@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "scrychat": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["packages/mcp/dist/index.js"]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "scrychat",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "^5.9",
+    "tsx": "^4.19.0",
+    "vitest": "^3.0.0",
+    "@types/node": "^24.0.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@scrychat/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": "dist/index.js",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29",
+    "zod": "^3.25",
+    "@scrychat/core": "workspace:*"
+  }
+}
