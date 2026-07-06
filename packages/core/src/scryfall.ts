@@ -5,11 +5,30 @@
  * returns 403 Forbidden — never drop these headers. Be a courteous citizen of
  * the ~10 req/s rate limit: SCRYFALL_MIN_INTERVAL_MS is enforced between
  * requests made through scryfallFetch.
+ *
+ * On 429 (rate limited) or 5xx-transient (503) responses, scryfallFetch
+ * retries with backoff (Retry-After header if present, else a fixed
+ * schedule) instead of surfacing the error immediately — downstream callers
+ * shouldn't have to manually sleep-and-retry around Scryfall hiccups.
  */
 
 const SCRYFALL_API_BASE = "https://api.scryfall.com";
 const USER_AGENT = "scrychat/0.1";
-const SCRYFALL_MIN_INTERVAL_MS = 100;
+const SCRYFALL_MIN_INTERVAL_MS = 150;
+const MAX_RETRIES = 4;
+const RETRY_BACKOFF_MS = [2000, 4000, 8000, 16000];
+
+/**
+ * Override point for tests: replaces the backoff schedule and the sleep
+ * implementation so retry tests don't take (2+4+8+16)s in real time.
+ */
+let retryBackoffMs = RETRY_BACKOFF_MS;
+let retrySleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+export function __setRetryConfigForTests(config: { backoffMs?: number[]; sleep?: (ms: number) => Promise<void> } | null): void {
+  retryBackoffMs = config?.backoffMs ?? RETRY_BACKOFF_MS;
+  retrySleep = config?.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+}
 
 /**
  * Escape a card name for embedding inside a double-quoted search term (e.g.
@@ -44,33 +63,60 @@ export class ScryfallError extends Error {
   }
 }
 
+function parseRetryAfterMs(res: Response): number | null {
+  const header = res.headers.get("Retry-After");
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(header);
+  if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
+  return null;
+}
+
 /**
  * Fetch a Scryfall URL (absolute or path beginning with "/"). Returns the
  * parsed JSON body. Non-200 responses throw ScryfallError, EXCEPT 404, which
  * resolves to `null` (Scryfall uses 404 for "no results" on search/named
  * endpoints, which callers usually want to treat as an empty result).
+ *
+ * 429 and 503 responses are retried up to MAX_RETRIES times with backoff
+ * (Retry-After header if present, else RETRY_BACKOFF_MS) before finally
+ * throwing ScryfallError.
  */
 export async function scryfallFetch<T = unknown>(path: string): Promise<T | null> {
   const url = path.startsWith("http") ? path : `${SCRYFALL_API_BASE}${path}`;
 
-  await throttle();
+  let attempt = 0;
+  for (;;) {
+    await throttle();
 
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": USER_AGENT,
-      Accept: "application/json",
-    },
-  });
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        Accept: "application/json",
+      },
+    });
 
-  if (res.status === 404) {
-    return null;
+    if (res.status === 404) {
+      return null;
+    }
+
+    if (res.status === 429 || res.status === 503) {
+      if (attempt >= MAX_RETRIES) {
+        throw new ScryfallError(`Scryfall request failed: ${res.status} ${res.statusText}`, res.status, url);
+      }
+      const delay = parseRetryAfterMs(res) ?? retryBackoffMs[attempt] ?? retryBackoffMs[retryBackoffMs.length - 1];
+      await retrySleep(delay);
+      attempt += 1;
+      continue;
+    }
+
+    if (!res.ok) {
+      throw new ScryfallError(`Scryfall request failed: ${res.status} ${res.statusText}`, res.status, url);
+    }
+
+    return (await res.json()) as T;
   }
-
-  if (!res.ok) {
-    throw new ScryfallError(`Scryfall request failed: ${res.status} ${res.statusText}`, res.status, url);
-  }
-
-  return (await res.json()) as T;
 }
 
 export interface Card {
