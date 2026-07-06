@@ -11,7 +11,7 @@ calling MCP tools directly. Tier B is judged from a fresh Claude Code chat trans
 | A2 | `search_cards({query:"otag:sacrifice-outlet id<=bg usd<3 legal:commander"})` | total > 400; every result identity ⊆ {B,G} |
 | A3 | `search_tags({query:"removal"})` | returns ≥ 5 slugs with descriptions + member counts; includes a spot-removal and a mass-removal slug |
 | A4 | `get_card({name:"kodama east tree"})` | fuzzy-resolves to Kodama of the East Tree; identity = G |
-| A5 | `find_alternatives({card:"Doubling Season", color_identity_within:"gw", max_price:20})` | includes Anointed Procession and Parallel Lives; excludes Doubling Season itself; results grouped with role labels |
+| A5 | `find_alternatives({card:"Doubling Season", color_identity_within:"gw", max_price:60})` | includes Anointed Procession and Parallel Lives (prices live-checked 2026-07: $55/$38 — keep budget above both); excludes Doubling Season itself; results grouped with role labels; every member honors id<=gw and usd<60 |
 | A6 | `find_combos({cards:["Hullbreaker Horror"]})` | non-empty; each combo lists pieces and a produces feature; status OK only |
 | A7 | `deck_create` → `deck_add({cards:[{name:"Lightning Bolt"}]})` on a Selesnya commander | add REJECTED (off-identity) with a clear reason |
 | A8 | `deck_add` same card name twice (non-basic) | second add rejected (singleton) |
@@ -25,7 +25,7 @@ Rubric: uses get_card then tag/otag searches (not memory-only); names functional
 **B2 — "Find all token doublers legal in Commander under $5."**
 Rubric: single correct search with price filter; presents the complete qualifying list, not 3 examples; mentions cheapest-printing caveat or uses prefer:usd-low.
 
-**B3 — "Suggest alternatives to Doubling Season for a Selesnya deck under $20."**
+**B3 — "Suggest alternatives to Doubling Season for a Selesnya deck under $60."**
 Rubric: identifies Doubling Season's distinct roles (token doubling vs counter doubling); groups alternatives by role; everything Selesnya-legal and under budget.
 
 **B4 — "What combo lines use Hullbreaker Horror?"**
