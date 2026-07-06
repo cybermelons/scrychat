@@ -28,7 +28,17 @@ const app = express();
 app.use(express.json());
 
 // ---- session management: sessionId -> SDK session id for resume ----
+const SESSION_MAP_MAX = 100;
 const sessionMap = new Map<string, string>();
+
+function setSession(clientSessionId: string, sdkSessionId: string): void {
+  sessionMap.delete(clientSessionId); // reinsert at newest position
+  sessionMap.set(clientSessionId, sdkSessionId);
+  if (sessionMap.size > SESSION_MAP_MAX) {
+    const oldest = sessionMap.keys().next().value;
+    if (oldest !== undefined) sessionMap.delete(oldest);
+  }
+}
 
 function sseWrite(res: Response, event: Record<string, unknown>): void {
   res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -65,15 +75,44 @@ app.post("/api/chat", async (req: Request, res: Response) => {
             args: [MCP_SERVER_PATH],
           },
         },
-        allowedTools: ["mcp__scrychat__*", "Read", "Grep"],
-        permissionMode: "bypassPermissions",
-        allowDangerouslySkipPermissions: true,
+        allowedTools: [
+          "mcp__scrychat__search_cards",
+          "mcp__scrychat__get_card",
+          "mcp__scrychat__search_tags",
+          "mcp__scrychat__find_alternatives",
+          "mcp__scrychat__find_combos",
+          "mcp__scrychat__deck_list",
+          "mcp__scrychat__deck_create",
+          "mcp__scrychat__deck_get",
+          "mcp__scrychat__deck_add",
+          "mcp__scrychat__deck_remove",
+          "Read",
+          "Grep",
+        ],
+        disallowedTools: [
+          "Bash",
+          "Write",
+          "Edit",
+          "NotebookEdit",
+          "WebFetch",
+          "WebSearch",
+          "Task",
+          "KillShell",
+        ],
+        permissionMode: "dontAsk",
       },
     });
 
+    res.on("close", () => {
+      if (!res.writableEnded) {
+        void q.interrupt();
+      }
+    });
+
     for await (const msg of q) {
+      if (res.writableEnded) break;
       if (msg.type === "system" && msg.subtype === "init") {
-        sessionMap.set(clientSessionId, msg.session_id);
+        setSession(clientSessionId, msg.session_id);
       }
 
       if (msg.type === "assistant") {
@@ -87,7 +126,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       }
 
       if (msg.type === "result") {
-        sessionMap.set(clientSessionId, msg.session_id);
+        setSession(clientSessionId, msg.session_id);
         sseWrite(res, {
           type: "done",
           sessionId: clientSessionId,

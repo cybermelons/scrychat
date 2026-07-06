@@ -50,6 +50,13 @@ const FIXTURES: Record<string, ResolvedCard> = {
     typeLine: "Creature — Elf Shaman",
     legalCommander: true,
   },
+  "swords to plowshares": {
+    name: "Swords to Plowshares",
+    colorIdentity: ["W"],
+    cmc: 1,
+    typeLine: "Instant",
+    legalCommander: true,
+  },
 };
 
 const resolver: CardResolver = async (name: string) => {
@@ -192,6 +199,8 @@ describe("decks", () => {
 
     const report = await deckReport("Selesnya Value", resolver, decksDir);
     expect(report.total).toBe(38);
+    expect(report.targetTotal).toBe(99);
+    expect(report.overUnder).toBe(38 - 99);
     expect(report.byRole.land).toBe(36);
     expect(report.byRole.ramp).toBe(1);
     expect(report.byRole.draw).toBe(1);
@@ -201,5 +210,43 @@ describe("decks", () => {
     expect(report.quotaCheck.lands.ok).toBe(true);
     expect(report.quotaCheck.ramp.ok).toBe(false);
     expect(report.identityViolations).toEqual([]);
+  });
+
+  it("aggregates interaction/removal/counterspell roles (case-insensitive) into the interaction quota bucket", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await addCards(
+      "Selesnya Value",
+      [
+        { name: "Swords to Plowshares", role: "Removal" },
+        { name: "Sol Ring", role: "COUNTERSPELL" },
+        { name: "Elvish Visionary", role: "interaction" },
+      ],
+      resolver,
+      decksDir
+    );
+
+    const report = await deckReport("Selesnya Value", resolver, decksDir);
+    // byRole keeps literal (case-preserved) role keys
+    expect(report.byRole.Removal).toBe(1);
+    expect(report.byRole.COUNTERSPELL).toBe(1);
+    expect(report.byRole.interaction).toBe(1);
+    // quotaCheck.interaction aggregates all three, case-insensitively
+    expect(report.quotaCheck.interaction.have).toBe(3);
+    expect(report.quotaCheck.interaction.ok).toBe(false); // below 8-10 quota
+  });
+
+  it("reports total/targetTotal/overUnder against the 99-card EDH target", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await addCards(
+      "Selesnya Value",
+      [{ name: "Forest", role: "land", count: 99 }],
+      resolver,
+      decksDir
+    );
+
+    const report = await deckReport("Selesnya Value", resolver, decksDir);
+    expect(report.total).toBe(99);
+    expect(report.targetTotal).toBe(99);
+    expect(report.overUnder).toBe(0);
   });
 });

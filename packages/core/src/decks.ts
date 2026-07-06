@@ -40,6 +40,8 @@ export type QuotaCheck = {
 
 export type DeckReport = {
   total: number;
+  targetTotal: number;
+  overUnder: number;
   byRole: Record<string, number>;
   curve: Record<string, number>;
   quotaCheck: {
@@ -51,6 +53,9 @@ export type DeckReport = {
   };
   identityViolations: string[];
 };
+
+const EDH_TARGET_TOTAL = 99;
+const INTERACTION_ROLES = new Set(["interaction", "removal", "counterspell"]);
 
 const DEFAULT_DECKS_DIR = () => path.join(process.cwd(), "decks");
 
@@ -313,11 +318,19 @@ export async function deckReport(
   const landsHave = byRole[LAND_ROLE] ?? 0;
   const rampHave = byRole["ramp"] ?? 0;
   const drawHave = byRole["draw"] ?? 0;
-  const interactionHave = byRole["interaction"] ?? 0;
   const wipesHave = byRole["wipe"] ?? 0;
+
+  let interactionHave = 0;
+  for (const [role, count] of Object.entries(byRole)) {
+    if (INTERACTION_ROLES.has(role.toLowerCase())) {
+      interactionHave += count;
+    }
+  }
 
   return {
     total,
+    targetTotal: EDH_TARGET_TOTAL,
+    overUnder: total - EDH_TARGET_TOTAL,
     byRole,
     curve,
     quotaCheck: {
