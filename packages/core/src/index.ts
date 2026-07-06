@@ -4,3 +4,4 @@ export * from "./scryfall.js";
 export * from "./tags.js";
 export * from "./spellbook.js";
 export * from "./alternatives.js";
+export * from "./decks.js";
