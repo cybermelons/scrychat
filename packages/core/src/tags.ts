@@ -55,7 +55,9 @@ function toResult(entry: TagEntry): TagSearchResult {
 /**
  * Case-insensitive substring/word match over slug, label, aliases,
  * description. Matches on slug/label (the "identity" fields) rank above
- * matches found only in aliases or description.
+ * matches found only in aliases or description. Within a tier, entries are
+ * sorted by member count descending so broad/common tags surface before
+ * narrow leaf tags (e.g. "spot-removal" before "removal-battle").
  */
 export async function searchTags(query: string, limit = 10): Promise<TagSearchResult[]> {
   const q = query.trim().toLowerCase();
@@ -80,7 +82,10 @@ export async function searchTags(query: string, limit = 10): Promise<TagSearchRe
     scored.push({ entry, rank });
   }
 
-  scored.sort((a, b) => a.rank - b.rank || a.entry.slug.localeCompare(b.entry.slug));
+  scored.sort(
+    (a, b) =>
+      a.rank - b.rank || (b.entry.count ?? 0) - (a.entry.count ?? 0) || a.entry.slug.localeCompare(b.entry.slug),
+  );
 
   return scored.slice(0, limit).map((s) => toResult(s.entry));
 }
