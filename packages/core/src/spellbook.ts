@@ -23,6 +23,8 @@
  *   - produces: { feature: { name, ... }, quantity }[] -> combo results
  */
 
+import { escapeQuotedTerm } from "./scryfall.js";
+
 const SPELLBOOK_API_BASE = "https://backend.commanderspellbook.com";
 const USER_AGENT = "scrychat/0.1";
 
@@ -80,8 +82,8 @@ function mapVariant(variant: SpellbookVariant): Combo {
  * Commander Spellbook's search grammar supports quoted exact-name terms;
  * space-joining multiple quoted names ANDs them (all must be present).
  */
-function buildCardsQuery(cards: string[]): string {
-  return cards.map((c) => `"${c}"`).join(" ");
+export function buildCardsQuery(cards: string[]): string {
+  return cards.map((c) => `"${escapeQuotedTerm(c)}"`).join(" ");
 }
 
 export async function findCombos(cards: string[], limit = 10): Promise<Combo[]> {

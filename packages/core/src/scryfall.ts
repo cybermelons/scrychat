@@ -11,6 +11,16 @@ const SCRYFALL_API_BASE = "https://api.scryfall.com";
 const USER_AGENT = "scrychat/0.1";
 const SCRYFALL_MIN_INTERVAL_MS = 100;
 
+/**
+ * Escape a card name for embedding inside a double-quoted search term (e.g.
+ * `!"${name}"`). Card names can themselves contain literal double quotes
+ * (e.g. Unhinged's `"Ach! Hans, Run!"`), which would otherwise break out of
+ * the quoted term and corrupt the query.
+ */
+export function escapeQuotedTerm(name: string): string {
+  return name.replace(/"/g, '\\"');
+}
+
 let lastRequestAt = 0;
 
 async function throttle(): Promise<void> {

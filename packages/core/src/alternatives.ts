@@ -18,7 +18,7 @@
  */
 
 import type { Card } from "./scryfall.js";
-import { searchCards, getCard } from "./scryfall.js";
+import { searchCards, getCard, escapeQuotedTerm } from "./scryfall.js";
 import { allTags } from "./tags.js";
 import type { TagEntry } from "./tags.js";
 
@@ -77,7 +77,7 @@ async function rankCandidateTags(card: Card): Promise<TagEntry[]> {
 }
 
 async function verifyCardHasTag(cardName: string, slug: string): Promise<boolean> {
-  const { total } = await searchCards(`otag:${slug} !"${cardName}"`, { limit: 1 });
+  const { total } = await searchCards(`otag:${slug} !"${escapeQuotedTerm(cardName)}"`, { limit: 1 });
   return total > 0;
 }
 
@@ -123,7 +123,7 @@ export async function findAlternatives(
 
   const roles: RoleAlternatives[] = [];
   for (const tag of confirmed) {
-    let query = `otag:${tag.slug} legal:commander -!"${card.name}"`;
+    let query = `otag:${tag.slug} legal:commander -!"${escapeQuotedTerm(card.name)}"`;
     if (opts.colorIdentityWithin) {
       query += ` id<=${opts.colorIdentityWithin}`;
     }
