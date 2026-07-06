@@ -1,0 +1,21 @@
+{
+  "name": "@scrychat/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "dev": "pnpm build && node dist/server.js",
+    "probe": "node scripts/probe-auth.mjs",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "@scrychat/core": "workspace:*",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21"
+  }
+}
