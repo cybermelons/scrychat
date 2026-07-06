@@ -167,6 +167,17 @@ app.get("/api/deck-events", (req: Request, res: Response) => {
   });
 });
 
+// ---- static UI (built by apps/web/ui -> ui/dist) ----
+const UI_DIST = path.resolve(__dirname, "../ui/dist");
+app.use(express.static(UI_DIST));
+
+// SPA fallback: serve index.html for any non-API GET
+app.get(/^\/(?!api\/).*/, (_req: Request, res: Response) => {
+  res.sendFile(path.join(UI_DIST, "index.html"), (err) => {
+    if (err) res.status(404).send("UI not built. Run: pnpm --filter @scrychat/web build");
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`scrychat web listening on http://localhost:${PORT}`);
   console.log(`repo root: ${REPO_ROOT}`);
