@@ -1,0 +1,447 @@
+{
+  "name": "Isshin Budget",
+  "commander": "Isshin, Two Heavens as One",
+  "commanderIdentity": [
+    "B",
+    "R",
+    "W"
+  ],
+  "cards": [
+    {
+      "name": "Adeline, Resplendent Cathar",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Hero of Bladehold",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Anim Pakal, Thousandth Moon",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Krenko, Tin Street Kingpin",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Leonin Warleader",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Legion Warboss",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Skyknight Vanguard",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Mavren Fein, Dusk Apostle",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Grave Titan",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Zurgo Stormrender",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Caesar, Legion's Emperor",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Sun Titan",
+      "role": "payoff-value",
+      "count": 1
+    },
+    {
+      "name": "Etali, Primal Storm",
+      "role": "payoff-value",
+      "count": 1
+    },
+    {
+      "name": "Ainok Strike Leader",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Within Range",
+      "role": "payoff-drain",
+      "count": 1
+    },
+    {
+      "name": "Sanctum Seeker",
+      "role": "payoff-drain",
+      "count": 1
+    },
+    {
+      "name": "Knights' Charge",
+      "role": "payoff-drain",
+      "count": 1
+    },
+    {
+      "name": "Firemane Commando",
+      "role": "draw",
+      "count": 1
+    },
+    {
+      "name": "Aurelia, the Law Above",
+      "role": "draw",
+      "count": 1
+    },
+    {
+      "name": "Tome of Legends",
+      "role": "draw",
+      "count": 1
+    },
+    {
+      "name": "Smuggler's Copter",
+      "role": "draw",
+      "count": 1
+    },
+    {
+      "name": "Mangara, the Diplomat",
+      "role": "draw",
+      "count": 1
+    },
+    {
+      "name": "Shared Animosity",
+      "role": "payoff-anthem",
+      "count": 1
+    },
+    {
+      "name": "Duelist's Heritage",
+      "role": "payoff-anthem",
+      "count": 1
+    },
+    {
+      "name": "Aurelia, the Warleader",
+      "role": "extra-combat",
+      "count": 1
+    },
+    {
+      "name": "Combat Celebrant",
+      "role": "extra-combat",
+      "count": 1
+    },
+    {
+      "name": "Moraug, Fury of Akoum",
+      "role": "extra-combat",
+      "count": 1
+    },
+    {
+      "name": "Port Razer",
+      "role": "extra-combat",
+      "count": 1
+    },
+    {
+      "name": "Relentless Assault",
+      "role": "extra-combat",
+      "count": 1
+    },
+    {
+      "name": "Seize the Day",
+      "role": "extra-combat",
+      "count": 1
+    },
+    {
+      "name": "Blade of Selves",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Sol Ring",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Arcane Signet",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Fellwar Stone",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Mind Stone",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Talisman of Indulgence",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Talisman of Hierarchy",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Talisman of Conviction",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Orzhov Signet",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Boros Signet",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Rakdos Signet",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Commander's Sphere",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Swords to Plowshares",
+      "role": "removal",
+      "count": 1
+    },
+    {
+      "name": "Path to Exile",
+      "role": "removal",
+      "count": 1
+    },
+    {
+      "name": "Anguished Unmaking",
+      "role": "removal",
+      "count": 1
+    },
+    {
+      "name": "Chaos Warp",
+      "role": "removal",
+      "count": 1
+    },
+    {
+      "name": "Generous Gift",
+      "role": "removal",
+      "count": 1
+    },
+    {
+      "name": "Go for the Throat",
+      "role": "removal",
+      "count": 1
+    },
+    {
+      "name": "Terminate",
+      "role": "removal",
+      "count": 1
+    },
+    {
+      "name": "Abrade",
+      "role": "removal",
+      "count": 1
+    },
+    {
+      "name": "Wrath of God",
+      "role": "wipe",
+      "count": 1
+    },
+    {
+      "name": "Toxic Deluge",
+      "role": "wipe",
+      "count": 1
+    },
+    {
+      "name": "Akiri, Fearless Voyager",
+      "role": "draw",
+      "count": 1
+    },
+    {
+      "name": "Breena, the Demagogue",
+      "role": "draw",
+      "count": 1
+    },
+    {
+      "name": "Path of Ancestry",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Command Tower",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Exotic Orchard",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Grand Coliseum",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Evolving Wilds",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Terramorphic Expanse",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Fabled Passage",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Myriad Landscape",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Shattered Landscape",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Boros Guildgate",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Orzhov Guildgate",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Rakdos Guildgate",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Command Bridge",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Tramway Station",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Bloodfell Caves",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Scoured Barrens",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Wind-Scarred Crag",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Clavileño, First of the Blessed",
+      "role": "payoff-drain",
+      "count": 1
+    },
+    {
+      "name": "Vengeful Ancestor",
+      "role": "payoff-goad",
+      "count": 1
+    },
+    {
+      "name": "Curse of Opulence",
+      "role": "ramp",
+      "count": 1
+    },
+    {
+      "name": "Inti, Seneschal of the Sun",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Nomad Outpost",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Plains",
+      "role": "land",
+      "count": 6
+    },
+    {
+      "name": "Swamp",
+      "role": "land",
+      "count": 6
+    },
+    {
+      "name": "Mountain",
+      "role": "land",
+      "count": 4
+    },
+    {
+      "name": "Welcoming Vampire",
+      "role": "draw",
+      "count": 1
+    },
+    {
+      "name": "Coercive Impetus",
+      "role": "draw",
+      "count": 1
+    },
+    {
+      "name": "Archaeological Dig",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Tendo Ice Bridge",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Vivid Marsh",
+      "role": "land",
+      "count": 1
+    },
+    {
+      "name": "Audacious Thief",
+      "role": "draw",
+      "count": 1
+    },
+    {
+      "name": "Redoubled Stormsinger",
+      "role": "payoff-token",
+      "count": 1
+    },
+    {
+      "name": "Chain Reaction",
+      "role": "wipe",
+      "count": 1
+    }
+  ],
+  "updatedAt": "2026-07-06T09:40:00.917Z"
+}
