@@ -67,6 +67,28 @@ export function getLocalDb(): DbInstance | null {
 export function __resetLocalDbCacheForTests(db?: DbInstance | null): void {
   cachedDb = db;
   totalTaggedCardsCache = undefined;
+  hasCardTagsCache = undefined;
+  hasCombosCache = undefined;
+}
+
+let hasCardTagsCache: boolean | undefined;
+
+/** Whether card_tags has any rows, memoized per process (see getLocalDb doc). */
+function hasCardTags(db: DbInstance): boolean {
+  if (hasCardTagsCache !== undefined) return hasCardTagsCache;
+  const row = db.prepare("SELECT COUNT(*) AS n FROM card_tags").get() as { n: number };
+  hasCardTagsCache = row.n > 0;
+  return hasCardTagsCache;
+}
+
+let hasCombosCache: boolean | undefined;
+
+/** Whether combos has any rows, memoized per process (see getLocalDb doc). */
+function hasCombos(db: DbInstance): boolean {
+  if (hasCombosCache !== undefined) return hasCombosCache;
+  const row = db.prepare("SELECT COUNT(*) AS n FROM combos").get() as { n: number };
+  hasCombosCache = row.n > 0;
+  return hasCombosCache;
 }
 
 let totalTaggedCardsCache: number | undefined;
@@ -265,6 +287,8 @@ export interface LocalCombo {
  * card fails to resolve locally (caller should fall back to live).
  */
 export function findCombosLocal(db: DbInstance, cards: string[], limit: number): LocalCombo[] | null {
+  if (!hasCombos(db)) return null;
+
   const oracleIds: string[] = [];
   for (const name of cards) {
     const card = getCardLocal(db, name);
@@ -339,6 +363,8 @@ export function findAlternativesLocal(
   cardName: string,
   opts: { colorIdentityWithin?: string; maxPrice?: number; limitPerRole?: number },
 ): { card: string; roles: LocalRole[] } | null {
+  if (!hasCardTags(db)) return null;
+
   const target = getCardLocal(db, cardName);
   if (!target) return null;
 
@@ -395,7 +421,7 @@ export function findAlternativesLocal(
           AND c.oracle_id != ?
           AND c.legal_commander = 1
           AND (? IS NULL OR (c.ci_mask & ~?) = 0)
-          AND (? IS NULL OR c.price_usd IS NULL OR c.price_usd <= ?)
+          AND (? IS NULL OR (c.price_usd IS NOT NULL AND c.price_usd <= ?))
         `,
       )
       .all(

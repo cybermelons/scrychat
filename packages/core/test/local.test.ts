@@ -93,6 +93,19 @@ const CARDS: FixtureCard[] = [
     legal_commander: 1,
     price_usd: 999,
   },
+  // Unpriced (NULL) - must be excluded when maxPrice is set (mirrors live
+  // Scryfall usd<N semantics, which excludes unpriced cards), but included
+  // when no maxPrice filter is given.
+  {
+    oracle_id: "member-unpriced",
+    name: "Unpriced Doubler",
+    type_line: "Enchantment",
+    oracle_text: "Doubles tokens.",
+    color_identity: ["G"],
+    ci_mask: 16,
+    legal_commander: 1,
+    price_usd: null,
+  },
   // Not legal in commander - must be excluded.
   {
     oracle_id: "member-illegal",
@@ -145,6 +158,7 @@ const CARD_TAGS: [string, string, number][] = [
   ["member-offcolor", "tag-token-doubler", 3],
   ["member-expensive", "tag-token-doubler", 3],
   ["member-illegal", "tag-token-doubler", 3],
+  ["member-unpriced", "tag-token-doubler", 3],
 
   ["member-weak", "tag-synergy-generic", 3],
   ["member-strong", "tag-synergy-generic", 3],
@@ -290,6 +304,18 @@ describe("local.findAlternativesLocal", () => {
     expect(allMembers).not.toContain("Expensive Doubler");
   });
 
+  it("excludes a NULL-priced card when maxPrice is set (mirrors live usd<N semantics)", () => {
+    const result = findAlternativesLocal(db, "Doubling Season", { maxPrice: 20 });
+    const allMembers = result!.roles.flatMap((r) => r.members.map((m) => m.name));
+    expect(allMembers).not.toContain("Unpriced Doubler");
+  });
+
+  it("includes a NULL-priced card when no maxPrice filter is given", () => {
+    const result = findAlternativesLocal(db, "Doubling Season", {});
+    const allMembers = result!.roles.flatMap((r) => r.members.map((m) => m.name));
+    expect(allMembers).toContain("Unpriced Doubler");
+  });
+
   it("excludes cards not legal in commander", () => {
     const result = findAlternativesLocal(db, "Doubling Season", {});
     const allMembers = result!.roles.flatMap((r) => r.members.map((m) => m.name));
@@ -298,6 +324,47 @@ describe("local.findAlternativesLocal", () => {
 
   it("returns null when the card cannot be resolved locally", () => {
     const result = findAlternativesLocal(db, "Totally Unknown Card Zzz", {});
+    expect(result).toBeNull();
+  });
+});
+
+describe("local partial-ingest fallback", () => {
+  // Simulates a DB where card ingest has completed but tag/combo ingest has
+  // not run yet: cards table is populated, but card_tags/combos are empty.
+  // findAlternativesLocal/findCombosLocal must return null (not [] / {roles:
+  // []}) so callers fall back to the live implementation instead of
+  // silently reporting "nothing found".
+  let partialTmpDir: string;
+  let partialDb: DbHandle;
+
+  beforeEach(() => {
+    partialTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrychat-local-partial-test-"));
+    const dbPath = path.join(partialTmpDir, "partial.db");
+    partialDb = openDb({ path: dbPath });
+
+    partialDb
+      .prepare(
+        `INSERT INTO cards (oracle_id, name, type_line, oracle_text, color_identity, ci_mask, legal_commander, price_usd)
+         VALUES ('target-1', 'Doubling Season', 'Enchantment', 'Doubles stuff.', '["G"]', 16, 1, 45)`,
+      )
+      .run();
+
+    __resetLocalDbCacheForTests(partialDb);
+  });
+
+  afterEach(() => {
+    partialDb.close();
+    __resetLocalDbCacheForTests(undefined);
+    fs.rmSync(partialTmpDir, { recursive: true, force: true });
+  });
+
+  it("findAlternativesLocal returns null when card_tags is empty", () => {
+    const result = findAlternativesLocal(partialDb, "Doubling Season", {});
+    expect(result).toBeNull();
+  });
+
+  it("findCombosLocal returns null when combos is empty", () => {
+    const result = findCombosLocal(partialDb, ["Doubling Season"], 10);
     expect(result).toBeNull();
   });
 });
