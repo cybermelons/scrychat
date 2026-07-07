@@ -515,6 +515,33 @@ app.get("/api/card-image", async (req: Request, res: Response) => {
   }
 });
 
+// Batch card-image lookup for group-chip galleries: GET ?names=a;b;c ->
+// {name: image|null} map. One pass over the shared resolver/cache — same
+// local-mirror lookup as /api/card-image, just amortized over N names.
+app.get("/api/card-images", async (req: Request, res: Response) => {
+  try {
+    const namesParam = req.query.names;
+    if (typeof namesParam !== "string" || namesParam.trim().length === 0) {
+      res.status(400).json({ error: "names is required" });
+      return;
+    }
+    const names = namesParam
+      .split(";")
+      .map((n) => n.trim())
+      .filter(Boolean);
+    const out: Record<string, string | null> = {};
+    await Promise.all(
+      names.map(async (name) => {
+        const resolved = await resolver(name);
+        out[name] = resolved?.image ?? null;
+      })
+    );
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 app.get("/api/decks", async (_req: Request, res: Response) => {
   try {
     const decks = await listDecks(DECKS_DIR);

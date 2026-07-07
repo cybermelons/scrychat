@@ -43,9 +43,11 @@ function ManaCurve({ curve }: { curve: Record<string, number> }) {
 export function DeckPanel({
   selected,
   setSelected,
+  onDeckNames,
 }: {
   selected: string;
   setSelected: (name: string) => void;
+  onDeckNames?: (names: Set<string>) => void;
 }) {
   const [decks, setDecks] = useState<DeckSummary[]>([]);
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -220,22 +222,34 @@ export function DeckPanel({
         setDeck(data.deck);
         setReport(data.report ?? null);
         if (!data.report) setReportError("report unavailable");
+        const names = new Set<string>([
+          data.deck.commander.toLowerCase(),
+          ...data.deck.cards.map((c) => c.name.toLowerCase()),
+        ]);
+        onDeckNames?.(names);
       })
       .catch((err: Error) => {
         if (selectedRef.current !== name) return;
         setDeck(null);
         setReport(null);
         setReportError(err.message);
+        onDeckNames?.(new Set());
       })
       .finally(() => {
         if (selectedRef.current === name) setLoading(false);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     setDeck(null);
     setReport(null);
+    if (!selected) {
+      onDeckNames?.(new Set());
+      return;
+    }
     loadDeck(selected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, loadDeck]);
 
   // Live refresh: refetch the open deck when its file changes on disk.

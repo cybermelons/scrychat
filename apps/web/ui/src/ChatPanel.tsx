@@ -3,6 +3,7 @@ import type { ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from 
 import { renderMarkdown } from "./markdown";
 
 const LAST_CHAT_KEY = "scrychat.lastChat";
+const SHOW_IN_DECK_KEY = "scrychat.showInDeck";
 
 function toolChipLabel(name: string, input: unknown): string {
   const short = name.replace(/^mcp__scrychat__/, "");
@@ -58,7 +59,13 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
   );
 }
 
-export function ChatPanel({ selected }: { selected: string }) {
+export function ChatPanel({
+  selected,
+  deckCardNames,
+}: {
+  selected: string;
+  deckCardNames: Set<string>;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -69,6 +76,19 @@ export function ChatPanel({ selected }: { selected: string }) {
   const sessionIdRef = useRef<string | null>(null);
   const chatIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const deckCardNamesRef = useRef(deckCardNames);
+  deckCardNamesRef.current = deckCardNames;
+
+  // In-deck indicator preference: persisted, defaults ON.
+  const [showInDeck, setShowInDeck] = useState<boolean>(() => {
+    const stored = localStorage.getItem(SHOW_IN_DECK_KEY);
+    return stored === null ? true : stored === "true";
+  });
+  useEffect(() => {
+    localStorage.setItem(SHOW_IN_DECK_KEY, String(showInDeck));
+  }, [showInDeck]);
 
   // Hover popovers: tool-result (over a chip) and card preview (over a
   // card-ref/card-embed span). Positioned via fixed coords from the mouse
@@ -76,6 +96,28 @@ export function ChatPanel({ selected }: { selected: string }) {
   const [toolPopover, setToolPopover] = useState<{ x: number; y: number; text: string } | null>(null);
   const [cardPopover, setCardPopover] = useState<{ x: number; y: number; url: string | null; name: string } | null>(null);
   const cardImageCache = useRef(new Map<string, string | null>());
+
+  // Group-chip gallery popover: opened on hover/click of a .card-group chip.
+  // Anchored under the chip (fixed coords), horizontally scroll-snapped.
+  const [groupPopover, setGroupPopover] = useState<{
+    x: number;
+    y: number;
+    label: string;
+    names: string[];
+    images: Record<string, string | null>;
+    loading: boolean;
+  } | null>(null);
+  const groupImageCache = useRef(new Map<string, string | null>());
+
+  // Transient hint/rejection chip near a click ("no deck selected", server
+  // rejection reason). Auto-dismisses after a few seconds.
+  const [hint, setHint] = useState<{ x: number; y: number; text: string } | null>(null);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showHint = useCallback((x: number, y: number, text: string) => {
+    setHint({ x, y, text });
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    hintTimerRef.current = setTimeout(() => setHint(null), 3000);
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -303,6 +345,41 @@ export function ChatPanel({ selected }: { selected: string }) {
       });
   }, []);
 
+  // Batch-resolve a set of names via /api/card-images, filling groupImageCache
+  // and returning a {name: url|null} map for exactly the requested names.
+  const resolveCardImages = useCallback((names: string[]): Promise<Record<string, string | null>> => {
+    const cache = groupImageCache.current;
+    const missing = names.filter((n) => !cache.has(n));
+    const fetchMissing = missing.length
+      ? fetch(`/api/card-images?names=${encodeURIComponent(missing.join(";"))}`)
+          .then((r) => (r.ok ? r.json() : {}))
+          .then((body: Record<string, string | null>) => {
+            for (const n of missing) cache.set(n, body[n] ?? null);
+          })
+          .catch(() => {
+            for (const n of missing) cache.set(n, null);
+          })
+      : Promise.resolve();
+    return fetchMissing.then(() => {
+      const out: Record<string, string | null> = {};
+      for (const n of names) out[n] = cache.get(n) ?? null;
+      return out;
+    });
+  }, []);
+
+  const openGroupPopover = useCallback(
+    (groupEl: HTMLElement, x: number, y: number) => {
+      const label = groupEl.getAttribute("data-group-label") ?? "";
+      const namesRaw = groupEl.getAttribute("data-group-names") ?? "";
+      const names = namesRaw.split(";").filter(Boolean);
+      setGroupPopover({ x, y, label, names, images: {}, loading: true });
+      void resolveCardImages(names).then((images) => {
+        setGroupPopover((p) => (p && p.label === label ? { ...p, images, loading: false } : p));
+      });
+    },
+    [resolveCardImages]
+  );
+
   const onScrollMouseOver = useCallback(
     (e: React.MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -313,6 +390,13 @@ export function ChatPanel({ selected }: { selected: string }) {
         if (resultText) {
           setToolPopover({ x: e.clientX, y: e.clientY, text: prettyResult(resultText) });
         }
+        return;
+      }
+
+      const groupEl = target.closest<HTMLElement>(".card-group");
+      if (groupEl) {
+        const rect = groupEl.getBoundingClientRect();
+        openGroupPopover(groupEl, rect.left, rect.bottom + 4);
         return;
       }
 
@@ -334,7 +418,7 @@ export function ChatPanel({ selected }: { selected: string }) {
         });
       }
     },
-    [resolveCardImage]
+    [resolveCardImage, openGroupPopover]
   );
 
   // Embedded card images (![[Name]]) render as an <img data-card-name> with
@@ -375,7 +459,103 @@ export function ChatPanel({ selected }: { selected: string }) {
     ) {
       setCardPopover(null);
     }
+    if (target.closest(".card-group") && !related?.closest(".card-group, .card-group-popover")) {
+      setGroupPopover(null);
+    }
   }, []);
+
+  // Click-to-toggle: clicking a card-ref, card-embed, or gallery card toggles
+  // its membership in the selected deck. Dismisses hover popovers so a click
+  // doesn't leave a stuck preview. No deck selected / server rejection ->
+  // transient hint chip near the click point.
+  const toggleDeckCard = useCallback(
+    (name: string, x: number, y: number) => {
+      const deck = selectedRef.current;
+      if (!deck) {
+        showHint(x, y, "no deck selected");
+        return;
+      }
+      const inDeck = deckCardNamesRef.current.has(name.toLowerCase());
+      const req = inDeck
+        ? fetch(`/api/decks/${encodeURIComponent(deck)}/cards`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cards: [name] }),
+          })
+        : fetch(`/api/decks/${encodeURIComponent(deck)}/cards`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cards: [{ name }] }),
+          });
+      void req
+        .then(async (r) => {
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            throw new Error(body.error ?? `HTTP ${r.status}`);
+          }
+          if (!inDeck && Array.isArray(body.rejected) && body.rejected.length > 0) {
+            showHint(x, y, body.rejected[0].reason ?? "rejected");
+          }
+          // Deck panel reloads via its own deck-events watch; badges refresh
+          // from the deckCardNames prop once that reload lands.
+        })
+        .catch((err: Error) => showHint(x, y, err.message));
+    },
+    [showHint]
+  );
+
+  const onScrollClick = useCallback(
+    (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement;
+
+      const groupEl = target.closest<HTMLElement>(".card-group");
+      if (groupEl) {
+        // Click (re)opens the gallery popover at this chip's position.
+        openGroupPopover(groupEl, e.clientX, e.clientY);
+        return;
+      }
+
+      const galleryCard = target.closest<HTMLElement>(".card-gallery-item");
+      if (galleryCard) {
+        const name = galleryCard.getAttribute("data-card-name");
+        if (name) toggleDeckCard(name, e.clientX, e.clientY);
+        setGroupPopover(null);
+        return;
+      }
+
+      const cardEl = target.closest<HTMLElement>(".card-ref, .card-embed-img, .card-embed");
+      if (cardEl) {
+        const name = cardEl.getAttribute("data-card-name");
+        setCardPopover(null);
+        if (name) toggleDeckCard(name, e.clientX, e.clientY);
+      }
+    },
+    [toggleDeckCard, openGroupPopover]
+  );
+
+  // In-deck badges: after every render of message content (or when the
+  // active deck's card set or the indicator pref changes), walk card
+  // ref/embed/gallery elements and toggle a small checkmark badge based on
+  // membership in deckCardNames. Runs as a DOM pass (not React state) since
+  // the content is injected via dangerouslySetInnerHTML.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const cardEls = el.querySelectorAll<HTMLElement>(".card-ref, .card-embed, .card-gallery-item");
+    cardEls.forEach((cardEl) => {
+      const name = cardEl.getAttribute("data-card-name");
+      let badge = cardEl.querySelector<HTMLElement>(".in-deck-badge");
+      const inDeck = showInDeck && !!name && deckCardNames.has(name.toLowerCase());
+      if (inDeck && !badge) {
+        badge = document.createElement("span");
+        badge.className = "in-deck-badge";
+        badge.textContent = "✓";
+        cardEl.appendChild(badge);
+      } else if (!inDeck && badge) {
+        badge.remove();
+      }
+    });
+  }, [messages, deckCardNames, showInDeck, groupPopover]);
 
   return (
     <main className="chat-panel">
@@ -412,6 +592,15 @@ export function ChatPanel({ selected }: { selected: string }) {
             Delete
           </button>
         )}
+        <button
+          type="button"
+          className={`btn btn-ghost btn-small in-deck-toggle${showInDeck ? " active" : ""}`}
+          onClick={() => setShowInDeck((s) => !s)}
+          title="Toggle in-deck checkmarks on card references"
+          aria-pressed={showInDeck}
+        >
+          ✓ in-deck
+        </button>
       </div>
       <div
         className="chat-scroll"
@@ -419,6 +608,7 @@ export function ChatPanel({ selected }: { selected: string }) {
         onMouseOver={onScrollMouseOver}
         onMouseMove={onScrollMouseMove}
         onMouseOut={onScrollMouseOut}
+        onClick={onScrollClick}
       >
         {messages.length === 0 && (
           <div className="chat-empty">
@@ -451,6 +641,41 @@ export function ChatPanel({ selected }: { selected: string }) {
               top: Math.max(8, Math.min(cardPopover.y - 170, window.innerHeight - 350)),
             }}
           />
+        )}
+        {groupPopover && (
+          <div
+            className="card-group-popover"
+            style={{
+              left: Math.min(groupPopover.x, window.innerWidth - 340),
+              top: Math.min(groupPopover.y, window.innerHeight - 260),
+            }}
+          >
+            <div className="card-group-popover-label">{groupPopover.label}</div>
+            <div className="card-gallery">
+              {groupPopover.names.map((name) => {
+                const url = groupPopover.images[name];
+                const inDeck = showInDeck && deckCardNames.has(name.toLowerCase());
+                return (
+                  <div className="card-gallery-item" data-card-name={name} key={name}>
+                    {url ? (
+                      <img className="card-gallery-img" src={url} alt={name} />
+                    ) : groupPopover.loading ? (
+                      <div className="card-gallery-img card-gallery-loading" />
+                    ) : (
+                      <div className="card-gallery-img card-gallery-missing" />
+                    )}
+                    {inDeck && <span className="in-deck-badge">✓</span>}
+                    <div className="card-gallery-caption">{name}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {hint && (
+          <div className="chip chip-hint" style={{ left: hint.x + 8, top: hint.y + 8 }}>
+            {hint.text}
+          </div>
         )}
       </div>
       <div className="chat-input-row">

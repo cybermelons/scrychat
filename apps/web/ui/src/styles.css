@@ -426,9 +426,11 @@ body {
 
 /* ---------- inline card refs (chat markdown [[Name]] / ![[Name]]) ---------- */
 .card-ref {
-  cursor: default;
+  position: relative;
+  cursor: pointer;
   border-bottom: 1px dotted var(--text-dim);
   color: var(--text);
+  padding-right: 2px;
 }
 
 .card-ref:hover {
@@ -437,19 +439,21 @@ body {
 }
 
 .card-embed {
+  position: relative;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
   margin: 4px 8px 4px 0;
   vertical-align: top;
+  cursor: pointer;
 }
 
 .card-embed-img {
   width: 180px;
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  cursor: default;
+  cursor: pointer;
 }
 
 .card-embed-caption {
@@ -459,6 +463,125 @@ body {
 
 .card-embed-missing .card-embed-img {
   display: none;
+}
+
+/* in-deck checkmark badge, appended as a child span of card-ref/card-embed/
+   card-gallery-item by ChatPanel's DOM-pass effect */
+.in-deck-badge {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  background: var(--ok);
+  color: #0e1a12;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: 999px;
+  padding: 2px 4px;
+  pointer-events: none;
+}
+
+.card-embed .in-deck-badge {
+  top: -2px;
+  right: -2px;
+}
+
+/* ---------- card group chips ([[group:label|A; B; C]]) ---------- */
+.card-group {
+  display: inline-block;
+  cursor: pointer;
+  background: var(--chip-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 0.85em;
+  color: var(--accent);
+  margin: 0 2px;
+}
+
+.card-group:hover {
+  border-color: var(--accent);
+}
+
+.card-group-popover {
+  position: fixed;
+  z-index: 100;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  max-width: 320px;
+}
+
+.card-group-popover-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card-gallery {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 4px;
+  max-width: 300px;
+}
+
+.card-gallery-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100px;
+  scroll-snap-align: start;
+  cursor: pointer;
+  text-align: center;
+}
+
+.card-gallery-img {
+  width: 100px;
+  height: 140px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+  background: var(--bg-panel);
+}
+
+.card-gallery-loading {
+  background: linear-gradient(90deg, var(--bg-panel), var(--bg-raised), var(--bg-panel));
+}
+
+.card-gallery-missing {
+  border: 1px dashed var(--border);
+}
+
+.card-gallery-caption {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- transient hint chip (no deck selected / rejection reason) ---------- */
+.chip-hint {
+  position: fixed;
+  z-index: 110;
+  background: var(--bg-raised);
+  border-color: var(--bad);
+  color: var(--bad);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  white-space: normal;
+  max-width: 260px;
+}
+
+.in-deck-toggle.active {
+  color: var(--ok);
+  border-color: var(--ok);
 }
 
 /* ---------- chips ---------- */

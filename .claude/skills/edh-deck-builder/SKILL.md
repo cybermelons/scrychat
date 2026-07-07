@@ -108,6 +108,12 @@ instead of asking.
   hover preview; use `![[Card Name]]` sparingly for showcase-worthy cards (the commander, a
   centerpiece suggestion, a top pick) to embed an inline thumbnail — one line each, not every
   mention.
+- When suggesting a functional category (e.g. "ramp", "sac outlets", "token doublers") as a group
+  rather than a single standout pick, emit `[[group:role|Name A; Name B; Name C]]` — a semicolon-
+  separated list of members from your actual tool results (`search_cards`/`find_alternatives`
+  output), never from memory. This renders as a clickable chip that opens a scrollable card
+  gallery. Reserve standout single picks (the commander, a centerpiece, a top recommendation) for
+  `[[..]]`/`![[..]]` as above — don't wrap a single card in a one-member group.
 
 ## Pitfalls
 

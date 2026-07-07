@@ -21,13 +21,31 @@ function renderManaSymbols(s: string): string {
   });
 }
 
+// Card group: [[group:LABEL|Name A; Name B; ...]] -> a chip summarizing a
+// functional-role cluster (e.g. "ramp (4) ▾"). Members are semicolon-
+// separated card names, resolved lazily by ChatPanel via the batch
+// /api/card-images route when the chip's gallery popover opens. Matched
+// before the plain [[Name]]/![[Name]] forms below (same `[[` prefix, more
+// specific pattern).
+function renderCardGroups(s: string): string {
+  return s.replace(/\[\[group:([^|\]]+)\|([^\]]+)\]\]/g, (_whole, label: string, namesRaw: string) => {
+    const names = namesRaw
+      .split(";")
+      .map((n) => n.trim())
+      .filter(Boolean);
+    const lbl = label.trim();
+    return `<span class="card-group" data-group-label="${lbl}" data-group-names="${names.join(";")}">${lbl} (${names.length}) &#9662;</span>`;
+  });
+}
+
 // Card references: [[Card Name]] -> hover-preview span; ![[Card Name]] ->
 // embedded inline thumbnail. Resolved client-side via GET /api/card-image
 // (see ChatPanel). Unknown names degrade to plain text (no error styling).
 // Matched on already-escaped text; must run before the markdown-link regex
 // below since both use `[`, and before mana symbols (no overlap in practice).
+// Card groups are parsed first since they also start with `[[`.
 function renderCardRefs(s: string): string {
-  return s
+  return renderCardGroups(s)
     .replace(/!\[\[([^\]|]+)\]\]/g, (_whole, name: string) => {
       const n = name.trim();
       return `<span class="card-embed" data-card-name="${n}"><img class="card-embed-img" data-card-name="${n}" alt="${n}"><span class="card-embed-caption">${n}</span></span>`;
