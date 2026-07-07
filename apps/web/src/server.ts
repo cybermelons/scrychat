@@ -30,6 +30,7 @@ delete SDK_ENV.ANTHROPIC_AUTH_TOKEN;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../../");
 const DECKS_DIR = path.join(REPO_ROOT, "decks");
+const CHATS_DIR = path.join(REPO_ROOT, "chats");
 const MCP_SERVER_PATH = path.join(REPO_ROOT, "packages/mcp/dist/index.js");
 
 const PORT = 8787;
@@ -54,8 +55,64 @@ function sseWrite(res: Response, event: Record<string, unknown>): void {
   res.write(`data: ${JSON.stringify(event)}\n\n`);
 }
 
+// ---- chats: first-class local files, symmetrical with decks/ ----
+type ChatMsg = {
+  role: "user" | "assistant";
+  text: string;
+  tools?: { name: string; input: unknown }[];
+  at: string;
+};
+
+type ChatFile = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  sdkSessionId?: string;
+  lastSeenActionIdx: number;
+  messages: ChatMsg[];
+};
+
+async function atomicWrite(filePath: string, data: string): Promise<void> {
+  const dir = path.dirname(filePath);
+  const tmpPath = path.join(
+    dir,
+    `.tmp-${path.basename(filePath)}-${process.pid}-${Math.random().toString(36).slice(2)}`
+  );
+  await fs.promises.writeFile(tmpPath, data, "utf8");
+  await fs.promises.rename(tmpPath, filePath);
+}
+
+function chatFilePath(id: string): string {
+  return path.join(CHATS_DIR, `${id}.json`);
+}
+
+async function readChatFile(id: string): Promise<ChatFile | null> {
+  try {
+    const raw = await fs.promises.readFile(chatFilePath(id), "utf8");
+    return JSON.parse(raw) as ChatFile;
+  } catch (err: any) {
+    if (err?.code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+async function writeChatFile(chat: ChatFile): Promise<void> {
+  await fs.promises.mkdir(CHATS_DIR, { recursive: true });
+  await atomicWrite(chatFilePath(chat.id), JSON.stringify(chat, null, 2));
+}
+
+function newChatId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function titleFromMessage(message: string): string {
+  const t = message.trim().replace(/\s+/g, " ");
+  return t.length > 40 ? `${t.slice(0, 40)}…` : t;
+}
+
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, sessionId, activeDeck } = req.body ?? {};
+  const { message, sessionId, activeDeck, chatId: reqChatId } = req.body ?? {};
   if (typeof message !== "string" || message.length === 0) {
     res.status(400).json({ error: "message is required" });
     return;
@@ -68,10 +125,34 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   });
 
   const clientSessionId: string = typeof sessionId === "string" ? sessionId : crypto.randomUUID();
-  const resumeSdkSessionId = sessionMap.get(clientSessionId);
+
+  let chat: ChatFile | null =
+    typeof reqChatId === "string" && reqChatId.length > 0 ? await readChatFile(reqChatId) : null;
+  const isNewChat = !chat;
+  const now = new Date().toISOString();
+  if (!chat) {
+    chat = {
+      id: newChatId(),
+      title: titleFromMessage(message),
+      createdAt: now,
+      updatedAt: now,
+      lastSeenActionIdx: pushed - Math.min(pushed, 5),
+      messages: [],
+    };
+  }
+  chat.messages.push({ role: "user", text: message, at: now });
+  chat.updatedAt = now;
+  await writeChatFile(chat);
+
+  if (isNewChat) {
+    sseWrite(res, { type: "chat", chatId: chat.id });
+  }
+
+  // file wins for resume; sessionMap is a fallback for legacy/no-file clients
+  const resumeSdkSessionId = chat.sdkSessionId ?? sessionMap.get(clientSessionId);
 
   let prompt = message;
-  const recentActions = recentActionsFor(clientSessionId);
+  const recentActions = recentActionsForChat(chat);
   let contextLine: string | null = null;
   if (typeof activeDeck === "string" && activeDeck.length > 0) {
     try {
@@ -91,6 +172,9 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   if (contextLine) {
     prompt = `${contextLine}]\n\n${message}`;
   }
+
+  let assistantText = "";
+  const assistantTools: { name: string; input: unknown }[] = [];
 
   try {
     const q = query({
@@ -145,13 +229,16 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       if (res.writableEnded) break;
       if (msg.type === "system" && msg.subtype === "init") {
         setSession(clientSessionId, msg.session_id);
+        chat.sdkSessionId = msg.session_id;
       }
 
       if (msg.type === "assistant") {
         for (const block of msg.message.content) {
           if (block.type === "text") {
+            assistantText += block.text;
             sseWrite(res, { type: "text-delta", text: block.text });
           } else if (block.type === "tool_use") {
+            assistantTools.push({ name: block.name, input: block.input });
             sseWrite(res, { type: "tool-use", name: block.name, input: block.input });
           }
         }
@@ -159,6 +246,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
       if (msg.type === "result") {
         setSession(clientSessionId, msg.session_id);
+        chat.sdkSessionId = msg.session_id;
         sseWrite(res, {
           type: "done",
           sessionId: clientSessionId,
@@ -170,7 +258,65 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   } catch (err) {
     sseWrite(res, { type: "done", error: err instanceof Error ? err.message : String(err) });
   } finally {
+    chat.messages.push({
+      role: "assistant",
+      text: assistantText,
+      tools: assistantTools,
+      at: new Date().toISOString(),
+    });
+    chat.updatedAt = new Date().toISOString();
+    await writeChatFile(chat);
     res.end();
+  }
+});
+
+app.get("/api/chats", async (_req: Request, res: Response) => {
+  try {
+    await fs.promises.mkdir(CHATS_DIR, { recursive: true });
+    const files = await fs.promises.readdir(CHATS_DIR);
+    const summaries: { id: string; title: string; updatedAt: string; messageCount: number }[] = [];
+    for (const file of files) {
+      if (!file.endsWith(".json") || file.startsWith(".tmp-")) continue;
+      const chat = await readChatFile(file.replace(/\.json$/, ""));
+      if (chat) {
+        summaries.push({
+          id: chat.id,
+          title: chat.title,
+          updatedAt: chat.updatedAt,
+          messageCount: chat.messages.length,
+        });
+      }
+    }
+    summaries.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    res.json(summaries);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get("/api/chats/:id", async (req: Request, res: Response) => {
+  try {
+    const chat = await readChatFile(req.params.id);
+    if (!chat) {
+      res.status(404).json({ error: "Chat not found" });
+      return;
+    }
+    res.json(chat);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.delete("/api/chats/:id", async (req: Request, res: Response) => {
+  try {
+    await fs.promises.unlink(chatFilePath(req.params.id));
+    res.json({ ok: true });
+  } catch (err: any) {
+    if (err?.code === "ENOENT") {
+      res.status(404).json({ error: "Chat not found" });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
@@ -195,6 +341,17 @@ function recentActionsFor(clientSessionId: string): string[] {
   const fromIdx = Math.max(0, seen - oldestIndex);
   const entries = actionLog.slice(fromIdx).map((e) => e.text);
   lastSeenMap.set(clientSessionId, pushed);
+  return entries;
+}
+
+// Chat-file-backed variant: lastSeenActionIdx lives in the chat file so
+// action context survives server restarts (mirrors recentActionsFor above).
+function recentActionsForChat(chat: ChatFile): string[] {
+  const oldestIndex = pushed - actionLog.length;
+  const seen = chat.lastSeenActionIdx ?? Math.max(oldestIndex, pushed - 5);
+  const fromIdx = Math.max(0, seen - oldestIndex);
+  const entries = actionLog.slice(fromIdx).map((e) => e.text);
+  chat.lastSeenActionIdx = pushed;
   return entries;
 }
 

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatEvent, ChatMessage } from "./types";
+import type { ChatEvent, ChatFile, ChatMessage, ChatSummary } from "./types";
 import { renderMarkdown } from "./markdown";
+
+const LAST_CHAT_KEY = "scrychat.lastChat";
 
 function toolChipLabel(name: string, input: unknown): string {
   const short = name.replace(/^mcp__scrychat__/, "");
@@ -41,13 +43,73 @@ export function ChatPanel({ selected }: { selected: string }) {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [chats, setChats] = useState<ChatSummary[]>([]);
+  const [chatId, setChatId] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const chatIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  const refreshChats = useCallback(() => {
+    return fetch("/api/chats")
+      .then((r) => r.json())
+      .then((list: ChatSummary[]) => {
+        setChats(list);
+        return list;
+      })
+      .catch(() => setChats([]));
+  }, []);
+
+  const loadChat = useCallback((id: string) => {
+    return fetch(`/api/chats/${encodeURIComponent(id)}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<ChatFile>;
+      })
+      .then((file) => {
+        chatIdRef.current = id;
+        setChatId(id);
+        sessionIdRef.current = null; // resume is driven server-side by the chat file now
+        setMessages(
+          file.messages.map((m) => ({ role: m.role, text: m.text, tools: m.tools ?? [] }))
+        );
+        localStorage.setItem(LAST_CHAT_KEY, id);
+      })
+      .catch(() => void 0);
+  }, []);
+
+  const startNewChat = useCallback(() => {
+    chatIdRef.current = null;
+    setChatId(null);
+    sessionIdRef.current = null;
+    setMessages([]);
+    setError(null);
+    localStorage.removeItem(LAST_CHAT_KEY);
+  }, []);
+
+  const deleteChat = useCallback(() => {
+    const id = chatIdRef.current;
+    if (!id) return;
+    if (!window.confirm("Delete this chat? This cannot be undone.")) return;
+    fetch(`/api/chats/${encodeURIComponent(id)}`, { method: "DELETE" })
+      .then(() => {
+        startNewChat();
+        refreshChats();
+      })
+      .catch(() => void 0);
+  }, [startNewChat, refreshChats]);
+
+  // On mount: load chat list, restore last-open chat.
+  useEffect(() => {
+    refreshChats();
+    const last = localStorage.getItem(LAST_CHAT_KEY);
+    if (last) void loadChat(last);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateLastAssistant = useCallback(
     (fn: (m: ChatMessage) => ChatMessage) => {
@@ -85,6 +147,7 @@ export function ChatPanel({ selected }: { selected: string }) {
           message,
           activeDeck: selected || undefined,
           ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
+          ...(chatIdRef.current ? { chatId: chatIdRef.current } : {}),
         }),
       });
       if (!res.ok || !res.body) {
@@ -96,7 +159,11 @@ export function ChatPanel({ selected }: { selected: string }) {
       let buffer = "";
 
       const handleEvent = (ev: ChatEvent) => {
-        if (ev.type === "text-delta") {
+        if (ev.type === "chat") {
+          chatIdRef.current = ev.chatId;
+          setChatId(ev.chatId);
+          localStorage.setItem(LAST_CHAT_KEY, ev.chatId);
+        } else if (ev.type === "text-delta") {
           updateLastAssistant((m) => ({ ...m, text: m.text + ev.text }));
         } else if (ev.type === "tool-use") {
           updateLastAssistant((m) => ({
@@ -140,8 +207,9 @@ export function ChatPanel({ selected }: { selected: string }) {
         }
         return msgs;
       });
+      void refreshChats();
     }
-  }, [input, streaming, updateLastAssistant, selected]);
+  }, [input, streaming, updateLastAssistant, selected, refreshChats]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -152,6 +220,29 @@ export function ChatPanel({ selected }: { selected: string }) {
 
   return (
     <main className="chat-panel">
+      <div className="chat-panel-header">
+        <select
+          className="chat-select"
+          value={chatId ?? ""}
+          onChange={(e) => (e.target.value ? void loadChat(e.target.value) : startNewChat())}
+          aria-label="Select chat"
+        >
+          <option value="">New Chat</option>
+          {chats.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.title || "(untitled)"}
+            </option>
+          ))}
+        </select>
+        <button type="button" className="btn btn-ghost btn-small" onClick={startNewChat}>
+          + New Chat
+        </button>
+        {chatId && (
+          <button type="button" className="btn btn-danger btn-small" onClick={deleteChat}>
+            Delete
+          </button>
+        )}
+      </div>
       <div className="chat-scroll" ref={scrollRef}>
         {messages.length === 0 && (
           <div className="chat-empty">

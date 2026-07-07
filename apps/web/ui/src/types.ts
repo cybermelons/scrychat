@@ -64,6 +64,7 @@ export const CARD_ROLES = [
 ] as const;
 
 export type ChatEvent =
+  | { type: "chat"; chatId: string }
   | { type: "text-delta"; text: string }
   | { type: "tool-use"; name: string; input: unknown }
   | { type: "done"; sessionId?: string; result?: string | null; isError?: boolean; error?: string };
@@ -72,4 +73,21 @@ export type ChatMessage = {
   role: "user" | "assistant";
   text: string;
   tools: { name: string; input: unknown }[];
+};
+
+export type ChatSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messageCount: number;
+};
+
+export type ChatFile = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  sdkSessionId?: string;
+  lastSeenActionIdx: number;
+  messages: { role: "user" | "assistant"; text: string; tools?: { name: string; input: unknown }[]; at: string }[];
 };
