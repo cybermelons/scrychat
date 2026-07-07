@@ -36,7 +36,7 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
   );
 }
 
-export function ChatPanel() {
+export function ChatPanel({ selected }: { selected: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -83,6 +83,7 @@ export function ChatPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message,
+          activeDeck: selected || undefined,
           ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
         }),
       });
@@ -140,7 +141,7 @@ export function ChatPanel() {
         return msgs;
       });
     }
-  }, [input, streaming, updateLastAssistant]);
+  }, [input, streaming, updateLastAssistant, selected]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -170,6 +171,7 @@ export function ChatPanel() {
         {error && <div className="chip chip-error">error: {error}</div>}
       </div>
       <div className="chat-input-row">
+        {selected && <span className="chip chip-context">context: {selected}</span>}
         <textarea
           className="chat-input"
           value={input}

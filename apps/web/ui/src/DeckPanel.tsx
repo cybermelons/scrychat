@@ -40,9 +40,14 @@ function ManaCurve({ curve }: { curve: Record<string, number> }) {
   );
 }
 
-export function DeckPanel() {
+export function DeckPanel({
+  selected,
+  setSelected,
+}: {
+  selected: string;
+  setSelected: (name: string) => void;
+}) {
   const [decks, setDecks] = useState<DeckSummary[]>([]);
-  const [selected, setSelected] = useState<string>("");
   const [deck, setDeck] = useState<Deck | null>(null);
   const [report, setReport] = useState<DeckReport | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,22 +72,27 @@ export function DeckPanel() {
   const [removeBusy, setRemoveBusy] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
-  const refreshDecks = useCallback((selectName?: string) => {
-    return fetch("/api/decks")
-      .then((r) => r.json())
-      .then((list: DeckSummary[]) => {
-        setDecks(list);
-        if (selectName) {
-          setSelected(selectName);
-        } else if (list.length > 0) {
-          setSelected((s) => (list.some((d) => d.name === s) ? s : list[0].name));
-        } else {
-          setSelected("");
-        }
-        return list;
-      })
-      .catch(() => setDecks([]));
-  }, []);
+  const refreshDecks = useCallback(
+    (selectName?: string) => {
+      return fetch("/api/decks")
+        .then((r) => r.json())
+        .then((list: DeckSummary[]) => {
+          setDecks(list);
+          if (selectName) {
+            setSelected(selectName);
+          } else if (list.length > 0) {
+            const s = selectedRef.current;
+            setSelected(list.some((d) => d.name === s) ? s : list[0].name);
+          } else {
+            setSelected("");
+          }
+          return list;
+        })
+        .catch(() => setDecks([]));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [setSelected]
+  );
 
   useEffect(() => {
     refreshDecks();

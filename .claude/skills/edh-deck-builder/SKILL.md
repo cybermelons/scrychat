@@ -36,6 +36,11 @@ yourself.
 
 ## Workflows
 
+**Before asking the user to disambiguate** a commander/deck reference (e.g. "which X do you
+mean?"), call `deck_list` first. If a saved deck's name or commander matches the reference, call
+`deck_get` on it and proceed with that deck as the subject — mention which deck you're using —
+instead of asking.
+
 **A. "What are the payoffs/synergies for card X?"**
 1. `get_card` X, read oracle text, identify the mechanical themes (tokens? counters? sacrifice?
    graveyard? attacking?).

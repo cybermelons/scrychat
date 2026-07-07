@@ -55,7 +55,7 @@ function sseWrite(res: Response, event: Record<string, unknown>): void {
 }
 
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, sessionId } = req.body ?? {};
+  const { message, sessionId, activeDeck } = req.body ?? {};
   if (typeof message !== "string" || message.length === 0) {
     res.status(400).json({ error: "message is required" });
     return;
@@ -70,9 +70,31 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   const clientSessionId: string = typeof sessionId === "string" ? sessionId : crypto.randomUUID();
   const resumeSdkSessionId = sessionMap.get(clientSessionId);
 
+  let prompt = message;
+  const recentActions = recentActionsFor(clientSessionId);
+  let contextLine: string | null = null;
+  if (typeof activeDeck === "string" && activeDeck.length > 0) {
+    try {
+      const deck = await getDeck(activeDeck, DECKS_DIR);
+      if (deck) {
+        const cardCount = deck.cards.reduce((n, c) => n + (c.count ?? 1), 0) + 1; // +1 for commander
+        contextLine = `[UI context: the user has deck "${deck.name}" (commander: ${deck.commander}, ${cardCount} cards) open in the deck panel. Treat ambiguous references — "my deck", the commander's name, "my payoffs" — as referring to this deck; call deck_get "${deck.name}" for its current list before answering deck-specific questions. The user may still ask about unrelated cards/decks; this is context, not a restriction.`;
+      }
+    } catch {
+      // tolerate missing/unreadable deck: ignore and fall back to plain message
+    }
+  }
+  if (recentActions.length > 0) {
+    const actionsText = `Recent UI actions since your last message: ${recentActions.join("; ")}.`;
+    contextLine = contextLine ? `${contextLine} ${actionsText}` : `[UI context: ${actionsText}`;
+  }
+  if (contextLine) {
+    prompt = `${contextLine}]\n\n${message}`;
+  }
+
   try {
     const q = query({
-      prompt: message,
+      prompt,
       options: {
         cwd: REPO_ROOT,
         env: SDK_ENV,
@@ -152,6 +174,30 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   }
 });
 
+// ---- UI action log: recent deck CRUD, surfaced to chat as context ----
+// Indices are absolute (monotonic `pushed` count), not array positions, so
+// trimming the array to ACTION_LOG_MAX entries never desyncs lastSeenMap.
+const ACTION_LOG_MAX = 50;
+const actionLog: { t: number; text: string }[] = [];
+let pushed = 0; // total entries ever logged
+const lastSeenMap = new Map<string, number>(); // clientSessionId -> absolute index seen so far
+
+function logAction(text: string): void {
+  actionLog.push({ t: Date.now(), text });
+  pushed++;
+  if (actionLog.length > ACTION_LOG_MAX) actionLog.shift();
+}
+
+function recentActionsFor(clientSessionId: string): string[] {
+  const oldestIndex = pushed - actionLog.length;
+  const defaultSeen = Math.max(oldestIndex, pushed - 5);
+  const seen = lastSeenMap.get(clientSessionId) ?? defaultSeen;
+  const fromIdx = Math.max(0, seen - oldestIndex);
+  const entries = actionLog.slice(fromIdx).map((e) => e.text);
+  lastSeenMap.set(clientSessionId, pushed);
+  return entries;
+}
+
 // ---- decks API, backed directly by @scrychat/core ----
 const resolverCache = new Map<string, Awaited<ReturnType<CardResolver>>>();
 
@@ -219,6 +265,7 @@ app.post("/api/decks", async (req: Request, res: Response) => {
       return;
     }
     const deck = await createDeck(name, commander, resolver, DECKS_DIR);
+    logAction(`created deck "${deck.name}" (commander ${deck.commander})`);
     res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -233,6 +280,12 @@ app.post("/api/decks/:name/cards", async (req: Request, res: Response) => {
       return;
     }
     const result = await addCards(req.params.name, cards, resolver, DECKS_DIR);
+    for (const c of result.added) {
+      logAction(`added "${c.name}"${c.role ? ` (${c.role})` : ""} to "${req.params.name}"`);
+    }
+    for (const r of result.rejected) {
+      logAction(`tried to add "${r.name}" to "${req.params.name}" — rejected: ${r.reason}`);
+    }
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -247,6 +300,9 @@ app.delete("/api/decks/:name/cards", async (req: Request, res: Response) => {
       return;
     }
     const deck = await removeCards(req.params.name, cards, DECKS_DIR);
+    for (const name of cards) {
+      logAction(`removed "${name}" from "${req.params.name}"`);
+    }
     res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -260,6 +316,7 @@ app.delete("/api/decks/:name", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Deck not found" });
       return;
     }
+    logAction(`deleted deck "${req.params.name}"`);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
