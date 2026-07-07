@@ -56,12 +56,41 @@ function sseWrite(res: Response, event: Record<string, unknown>): void {
 }
 
 // ---- chats: first-class local files, symmetrical with decks/ ----
+type ChatSegment =
+  | { type: "text"; text: string }
+  | { type: "tool"; name: string; input: unknown; result?: string };
+
 type ChatMsg = {
   role: "user" | "assistant";
   text: string;
   tools?: { name: string; input: unknown }[];
+  segments?: ChatSegment[];
+  activeDeck?: string;
   at: string;
 };
+
+const TOOL_RESULT_MAX_CHARS = 2048;
+
+function truncateResult(s: string): string {
+  return s.length > TOOL_RESULT_MAX_CHARS ? `${s.slice(0, TOOL_RESULT_MAX_CHARS)}…` : s;
+}
+
+// Extract a plain-text rendering of an SDK tool_result content block's `content`,
+// which may be a string or an array of {type:"text", text} blocks.
+function stringifyToolResultContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((c) => (c && typeof c === "object" && "text" in c ? String((c as any).text) : ""))
+      .filter(Boolean)
+      .join("\n");
+  }
+  try {
+    return JSON.stringify(content);
+  } catch {
+    return String(content);
+  }
+}
 
 type ChatFile = {
   id: string;
@@ -71,7 +100,57 @@ type ChatFile = {
   sdkSessionId?: string;
   lastSeenActionIdx: number;
   messages: ChatMsg[];
+  deckRefs?: string[];
 };
+
+// mirrors packages/core/src/decks.ts sanitizeName (not exported there)
+function sanitizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Words (length >= 3) making up a deck/commander name, e.g. "Isshin, Two
+// Heavens as One" -> ["isshin", "two", "heavens", "one"]. Used to detect a
+// mention without requiring the full (often multi-word) name verbatim.
+function nameWords(name: string): string[] {
+  return name
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 3);
+}
+
+// Recompute deckRefs for a chat: union of every message's activeDeck plus any
+// deck whose name or commander is mentioned (case-insensitively, word-level)
+// in any user message's text. Cheap: called on every append against the small
+// deck list.
+async function updateDeckRefs(chat: ChatFile): Promise<void> {
+  const refs = new Set<string>();
+  for (const m of chat.messages) {
+    if (m.activeDeck) refs.add(sanitizeName(m.activeDeck));
+  }
+  try {
+    const decks = await listDecks(DECKS_DIR);
+    const userWords = new Set(
+      chat.messages
+        .filter((m) => m.role === "user")
+        .flatMap((m) => nameWords(m.text))
+    );
+    if (userWords.size > 0) {
+      for (const d of decks) {
+        const candidateWords = [...nameWords(d.name), ...nameWords(d.commander)];
+        if (candidateWords.some((w) => userWords.has(w))) {
+          refs.add(sanitizeName(d.name));
+        }
+      }
+    }
+  } catch {
+    // tolerate deck listing failures; keep activeDeck-derived refs
+  }
+  chat.deckRefs = [...refs];
+}
 
 async function atomicWrite(filePath: string, data: string): Promise<void> {
   const dir = path.dirname(filePath);
@@ -140,8 +219,10 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       messages: [],
     };
   }
-  chat.messages.push({ role: "user", text: message, at: now });
+  const msgActiveDeck = typeof activeDeck === "string" && activeDeck.length > 0 ? activeDeck : undefined;
+  chat.messages.push({ role: "user", text: message, activeDeck: msgActiveDeck, at: now });
   chat.updatedAt = now;
+  await updateDeckRefs(chat);
   await writeChatFile(chat);
 
   if (isNewChat) {
@@ -175,6 +256,10 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
   let assistantText = "";
   const assistantTools: { name: string; input: unknown }[] = [];
+  const segments: ChatSegment[] = [];
+  // tool_use_id -> index into `segments` of the {type:"tool"} segment, so a
+  // later tool_result (arrives as a "user" message) can attach to it.
+  const toolSegmentByUseId = new Map<string, number>();
 
   try {
     const q = query({
@@ -236,10 +321,38 @@ app.post("/api/chat", async (req: Request, res: Response) => {
         for (const block of msg.message.content) {
           if (block.type === "text") {
             assistantText += block.text;
+            const last = segments[segments.length - 1];
+            if (last && last.type === "text") {
+              last.text += block.text;
+            } else {
+              segments.push({ type: "text", text: block.text });
+            }
             sseWrite(res, { type: "text-delta", text: block.text });
           } else if (block.type === "tool_use") {
             assistantTools.push({ name: block.name, input: block.input });
+            segments.push({ type: "tool", name: block.name, input: block.input });
+            toolSegmentByUseId.set(block.id, segments.length - 1);
             sseWrite(res, { type: "tool-use", name: block.name, input: block.input });
+          }
+        }
+      }
+
+      // tool_result blocks arrive on a subsequent "user" message; match by
+      // tool_use_id back to the segment created above.
+      if (msg.type === "user") {
+        const content = (msg.message as { content?: unknown }).content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block && typeof block === "object" && (block as any).type === "tool_result") {
+              const toolUseId = (block as any).tool_use_id as string | undefined;
+              if (!toolUseId) continue;
+              const idx = toolSegmentByUseId.get(toolUseId);
+              if (idx === undefined) continue;
+              const result = truncateResult(stringifyToolResultContent((block as any).content));
+              const seg = segments[idx];
+              if (seg && seg.type === "tool") seg.result = result;
+              sseWrite(res, { type: "tool-result", toolIndex: idx, result });
+            }
           }
         }
       }
@@ -262,6 +375,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       role: "assistant",
       text: assistantText,
       tools: assistantTools,
+      segments,
       at: new Date().toISOString(),
     });
     chat.updatedAt = new Date().toISOString();
@@ -270,8 +384,9 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/api/chats", async (_req: Request, res: Response) => {
+app.get("/api/chats", async (req: Request, res: Response) => {
   try {
+    const deckFilter = typeof req.query.deck === "string" ? sanitizeName(req.query.deck) : null;
     await fs.promises.mkdir(CHATS_DIR, { recursive: true });
     const files = await fs.promises.readdir(CHATS_DIR);
     const summaries: { id: string; title: string; updatedAt: string; messageCount: number }[] = [];
@@ -279,6 +394,8 @@ app.get("/api/chats", async (_req: Request, res: Response) => {
       if (!file.endsWith(".json") || file.startsWith(".tmp-")) continue;
       const chat = await readChatFile(file.replace(/\.json$/, ""));
       if (chat) {
+        // backfill tolerance: old chat files without deckRefs are unlinked
+        if (deckFilter && !(chat.deckRefs ?? []).includes(deckFilter)) continue;
         summaries.push({
           id: chat.id,
           title: chat.title,
@@ -376,6 +493,27 @@ const resolver: CardResolver = async (name: string) => {
   resolverCache.set(key, resolved);
   return resolved;
 };
+
+// Lightweight card-image lookup for chat text hover previews: local-mirror
+// getCard lookup (fast) via the same resolver/cache as the decks API. Returns
+// {image} on hit, 404 on miss/unresolvable (e.g. bold-but-not-a-card).
+app.get("/api/card-image", async (req: Request, res: Response) => {
+  try {
+    const name = req.query.name;
+    if (typeof name !== "string" || name.trim().length === 0) {
+      res.status(400).json({ error: "name is required" });
+      return;
+    }
+    const resolved = await resolver(name.trim());
+    if (!resolved?.image) {
+      res.status(404).json({ error: "Card not found" });
+      return;
+    }
+    res.json({ image: resolved.image });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
 
 app.get("/api/decks", async (_req: Request, res: Response) => {
   try {

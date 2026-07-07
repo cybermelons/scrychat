@@ -104,6 +104,10 @@ instead of asking.
 - If an `otag:` search returns few or no hits, say so explicitly — it may be a tag-coverage gap,
   not an absence of cards — then fall back to oracle-text `search_cards` (e.g. `o:"sacrifice a
   creature"`) before concluding nothing exists.
+- The chat UI renders card names specially: wrap card names in `[[Card Name]]` in prose to get a
+  hover preview; use `![[Card Name]]` sparingly for showcase-worthy cards (the commander, a
+  centerpiece suggestion, a top pick) to embed an inline thumbnail — one line each, not every
+  mention.
 
 ## Pitfalls
 

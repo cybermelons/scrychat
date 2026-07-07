@@ -416,6 +416,51 @@ body {
   pointer-events: none;
 }
 
+/* ---------- mana symbols ---------- */
+.mana-symbol {
+  width: 1em;
+  height: 1em;
+  vertical-align: middle;
+  margin: 0 1px;
+}
+
+/* ---------- inline card refs (chat markdown [[Name]] / ![[Name]]) ---------- */
+.card-ref {
+  cursor: default;
+  border-bottom: 1px dotted var(--text-dim);
+  color: var(--text);
+}
+
+.card-ref:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.card-embed {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 4px 8px 4px 0;
+  vertical-align: top;
+}
+
+.card-embed-img {
+  width: 180px;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+
+.card-embed-caption {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+}
+
+.card-embed-missing .card-embed-img {
+  display: none;
+}
+
 /* ---------- chips ---------- */
 .chip {
   display: inline-block;
@@ -443,6 +488,11 @@ body {
   color: var(--accent);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.74rem;
+  cursor: default;
+}
+
+.chip-tool:hover {
+  border-color: var(--accent);
 }
 
 .chip-streaming {
@@ -528,6 +578,30 @@ body {
 
 .tool-chips {
   margin-bottom: 4px;
+}
+
+.tool-chip-row {
+  margin: 2px 0;
+}
+
+.tool-result-popover {
+  position: fixed;
+  z-index: 100;
+  max-width: 420px;
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  font-size: 0.76rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+  color: var(--text);
 }
 
 /* markdown body */
