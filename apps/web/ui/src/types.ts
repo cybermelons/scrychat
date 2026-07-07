@@ -2,6 +2,7 @@ export type CardEntry = {
   name: string;
   role?: string;
   count?: number;
+  image?: string | null;
 };
 
 export type Deck = {
@@ -10,6 +11,7 @@ export type Deck = {
   commanderIdentity: string[];
   cards: CardEntry[];
   updatedAt: string;
+  commanderImage?: string | null;
 };
 
 export type DeckSummary = {
@@ -42,6 +44,24 @@ export type DeckResponse = {
   deck: Deck;
   report: DeckReport;
 };
+
+export type RejectedCard = { name: string; reason: string };
+
+export type AddCardsResult = {
+  added: CardEntry[];
+  rejected: RejectedCard[];
+};
+
+export const CARD_ROLES = [
+  "land",
+  "ramp",
+  "draw",
+  "interaction",
+  "wipe",
+  "wincon",
+  "synergy",
+  "other",
+] as const;
 
 export type ChatEvent =
   | { type: "text-delta"; text: string }

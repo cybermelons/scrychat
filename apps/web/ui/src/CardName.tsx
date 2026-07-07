@@ -3,7 +3,7 @@ import { getCardImage } from "./scryfallImages";
 
 type Preview = { url: string; x: number; y: number } | null;
 
-export function CardName({ name }: { name: string }) {
+export function CardName({ name, image }: { name: string; image?: string | null }) {
   const [preview, setPreview] = useState<Preview>(null);
   const hovering = useRef(false);
 
@@ -12,11 +12,15 @@ export function CardName({ name }: { name: string }) {
       hovering.current = true;
       const x = e.clientX;
       const y = e.clientY;
+      if (image) {
+        setPreview({ url: image, x, y });
+        return;
+      }
       getCardImage(name).then((url) => {
         if (url && hovering.current) setPreview({ url, x, y });
       });
     },
-    [name]
+    [name, image]
   );
 
   const onMove = useCallback((e: React.MouseEvent) => {

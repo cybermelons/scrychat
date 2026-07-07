@@ -21,6 +21,7 @@ export type ResolvedCard = {
   cmc: number;
   typeLine: string;
   legalCommander: boolean;
+  image?: string | null;
 };
 
 export type CardResolver = (name: string) => Promise<ResolvedCard | null>;

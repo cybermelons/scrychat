@@ -4,7 +4,17 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import type { Request, Response } from "express";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { getCard, listDecks, getDeck, deckReport, type CardResolver } from "@scrychat/core";
+import {
+  getCard,
+  listDecks,
+  getDeck,
+  deckReport,
+  createDeck,
+  addCards,
+  removeCards,
+  deleteDeck,
+  type CardResolver,
+} from "@scrychat/core";
 
 // CRITICAL: strip stale ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the
 // process env at startup, before anything else touches process.env or the
@@ -157,6 +167,7 @@ const resolver: CardResolver = async (name: string) => {
         cmc: card.cmc,
         typeLine: card.typeLine,
         legalCommander: card.legalCommander,
+        image: card.image,
       }
     : null;
   resolverCache.set(key, resolved);
@@ -180,9 +191,78 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
       return;
     }
     const report = await deckReport(req.params.name, resolver, DECKS_DIR);
-    res.json({ deck, report });
+
+    const commanderResolved = await resolver(deck.commander);
+    const cardsWithImages = await Promise.all(
+      deck.cards.map(async (c) => {
+        const resolved = await resolver(c.name);
+        return { ...c, image: resolved?.image ?? null };
+      })
+    );
+    const deckWithImages = {
+      ...deck,
+      commanderImage: commanderResolved?.image ?? null,
+      cards: cardsWithImages,
+    };
+
+    res.json({ deck: deckWithImages, report });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post("/api/decks", async (req: Request, res: Response) => {
+  try {
+    const { name, commander } = req.body ?? {};
+    if (typeof name !== "string" || typeof commander !== "string") {
+      res.status(400).json({ error: "name and commander are required" });
+      return;
+    }
+    const deck = await createDeck(name, commander, resolver, DECKS_DIR);
+    res.json({ deck });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post("/api/decks/:name/cards", async (req: Request, res: Response) => {
+  try {
+    const { cards } = req.body ?? {};
+    if (!Array.isArray(cards)) {
+      res.status(400).json({ error: "cards array is required" });
+      return;
+    }
+    const result = await addCards(req.params.name, cards, resolver, DECKS_DIR);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.delete("/api/decks/:name/cards", async (req: Request, res: Response) => {
+  try {
+    const { cards } = req.body ?? {};
+    if (!Array.isArray(cards)) {
+      res.status(400).json({ error: "cards array is required" });
+      return;
+    }
+    const deck = await removeCards(req.params.name, cards, DECKS_DIR);
+    res.json({ deck });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.delete("/api/decks/:name", async (req: Request, res: Response) => {
+  try {
+    const ok = await deleteDeck(req.params.name, DECKS_DIR);
+    if (!ok) {
+      res.status(404).json({ error: "Deck not found" });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
