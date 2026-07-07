@@ -8,7 +8,7 @@ const USER_AGENT = "scrychat/0.1";
 const BULK_DATA_URL = "https://api.scryfall.com/bulk-data";
 const DOWNLOADS_DIR = path.join(REPO_ROOT, "data", "downloads");
 
-export type BulkType = "oracle_cards" | "default_cards";
+export type BulkType = "oracle_cards" | "default_cards" | "oracle_tags";
 
 interface BulkDataEntry {
   type: string;
