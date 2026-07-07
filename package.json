@@ -11,5 +11,8 @@
     "tsx": "^4.19.0",
     "vitest": "^3.0.0",
     "@types/node": "^24.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
   }
 }

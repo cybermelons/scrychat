@@ -8,6 +8,17 @@
   "scripts": {
     "build": "tsc -p . && mkdir -p dist/generated && cp src/generated/tags.json dist/generated/tags.json",
     "test": "vitest run --passWithNoTests",
-    "build-tag-index": "tsx scripts/build-tag-index.ts"
+    "build-tag-index": "tsx scripts/build-tag-index.ts",
+    "ingest": "tsx src/ingest/index.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "stream-chain": "^2.2.5",
+    "stream-json": "^1.9.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/stream-chain": "^2.1.0",
+    "@types/stream-json": "^1.7.8"
   }
 }
