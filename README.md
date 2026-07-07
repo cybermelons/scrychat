@@ -80,6 +80,35 @@ pnpm --filter @scrychat/core build-tag-index
 live tool surface; results land in `evals/RESULTS.md` and transcripts in
 `evals/transcripts/`.
 
+## Local mirror (optional but recommended)
+
+```
+pnpm --filter @scrychat/core ingest
+```
+
+Downloads Scryfall's `oracle_cards`/`default_cards`/`oracle_tags` bulk exports
+and Commander Spellbook's variants dump into `data/downloads/` (cached, ~1GB)
+and populates a local SQLite mirror at `data/scrychat.db`. Takes ~2 minutes on
+a normal connection.
+
+What moves local vs. stays live:
+- **Local (instant, no network round-trip):** `get_card`, `search_tags`,
+  `find_alternatives`, `find_combos` — card lookup, tag search, functional
+  alternatives, and combo search all hit `data/scrychat.db`.
+- **Still live:** `search_cards` — full Scryfall search syntax (`otag:`,
+  `id<=`, `usd<`, `prefer:usd-low`, etc.) proxies the live API so query syntax
+  stays exactly what the skill teaches.
+
+Refresh with the same command — Scryfall's bulk data updates daily, so
+re-running `pnpm --filter @scrychat/core ingest` picks up new prices, cards,
+and tags. Use `--cards` / `--prices` / `--tags` / `--combos` to refresh one
+dataset at a time.
+
+Without the local mirror, every tool falls back to live API calls — nothing
+breaks, it's just slower. One caveat: a running MCP server or web app decides
+local-vs-live once at first use, so restart it after running the ingest for
+the first time (or after a refresh) to pick up the mirror.
+
 ## Attribution & data
 
 Card data and images are © Wizards of the Coast, used under WotC's

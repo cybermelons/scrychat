@@ -105,6 +105,10 @@ Verify: build a deck entirely from the browser chat; edit deck in UI and confirm
 **Phase 3 — local mirror (only when live APIs pinch)**
 Triggers: Tagger gaps on new sets, wanting custom/personal tags, cross-source joins, offline. Swap core's backing store to SQLite (better-sqlite3 + FTS5; pnpm 10 needs `onlyBuiltDependencies` for its postinstall; stream-parse the 551 MB Spellbook bulk; IDF shared-tag scoring for alternatives; no sqlite-vec — brute-force cosine if embeddings ever needed). Tool contracts unchanged.
 
+## Phase 3 shipped (2026-07-07)
+
+Local SQLite mirror is live: `get_card`/`search_tags`/`find_alternatives`/`find_combos` read `data/scrychat.db` (populated by `pnpm --filter @scrychat/core ingest`), `search_cards` stays a live Scryfall proxy for full query-syntax fidelity. Local-first-with-live-fallback: tools work unchanged (same contracts) with or without the mirror present, just slower without it.
+
 ## Risks / notes
 - **Agent SDK on subscription auth** is the linchpin for a billing-free web chat — Phase 2 step 1 verifies it first; fallback is a Happy-style bridge or running the web chat through a Claude Code headless process directly.
 - WotC Fan Content Policy: free personal tool, fine; attribute Scryfall/Tagger/Commander Spellbook in README; don't redistribute derived data publicly.

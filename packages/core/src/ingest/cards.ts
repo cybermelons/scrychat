@@ -104,9 +104,13 @@ export async function ingestCards(db: Database.Database, filePath: string): Prom
       color_identity=excluded.color_identity, ci_mask=excluded.ci_mask, power=excluded.power,
       toughness=excluded.toughness, keywords=excluded.keywords, layout=excluded.layout,
       is_commander=excluded.is_commander, legal_commander=excluded.legal_commander,
-      rarity=excluded.rarity, edhrec_rank=excluded.edhrec_rank, price_usd=excluded.price_usd,
+      rarity=excluded.rarity, edhrec_rank=excluded.edhrec_rank,
       image=excluded.image, scryfall_uri=excluded.scryfall_uri
   `);
+  // price_usd is intentionally omitted from the UPDATE SET above: cards
+  // ingest has no price data (that's a separate --prices run), and the
+  // INSERT's price_usd is only used for brand-new rows. Re-running cards
+  // ingest must not wipe prices populated by a prior --prices run.
 
   const insertFts = db.prepare(`
     INSERT INTO cards_fts (rowid, name, type_line, oracle_text)
