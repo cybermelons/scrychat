@@ -398,6 +398,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
           "mcp__scrychat__deck_get",
           "mcp__scrychat__deck_add",
           "mcp__scrychat__deck_remove",
+          "mcp__scrychat__deck_import",
           "Read",
           "Grep",
         ],

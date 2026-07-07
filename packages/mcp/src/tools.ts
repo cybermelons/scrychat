@@ -26,8 +26,10 @@ import {
   removeCards,
   deckReport,
 } from "@scrychat/core";
+import { parseDecklist } from "@scrychat/core";
 import type { CardResolver, CardEntry } from "@scrychat/core";
 import type { Card } from "@scrychat/core";
+import type { DeckImportEntry } from "@scrychat/core";
 
 const decksDir = path.resolve(process.cwd(), "decks");
 
@@ -73,6 +75,118 @@ function shortCard(card: Card) {
     usd: card.usd,
     r: card.edhrecRank,
     o: truncate(card.oracleText, 200),
+  };
+}
+
+function toCardEntry(e: DeckImportEntry): CardEntry {
+  return { name: e.name, count: e.count };
+}
+
+/**
+ * Implements the deck_import tool's behavior. See registerTools() for the
+ * inputSchema; this is factored out as a plain async function so it can be
+ * called from inside `safe(...)` in the handler.
+ */
+async function deckImport(
+  text: string,
+  deckNameArg: string | undefined,
+  modeArg: "new" | "existing" | undefined,
+): Promise<unknown> {
+  const parsed = parseDecklist(text);
+  const parsedOut = { entries: parsed.entries, unparsed: parsed.unparsed };
+  const commanderEntries = parsed.entries.filter((e) => e.commander);
+
+  const mode: "new" | "existing" = modeArg ?? (commanderEntries.length > 0 ? "new" : "existing");
+
+  if (mode === "existing") {
+    if (!deckNameArg) {
+      return { error: "deck_name required for existing-deck import", parsed: parsedOut };
+    }
+    const deck = await getDeck(deckNameArg, decksDir);
+    if (!deck) {
+      return { error: `Deck not found: ${deckNameArg}`, parsed: parsedOut };
+    }
+    const result = await addCards(deckNameArg, parsed.entries.map(toCardEntry), resolveCard, decksDir);
+    return {
+      mode,
+      added: result.added,
+      rejected: result.rejected,
+      unparsed: parsed.unparsed,
+    };
+  }
+
+  // mode === "new"
+  let commanderName: string | undefined;
+  let commanderNote: string | undefined;
+  let nonCommanderEntries: DeckImportEntry[];
+
+  if (commanderEntries.length === 1) {
+    commanderName = commanderEntries[0].name;
+    nonCommanderEntries = parsed.entries.filter((e) => e !== commanderEntries[0]);
+  } else if (commanderEntries.length > 1) {
+    // Partner/background pair or ambiguous multi-marker list. Phase 1: keep it
+    // simple, use the first as commander, demote the rest to normal cards.
+    commanderName = commanderEntries[0].name;
+    commanderNote =
+      `Multiple *CMDR* markers found; used "${commanderName}" as commander and treated ` +
+      `the rest (${commanderEntries.slice(1).map((e) => e.name).join(", ")}) as normal cards ` +
+      `(partner/background pairing is not auto-resolved in phase 1).`;
+    nonCommanderEntries = parsed.entries.filter((e) => e !== commanderEntries[0]);
+  } else {
+    // Zero commander-marked entries but mode forced to "new": try to infer a
+    // single legal-commander candidate by resolving every entry. Only done in
+    // this rare forced path — the common (marked) path above never resolves.
+    const candidateEntries: DeckImportEntry[] = [];
+    for (const entry of parsed.entries) {
+      const resolved = await resolveCard(entry.name);
+      if (resolved && resolved.typeLine.includes("Legendary") && resolved.typeLine.includes("Creature")) {
+        candidateEntries.push(entry);
+      }
+    }
+    // Dedupe candidate NAMES for the needsCommander list (a duplicate legendary
+    // line shouldn't make it look like 2 distinct candidates).
+    const candidates = [...new Set(candidateEntries.map((e) => e.name))];
+    if (candidates.length === 1) {
+      commanderName = candidates[0];
+      const commanderEntry = candidateEntries[0]; // first matching entry object
+      nonCommanderEntries = parsed.entries.filter((e) => e !== commanderEntry);
+    } else if (candidates.length > 1) {
+      return { needsCommander: true, candidates, parsed: parsedOut };
+    } else {
+      return {
+        error: "No commander found in list; specify deck_name + a commander.",
+        parsed: parsedOut,
+      };
+    }
+  }
+
+  const deckName = deckNameArg ?? commanderName!;
+  if (!deckNameArg) {
+    const defaultNote = `deck_name not given; defaulted to commander name "${deckName}".`;
+    commanderNote = commanderNote ? `${commanderNote} ${defaultNote}` : defaultNote;
+  }
+
+  let deck;
+  try {
+    deck = await createDeck(deckName, commanderName!, resolveCard, decksDir);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: message, parsed: parsedOut };
+  }
+
+  const result = await addCards(deckName, nonCommanderEntries!.map(toCardEntry), resolveCard, decksDir);
+
+  return {
+    mode,
+    created: {
+      name: deck.name,
+      commander: deck.commander,
+      commanderIdentity: deck.commanderIdentity.join(""),
+    },
+    ...(commanderNote ? { commanderNote } : {}),
+    added: result.added,
+    rejected: result.rejected,
+    unparsed: parsed.unparsed,
   };
 }
 
@@ -334,6 +448,27 @@ export function registerTools(server: McpServer): void {
           total: deck.cards.reduce((sum, c) => sum + (c.count ?? 1), 0),
         };
       });
+    },
+  );
+
+  server.registerTool(
+    "deck_import",
+    {
+      title: "Import decklist",
+      description:
+        "Parses a pasted decklist (Moxfield/Archidekt/MTGO/plain-text export style, including *CMDR* markers, " +
+        "section headers, set/collector/foil suffixes) and either creates a new deck or adds to an existing one. " +
+        "Mode is inferred from the presence of *CMDR*-marked entries unless explicitly given. " +
+        "Returns a full accounting: created deck info (if new), added cards, rejected cards with reasons, and " +
+        "any unparsed lines — nothing from the input is silently dropped.",
+      inputSchema: {
+        text: z.string().describe("Raw pasted decklist text"),
+        deck_name: z.string().optional().describe("Target deck name (existing mode) or new deck name (new mode)"),
+        mode: z.enum(["new", "existing"]).optional().describe("Override automatic new-vs-existing inference"),
+      },
+    },
+    async ({ text, deck_name, mode }) => {
+      return safe(async () => deckImport(text, deck_name, mode));
     },
   );
 }

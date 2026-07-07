@@ -84,6 +84,29 @@ instead of asking.
 9. If a budget was given, run a final pass replacing over-budget cards via `find_alternatives`
    with `usd<N prefer:usd-low`.
 
+**F. "Import a pasted decklist"**
+1. When the user pastes something that looks like a decklist (multiple lines, many with leading
+   counts like `1 ` / `1x `, or containing `(SET) 123` suffixes / `*CMDR*` / a `Commander:`
+   header), call `deck_import` with the pasted text. Pass `deck_name` if the user named a deck or
+   one is clearly the active deck; pass `mode:"existing"` when they want it added to the open/
+   active deck, `mode:"new"` when they describe a new deck. Otherwise let it infer.
+2. Handle `needsCommander`: present the `candidates` to the user (or pick the obvious commander
+   if unambiguous from context). Since `deck_import` infers the commander only from a `*CMDR*`
+   marker, either ask the user which candidate is the commander, or re-issue by adding `*CMDR*` to
+   the intended commander's line in the text and calling `deck_import` again. Keep it short.
+3. Resolve `unparsed` lines yourself: for each raw unparsed line, use `get_card` (fuzzy) or
+   `search_cards` to figure out the intended real card name (handle typos, partial names, "3
+   copies of that green ramp rock" style descriptions). Then add the resolved cards to the SAME
+   deck with `deck_add` (batch them in one call). Track which unparsed lines you could resolve vs.
+   genuinely couldn't.
+4. Relay a COMPLETE accounting to the user so every pasted line is accounted for: N added (from
+   `deck_import` + your `deck_add`), M rejected with the verbatim reasons, any unparsed lines you
+   resolved (and to what), and any you still couldn't identify (ask the user to clarify those). Do
+   NOT silently drop anything. Wrap every card name in `[[Card Name]]` per the presentation rules.
+5. Note: `deck_import` does not assign functional roles (land/ramp/etc). If the user wants a quota
+   report afterward, optionally run a follow-up pass tagging roles via `deck_add`/`deck_remove` or
+   just call `deck_get` — mention curve/quota only if asked.
+
 ## EDH skeleton quotas
 
 - Lands: ~36-38 (down toward 33-35 with a low curve or heavy ramp package)

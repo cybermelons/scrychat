@@ -6,11 +6,13 @@
  * `decks/` directory it creates is isolated and easy to clean up), speaks
  * newline-delimited JSON-RPC over stdio, and asserts:
  *   1. initialize succeeds
- *   2. tools/list returns exactly 10 tools
+ *   2. tools/list returns exactly 11 tools
  *   3. tools/call search_cards {query:"otag:token-doubler"} -> total >= 10
  *   4. tools/call search_tags {query:"removal"} -> non-empty array
  *   5. tools/call deck_create + deck_add with an off-identity card -> a
  *      rejection with a reason is present
+ *   6. tools/call deck_import with a *CMDR*-marked new-mode decklist ->
+ *      creates a deck, adds valid cards, and accounts for a junk line
  *
  * Cleans up the temp cwd (and any decks/ it created) on exit.
  */
@@ -20,6 +22,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { deleteDeck } from "../dist/tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(__dirname, "..", "dist", "index.js");
@@ -109,7 +112,7 @@ async function main() {
     // 2. tools/list
     const listRes = await withTimeout(send("tools/list", {}), 10000, "tools/list");
     const tools = listRes.result?.tools ?? [];
-    assert(tools.length === 10, `tools/list returns 10 tools (got ${tools.length}: ${tools.map((t) => t.name).join(", ")})`);
+    assert(tools.length === 11, `tools/list returns 11 tools (got ${tools.length}: ${tools.map((t) => t.name).join(", ")})`);
 
     // 3. search_cards otag:token-doubler
     const searchRes = await withTimeout(
@@ -161,6 +164,37 @@ async function main() {
       rejection && typeof rejection.reason === "string" && rejection.reason.length > 0,
       `deck_add off-identity card rejected with reason (got ${JSON.stringify(addJson)})`,
     );
+
+    // 6. deck_import new-mode with a *CMDR* marker + valid cards + a junk line
+    const importDeckName = `smoke-test-import-${Date.now()}`;
+    const importText =
+      "1 Atraxa, Praetors' Voice *CMDR*\n1 Sol Ring\n1 Arcane Signet\nblarghle not a card 999";
+    const importRes = await withTimeout(
+      send("tools/call", {
+        name: "deck_import",
+        arguments: { text: importText, deck_name: importDeckName },
+      }),
+      20000,
+      "tools/call deck_import",
+    );
+    const importTextOut = importRes.result?.content?.[0]?.text ?? "{}";
+    const importJson = JSON.parse(importTextOut);
+    assert(importJson.mode === "new", `deck_import mode === "new" (got ${JSON.stringify(importJson)})`);
+    assert(!!importJson.created?.commander, `deck_import created.commander is set (got ${JSON.stringify(importJson.created)})`);
+    assert(
+      Array.isArray(importJson.added) && importJson.added.length >= 1,
+      `deck_import added at least 1 card (got ${JSON.stringify(importJson.added)})`,
+    );
+    const junkAccountedFor =
+      (importJson.rejected?.length ?? 0) + (importJson.unparsed?.length ?? 0) >= 1;
+    assert(
+      junkAccountedFor,
+      `deck_import accounts for junk line in rejected/unparsed (got rejected=${JSON.stringify(
+        importJson.rejected,
+      )}, unparsed=${JSON.stringify(importJson.unparsed)})`,
+    );
+
+    await deleteDeck(importDeckName, path.join(workDir, "decks"));
   } finally {
     child.stdin.end();
     child.kill();
