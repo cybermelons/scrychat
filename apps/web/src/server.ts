@@ -183,7 +183,15 @@ async function atomicWrite(filePath: string, data: string): Promise<void> {
   await fs.promises.rename(tmpPath, filePath);
 }
 
+const VALID_CHAT_ID = /^[a-z0-9][a-z0-9-]*$/;
+function isValidChatId(id: unknown): id is string {
+  return typeof id === "string" && id.length > 0 && id.length <= 128 && VALID_CHAT_ID.test(id);
+}
+
 function chatFilePath(id: string): string {
+  if (!isValidChatId(id)) {
+    throw new Error("invalid chat id");
+  }
   return path.join(CHATS_DIR, `${id}.json`);
 }
 
@@ -293,6 +301,10 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   const { message, sessionId, activeDeck, chatId: reqChatId } = req.body ?? {};
   if (typeof message !== "string" || message.length === 0) {
     res.status(400).json({ error: "message is required" });
+    return;
+  }
+  if (reqChatId !== undefined && reqChatId !== null && reqChatId !== "" && !isValidChatId(reqChatId)) {
+    res.status(400).json({ error: "invalid chatId" });
     return;
   }
 
@@ -526,6 +538,10 @@ app.get("/api/chats", async (req: Request, res: Response) => {
 });
 
 app.get("/api/chats/:id", async (req: Request, res: Response) => {
+  if (!isValidChatId(req.params.id)) {
+    res.status(400).json({ error: "invalid chat id" });
+    return;
+  }
   try {
     const chat = await readChatFile(req.params.id);
     if (!chat) {
@@ -539,6 +555,10 @@ app.get("/api/chats/:id", async (req: Request, res: Response) => {
 });
 
 app.delete("/api/chats/:id", async (req: Request, res: Response) => {
+  if (!isValidChatId(req.params.id)) {
+    res.status(400).json({ error: "invalid chat id" });
+    return;
+  }
   try {
     await fs.promises.unlink(chatFilePath(req.params.id));
     res.json({ ok: true });
