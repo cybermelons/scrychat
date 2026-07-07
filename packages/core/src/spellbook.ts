@@ -24,6 +24,7 @@
  */
 
 import { escapeQuotedTerm } from "./scryfall.js";
+import { getLocalDb, findCombosLocal } from "./local.js";
 
 const SPELLBOOK_API_BASE = "https://backend.commanderspellbook.com";
 const USER_AGENT = "scrychat/0.1";
@@ -88,6 +89,19 @@ export function buildCardsQuery(cards: string[]): string {
 
 export async function findCombos(cards: string[], limit = 10): Promise<Combo[]> {
   if (cards.length === 0) return [];
+
+  const db = getLocalDb();
+  if (db) {
+    const local = findCombosLocal(db, cards, limit);
+    if (local) {
+      return local.map((c) => ({
+        pieces: c.pieces,
+        produces: c.produces,
+        identity: c.identity,
+        link: c.link,
+      }));
+    }
+  }
 
   const params = new URLSearchParams({
     q: buildCardsQuery(cards),

@@ -12,6 +12,8 @@
  * shouldn't have to manually sleep-and-retry around Scryfall hiccups.
  */
 
+import { getLocalDb, getCardLocal } from "./local.js";
+
 const SCRYFALL_API_BASE = "https://api.scryfall.com";
 const USER_AGENT = "scrychat/0.1";
 const SCRYFALL_MIN_INTERVAL_MS = 150;
@@ -239,6 +241,12 @@ export async function searchCards(query: string, opts: SearchCardsOptions = {}):
 }
 
 export async function getCard(name: string): Promise<Card | null> {
+  const db = getLocalDb();
+  if (db) {
+    const local = getCardLocal(db, name);
+    if (local) return local;
+  }
+
   const params = new URLSearchParams({ fuzzy: name });
   const raw = await scryfallFetch<ScryfallCardResponse>(`/cards/named?${params.toString()}`);
   if (raw === null) return null;

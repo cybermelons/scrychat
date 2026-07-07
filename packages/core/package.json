@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p . && mkdir -p dist/generated && cp src/generated/tags.json dist/generated/tags.json",
+    "build": "tsc -p . && mkdir -p dist/generated && cp src/generated/tags.json dist/generated/tags.json && cp src/db/schema.sql dist/db/schema.sql",
     "test": "vitest run --passWithNoTests",
     "build-tag-index": "tsx scripts/build-tag-index.ts",
     "ingest": "tsx src/ingest/index.ts"

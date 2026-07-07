@@ -1,0 +1,303 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { openDb } from "../src/db/connection.js";
+import {
+  __resetLocalDbCacheForTests,
+  getCardLocal,
+  findCombosLocal,
+  findAlternativesLocal,
+  parseCiMask,
+} from "../src/local.js";
+
+type DbHandle = ReturnType<typeof openDb>;
+
+let tmpDir: string;
+let db: DbHandle;
+
+interface FixtureCard {
+  oracle_id: string;
+  name: string;
+  type_line: string;
+  oracle_text: string;
+  color_identity: string[];
+  ci_mask: number;
+  legal_commander: number;
+  price_usd: number | null;
+}
+
+const CARDS: FixtureCard[] = [
+  {
+    oracle_id: "target-1",
+    name: "Doubling Season",
+    type_line: "Enchantment",
+    oracle_text: "If an effect would create tokens, twice as many are created. If an effect would put counters, twice as many are put.",
+    color_identity: ["G"],
+    ci_mask: 16,
+    legal_commander: 1,
+    price_usd: 45,
+  },
+  // Shares BOTH token-doubler (specific, 3 members) and counter-doubler (specific, 2 members) with target.
+  {
+    oracle_id: "member-strong",
+    name: "Strong Doubler",
+    type_line: "Enchantment",
+    oracle_text: "Doubles tokens and counters.",
+    color_identity: ["G", "W"],
+    ci_mask: 17,
+    legal_commander: 1,
+    price_usd: 10,
+  },
+  // Shares only synergy-generic (broad, 5 members) - a generic/common tag.
+  {
+    oracle_id: "member-weak",
+    name: "Weak Synergy Card",
+    type_line: "Creature",
+    oracle_text: "Generic synergy payoff.",
+    color_identity: ["G"],
+    ci_mask: 16,
+    legal_commander: 1,
+    price_usd: 5,
+  },
+  // Shares token-doubler only.
+  {
+    oracle_id: "member-token-only",
+    name: "Token Only Doubler",
+    type_line: "Artifact",
+    oracle_text: "Doubles tokens.",
+    color_identity: ["W"],
+    ci_mask: 1,
+    legal_commander: 1,
+    price_usd: 8,
+  },
+  // Out of color identity (Blue) - must be excluded by ci filter.
+  {
+    oracle_id: "member-offcolor",
+    name: "Offcolor Doubler",
+    type_line: "Enchantment",
+    oracle_text: "Doubles tokens.",
+    color_identity: ["U"],
+    ci_mask: 2,
+    legal_commander: 1,
+    price_usd: 5,
+  },
+  // Too expensive - must be excluded by price filter.
+  {
+    oracle_id: "member-expensive",
+    name: "Expensive Doubler",
+    type_line: "Enchantment",
+    oracle_text: "Doubles tokens.",
+    color_identity: ["G"],
+    ci_mask: 16,
+    legal_commander: 1,
+    price_usd: 999,
+  },
+  // Not legal in commander - must be excluded.
+  {
+    oracle_id: "member-illegal",
+    name: "Banned Doubler",
+    type_line: "Enchantment",
+    oracle_text: "Doubles tokens.",
+    color_identity: ["G"],
+    ci_mask: 16,
+    legal_commander: 0,
+    price_usd: 5,
+  },
+  // Combo partner card.
+  {
+    oracle_id: "combo-partner",
+    name: "Combo Partner",
+    type_line: "Creature",
+    oracle_text: "Tap: draw a card.",
+    color_identity: ["U"],
+    ci_mask: 2,
+    legal_commander: 1,
+    price_usd: 1,
+  },
+];
+
+interface FixtureTag {
+  id: string;
+  slug: string;
+  label: string;
+  description: string | null;
+  is_functional: number;
+}
+
+const TAGS: FixtureTag[] = [
+  { id: "tag-token-doubler", slug: "token-doubler", label: "token doubler", description: "Doubles tokens", is_functional: 1 },
+  { id: "tag-counter-doubler", slug: "counter-doubler", label: "counter doubler", description: "Doubles counters", is_functional: 1 },
+  { id: "tag-synergy-generic", slug: "synergy-generic", label: "generic synergy", description: "Broad synergy grouping", is_functional: 1 },
+  { id: "tag-cycle-fake", slug: "cycle-fake", label: "cycle fake", description: null, is_functional: 0 },
+];
+
+// oracle_id -> tag_id -> weight
+const CARD_TAGS: [string, string, number][] = [
+  ["target-1", "tag-token-doubler", 3],
+  ["target-1", "tag-counter-doubler", 5],
+
+  ["member-strong", "tag-token-doubler", 3],
+  ["member-strong", "tag-counter-doubler", 4],
+
+  ["member-token-only", "tag-token-doubler", 3],
+
+  ["member-offcolor", "tag-token-doubler", 3],
+  ["member-expensive", "tag-token-doubler", 3],
+  ["member-illegal", "tag-token-doubler", 3],
+
+  ["member-weak", "tag-synergy-generic", 3],
+  ["member-strong", "tag-synergy-generic", 3],
+  ["member-token-only", "tag-synergy-generic", 3],
+  ["member-offcolor", "tag-synergy-generic", 3],
+  ["member-expensive", "tag-synergy-generic", 3],
+  ["combo-partner", "tag-synergy-generic", 3],
+  ["target-1", "tag-synergy-generic", 3],
+];
+
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrychat-local-test-"));
+  const dbPath = path.join(tmpDir, "test.db");
+  db = openDb({ path: dbPath });
+
+  const insertCard = db.prepare(`
+    INSERT INTO cards (oracle_id, name, type_line, oracle_text, color_identity, ci_mask, legal_commander, price_usd)
+    VALUES (@oracle_id, @name, @type_line, @oracle_text, @color_identity, @ci_mask, @legal_commander, @price_usd)
+  `);
+  const insertFts = db.prepare(`
+    INSERT INTO cards_fts (rowid, name, type_line, oracle_text)
+    SELECT rowid, name, type_line, oracle_text FROM cards WHERE oracle_id = ?
+  `);
+  for (const c of CARDS) {
+    insertCard.run({
+      oracle_id: c.oracle_id,
+      name: c.name,
+      type_line: c.type_line,
+      oracle_text: c.oracle_text,
+      color_identity: JSON.stringify(c.color_identity),
+      ci_mask: c.ci_mask,
+      legal_commander: c.legal_commander,
+      price_usd: c.price_usd,
+    });
+    insertFts.run(c.oracle_id);
+  }
+
+  const insertTag = db.prepare(`
+    INSERT INTO tags (id, slug, label, description, is_functional, source)
+    VALUES (@id, @slug, @label, @description, @is_functional, 'test')
+  `);
+  for (const t of TAGS) insertTag.run(t);
+
+  const insertCardTag = db.prepare(`
+    INSERT INTO card_tags (oracle_id, tag_id, weight, source) VALUES (?, ?, ?, 'test')
+  `);
+  for (const [oracleId, tagId, weight] of CARD_TAGS) insertCardTag.run(oracleId, tagId, weight);
+
+  // One combo containing Doubling Season + Combo Partner.
+  db.prepare(`
+    INSERT INTO combos (id, identity, ci_mask, status, description, card_count, popularity, price_usd)
+    VALUES ('combo-1', 'GU', 18, 'OK', 'Test combo', 2, 100, 5)
+  `).run();
+  db.prepare(`INSERT INTO combo_cards (combo_id, oracle_id) VALUES ('combo-1', 'target-1')`).run();
+  db.prepare(`INSERT INTO combo_cards (combo_id, oracle_id) VALUES ('combo-1', 'combo-partner')`).run();
+  db.prepare(`INSERT INTO combo_produces (combo_id, feature) VALUES ('combo-1', 'Infinite test')`).run();
+
+  __resetLocalDbCacheForTests(db);
+});
+
+afterEach(() => {
+  db.close();
+  __resetLocalDbCacheForTests(undefined);
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe("local.getCardLocal", () => {
+  it("resolves an exact name", () => {
+    const card = getCardLocal(db, "Doubling Season");
+    expect(card?.name).toBe("Doubling Season");
+    expect(card?.colorIdentity).toEqual(["G"]);
+  });
+
+  it("resolves case-insensitively", () => {
+    const card = getCardLocal(db, "doubling season");
+    expect(card?.name).toBe("Doubling Season");
+  });
+
+  it("returns null for a name with no local match", () => {
+    const card = getCardLocal(db, "Some Card That Does Not Exist Zzz");
+    expect(card).toBeNull();
+  });
+});
+
+describe("local.parseCiMask", () => {
+  it("parses gw into the G|W bitmask", () => {
+    expect(parseCiMask("gw")).toBe(1 | 16);
+  });
+});
+
+describe("local.findCombosLocal", () => {
+  it("AND-matches combos containing all given cards", () => {
+    const combos = findCombosLocal(db, ["Doubling Season", "Combo Partner"], 10);
+    expect(combos).not.toBeNull();
+    expect(combos!.length).toBe(1);
+    expect(combos![0].pieces.sort()).toEqual(["Combo Partner", "Doubling Season"].sort());
+    expect(combos![0].produces).toEqual(["Infinite test"]);
+    expect(combos![0].link).toBe("https://commanderspellbook.com/combo/combo-1");
+  });
+
+  it("returns empty array when no combo contains all given cards", () => {
+    const combos = findCombosLocal(db, ["Doubling Season", "Weak Synergy Card"], 10);
+    expect(combos).toEqual([]);
+  });
+
+  it("returns null when a card name cannot be resolved locally", () => {
+    const combos = findCombosLocal(db, ["Doubling Season", "Totally Unknown Card Zzz"], 10);
+    expect(combos).toBeNull();
+  });
+});
+
+describe("local.findAlternativesLocal", () => {
+  it("orders a card sharing 2 specific tags above one sharing only 1 generic tag", () => {
+    const result = findAlternativesLocal(db, "Doubling Season", {});
+    expect(result).not.toBeNull();
+
+    const allMembers = result!.roles.flatMap((r) => r.members.map((m) => m.name));
+    // Doubling Season itself must never appear among its own alternatives.
+    expect(allMembers).not.toContain("Doubling Season");
+
+    const tokenDoublerRole = result!.roles.find((r) => r.slug === "token-doubler");
+    expect(tokenDoublerRole).toBeDefined();
+    const names = tokenDoublerRole!.members.map((m) => m.name);
+    const strongIdx = names.indexOf("Strong Doubler");
+    const tokenOnlyIdx = names.indexOf("Token Only Doubler");
+    expect(strongIdx).toBeGreaterThanOrEqual(0);
+    expect(tokenOnlyIdx).toBeGreaterThanOrEqual(0);
+    // Strong Doubler shares token-doubler AND counter-doubler with the
+    // target (higher summed IDF) so it must outrank a card that only
+    // shares the single token-doubler tag.
+    expect(strongIdx).toBeLessThan(tokenOnlyIdx);
+  });
+
+  it("excludes cards outside colorIdentityWithin", () => {
+    const result = findAlternativesLocal(db, "Doubling Season", { colorIdentityWithin: "gw" });
+    const allMembers = result!.roles.flatMap((r) => r.members.map((m) => m.name));
+    expect(allMembers).not.toContain("Offcolor Doubler");
+  });
+
+  it("excludes cards above maxPrice", () => {
+    const result = findAlternativesLocal(db, "Doubling Season", { maxPrice: 20 });
+    const allMembers = result!.roles.flatMap((r) => r.members.map((m) => m.name));
+    expect(allMembers).not.toContain("Expensive Doubler");
+  });
+
+  it("excludes cards not legal in commander", () => {
+    const result = findAlternativesLocal(db, "Doubling Season", {});
+    const allMembers = result!.roles.flatMap((r) => r.members.map((m) => m.name));
+    expect(allMembers).not.toContain("Banned Doubler");
+  });
+
+  it("returns null when the card cannot be resolved locally", () => {
+    const result = findAlternativesLocal(db, "Totally Unknown Card Zzz", {});
+    expect(result).toBeNull();
+  });
+});

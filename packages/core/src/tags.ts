@@ -12,6 +12,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getLocalDb, searchTagsLocal, getTagLocal } from "./local.js";
 
 export interface TagEntry {
   slug: string;
@@ -63,6 +64,11 @@ export async function searchTags(query: string, limit = 10): Promise<TagSearchRe
   const q = query.trim().toLowerCase();
   if (!q) return [];
 
+  const db = getLocalDb();
+  if (db) {
+    return searchTagsLocal(db, query, limit);
+  }
+
   const entries = await loadTags();
   const scored: { entry: TagEntry; rank: number }[] = [];
 
@@ -91,6 +97,11 @@ export async function searchTags(query: string, limit = 10): Promise<TagSearchRe
 }
 
 export async function getTag(slug: string): Promise<TagSearchResult | null> {
+  const db = getLocalDb();
+  if (db) {
+    return getTagLocal(db, slug);
+  }
+
   const entries = await loadTags();
   const entry = entries.find((e) => e.slug === slug);
   return entry ? toResult(entry) : null;

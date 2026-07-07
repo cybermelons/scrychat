@@ -21,6 +21,7 @@ import type { Card } from "./scryfall.js";
 import { searchCards, getCard, escapeQuotedTerm } from "./scryfall.js";
 import { allTags } from "./tags.js";
 import type { TagEntry } from "./tags.js";
+import { getLocalDb, findAlternativesLocal } from "./local.js";
 
 const STOPWORDS = new Set([
   "a", "an", "the", "of", "to", "and", "or", "for", "with", "your", "you",
@@ -99,6 +100,19 @@ export interface FindAlternativesOptions {
 }
 
 export async function findAlternatives(
+  cardName: string,
+  opts: FindAlternativesOptions = {},
+): Promise<FindAlternativesResult> {
+  const db = getLocalDb();
+  if (db) {
+    const local = findAlternativesLocal(db, cardName, opts);
+    if (local) return local;
+  }
+
+  return findAlternatives_live(cardName, opts);
+}
+
+async function findAlternatives_live(
   cardName: string,
   opts: FindAlternativesOptions = {},
 ): Promise<FindAlternativesResult> {
