@@ -3,6 +3,7 @@ export type CardEntry = {
   role?: string;
   count?: number;
   image?: string | null;
+  manaCost?: string | null;
 };
 
 export type Deck = {
@@ -72,7 +73,8 @@ export type ChatEvent =
   | { type: "text-delta"; text: string }
   | { type: "tool-use"; name: string; input: unknown }
   | { type: "tool-result"; toolIndex: number; result: string }
-  | { type: "done"; sessionId?: string; result?: string | null; isError?: boolean; error?: string };
+  | { type: "done"; sessionId?: string; result?: string | null; isError?: boolean; error?: string }
+  | { type: "segments-update"; segments: ChatSegment[] };
 
 export type ChatMessage = {
   role: "user" | "assistant";

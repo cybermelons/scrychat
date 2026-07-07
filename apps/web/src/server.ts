@@ -32,8 +32,29 @@ const REPO_ROOT = path.resolve(__dirname, "../../../");
 const DECKS_DIR = path.join(REPO_ROOT, "decks");
 const CHATS_DIR = path.join(REPO_ROOT, "chats");
 const MCP_SERVER_PATH = path.join(REPO_ROOT, "packages/mcp/dist/index.js");
+const CONFIG_PATH = path.join(REPO_ROOT, "scrychat.config.json");
 
 const PORT = 8787;
+
+// ---- config: scrychat.config.json at repo root, tolerate absent file ----
+type ScrychatConfig = { linkifyPass: boolean };
+
+const DEFAULT_CONFIG: ScrychatConfig = { linkifyPass: false };
+
+function loadConfig(): ScrychatConfig {
+  try {
+    const raw = fs.readFileSync(CONFIG_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    return {
+      linkifyPass: typeof parsed.linkifyPass === "boolean" ? parsed.linkifyPass : DEFAULT_CONFIG.linkifyPass,
+    };
+  } catch {
+    return DEFAULT_CONFIG;
+  }
+}
+
+const config = loadConfig();
+console.log(`scrychat config: linkifyPass=${config.linkifyPass}`);
 
 const app = express();
 app.use(express.json());
@@ -188,6 +209,84 @@ function newChatId(): string {
 function titleFromMessage(message: string): string {
   const t = message.trim().replace(/\s+/g, " ");
   return t.length > 40 ? `${t.slice(0, 40)}…` : t;
+}
+
+// ---- linkify post-pass (opt-in, see scrychat.config.json) ----
+// Cheap gate: does the text look like it has a table row or list line? If
+// so it's plausible bare card names slipped through (see issue #12) — worth
+// the extra cheap-model pass. If not (plain prose), skip: the skill's [[...]]
+// instruction almost always holds outside tabular/list contexts.
+function looksTabularOrListy(text: string): boolean {
+  return /^\s*\|.*\|\s*$/m.test(text) || /^\s*[-*+]\s+\S/m.test(text) || /^\s*\d+[.)]\s+\S/m.test(text);
+}
+
+const LINKIFY_TIMEOUT_MS = 10_000;
+const LINKIFY_PROMPT_PREFIX =
+  "Re-emit this text EXACTLY, but wrap every Magic: The Gathering card name that is not already " +
+  "inside [[...]], ![[...]], or [[group:...]] in [[...]]. Change nothing else — same words, same " +
+  "whitespace, same markdown, same order. Output only the rewritten text, nothing else.\n\n---\n\n";
+
+// Runs the opt-in Haiku linkify pass over a finished assistant message's text
+// segments. Returns the rewritten segments, or null on any failure/timeout —
+// callers must treat null as "skip silently, original stands" per issue #12.
+async function linkifySegments(segments: ChatSegment[]): Promise<ChatSegment[] | null> {
+  const textSegments = segments.filter((s): s is { type: "text"; text: string } => s.type === "text");
+  const combinedText = textSegments.map((s) => s.text).join("");
+  if (!combinedText.trim() || !looksTabularOrListy(combinedText)) return null;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LINKIFY_TIMEOUT_MS);
+  try {
+    const q = query({
+      prompt: `${LINKIFY_PROMPT_PREFIX}${combinedText}`,
+      options: {
+        cwd: REPO_ROOT,
+        env: SDK_ENV,
+        model: "haiku", // cheap-model alias; see @anthropic-ai/claude-agent-sdk AgentDefinition.model
+        maxTurns: 1,
+        allowedTools: [],
+        disallowedTools: ["Bash", "Read", "Write", "Edit", "NotebookEdit", "WebFetch", "WebSearch", "Task", "KillShell"],
+        permissionMode: "dontAsk",
+        abortController: controller,
+      },
+    });
+
+    let rewritten = "";
+    for await (const msg of q) {
+      if (msg.type === "assistant") {
+        for (const block of msg.message.content) {
+          if (block.type === "text") rewritten += block.text;
+        }
+      }
+    }
+    clearTimeout(timer);
+    if (!rewritten.trim()) return null;
+
+    // Single combined text segment stood in for N text segments above; any
+    // interleaved tool segments are preserved as-is, text segments collapse
+    // into one rewritten block at the position of the first text segment.
+    const firstTextIdx = segments.findIndex((s) => s.type === "text");
+    if (firstTextIdx === -1) return null;
+    const out: ChatSegment[] = [];
+    let inserted = false;
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (seg.type === "text") {
+        if (!inserted) {
+          out.push({ type: "text", text: rewritten });
+          inserted = true;
+        }
+        // subsequent text segments are dropped: folded into the rewrite above
+      } else {
+        out.push(seg);
+      }
+    }
+    return out;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 app.post("/api/chat", async (req: Request, res: Response) => {
@@ -371,11 +470,26 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   } catch (err) {
     sseWrite(res, { type: "done", error: err instanceof Error ? err.message : String(err) });
   } finally {
+    // Opt-in linkify post-pass (issue #12): runs after "done" has already
+    // streamed (the reply is final either way), so a slow/failed pass never
+    // delays the visible response — it only ever arrives as a later
+    // "segments-update" correction, or not at all. Persisted segments are
+    // whichever version we end up with (linkified if the pass ran and
+    // succeeded, original otherwise).
+    let finalSegments = segments;
+    if (config.linkifyPass && !res.writableEnded) {
+      const linkified = await linkifySegments(segments);
+      if (linkified) {
+        finalSegments = linkified;
+        sseWrite(res, { type: "segments-update", segments: linkified });
+      }
+    }
+
     chat.messages.push({
       role: "assistant",
       text: assistantText,
       tools: assistantTools,
-      segments,
+      segments: finalSegments,
       at: new Date().toISOString(),
     });
     chat.updatedAt = new Date().toISOString();
@@ -488,6 +602,7 @@ const resolver: CardResolver = async (name: string) => {
         typeLine: card.typeLine,
         legalCommander: card.legalCommander,
         image: card.image,
+        manaCost: card.manaCost,
       }
     : null;
   resolverCache.set(key, resolved);
@@ -564,7 +679,7 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
     const cardsWithImages = await Promise.all(
       deck.cards.map(async (c) => {
         const resolved = await resolver(c.name);
-        return { ...c, image: resolved?.image ?? null };
+        return { ...c, image: resolved?.image ?? null, manaCost: resolved?.manaCost ?? null };
       })
     );
     const deckWithImages = {

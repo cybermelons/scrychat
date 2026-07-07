@@ -109,6 +109,10 @@ breaks, it's just slower. One caveat: a running MCP server or web app decides
 local-vs-live once at first use, so restart it after running the ingest for
 the first time (or after a refresh) to pick up the mirror.
 
+`scrychat.config.json` at repo root: `linkifyPass` (default `false`) runs a
+second cheap-model pass over each reply to wrap any bare card names the model
+missed in `[[...]]`, before persisting — off by default, no extra cost/latency.
+
 ## Attribution & data
 
 Card data and images are © Wizards of the Coast, used under WotC's

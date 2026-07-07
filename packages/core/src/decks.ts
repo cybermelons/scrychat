@@ -22,6 +22,7 @@ export type ResolvedCard = {
   typeLine: string;
   legalCommander: boolean;
   image?: string | null;
+  manaCost?: string | null;
 };
 
 export type CardResolver = (name: string) => Promise<ResolvedCard | null>;

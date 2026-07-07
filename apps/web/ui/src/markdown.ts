@@ -14,7 +14,7 @@ function escapeHtml(s: string): string {
 // official symbol SVGs (svgs.scryfall.io, the un-rate-limited file origin —
 // same CDN-hotlink policy as card images). Conservative match: 1-3 chars of
 // letters/digits/slash inside braces, applied to already-escaped text.
-function renderManaSymbols(s: string): string {
+export function renderManaSymbols(s: string): string {
   return s.replace(/\{([A-Za-z0-9/]{1,3})\}/g, (whole, sym: string) => {
     const code = sym.toUpperCase().replace(/\//g, "");
     return `<img class="mana-symbol" src="https://svgs.scryfall.io/card-symbols/${code}.svg" alt="${whole}">`;

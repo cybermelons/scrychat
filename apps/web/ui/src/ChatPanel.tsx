@@ -34,6 +34,24 @@ function prettyResult(result: string): string {
   }
 }
 
+// Tool chip result status: pulse while awaiting (result undefined), else
+// settle — red tint if the result JSON carries an "error" key or isError
+// truthy, otherwise a plain settled state. Falls back to string sniffing if
+// the result isn't valid JSON (e.g. plain-text error messages).
+function toolResultStatus(result: string | undefined): "pending" | "error" | "ok" {
+  if (result === undefined) return "pending";
+  try {
+    const parsed = JSON.parse(result);
+    if (parsed && typeof parsed === "object") {
+      if ((parsed as Record<string, unknown>).isError) return "error";
+      if ("error" in (parsed as Record<string, unknown>)) return "error";
+    }
+    return "ok";
+  } catch {
+    return /error/i.test(result) ? "error" : "ok";
+  }
+}
+
 function AssistantBody({ msg }: { msg: ChatMessage }) {
   return (
     <>
@@ -47,7 +65,7 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
         ) : (
           <div className="tool-chip-row" key={i}>
             <span
-              className={`chip chip-tool${seg.result === undefined ? " chip-streaming" : ""}`}
+              className={`chip chip-tool chip-tool-${toolResultStatus(seg.result)}`}
               data-result={seg.result ?? ""}
             >
               ⚙ {toolChipLabel(seg.name, seg.input)}
@@ -62,14 +80,17 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
 export function ChatPanel({
   selected,
   deckCardNames,
+  onOpenDeckDrawer,
 }: {
   selected: string;
   deckCardNames: Set<string>;
+  onOpenDeckDrawer?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingChat, setLoadingChat] = useState(false);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [deckChats, setDeckChats] = useState<ChatSummary[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
@@ -135,6 +156,7 @@ export function ChatPanel({
   }, []);
 
   const loadChat = useCallback((id: string) => {
+    setLoadingChat(true);
     return fetch(`/api/chats/${encodeURIComponent(id)}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -154,7 +176,8 @@ export function ChatPanel({
         );
         localStorage.setItem(LAST_CHAT_KEY, id);
       })
-      .catch(() => void 0);
+      .catch(() => void 0)
+      .finally(() => setLoadingChat(false));
   }, []);
 
   const startNewChat = useCallback(() => {
@@ -245,9 +268,17 @@ export function ChatPanel({
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      // Chat this stream belongs to. For a resumed chat it's known up front;
+      // for a brand-new chat the server assigns it mid-stream via the
+      // "chat" event below. Used to drop late events (e.g. the linkify
+      // post-pass's segments-update, which can arrive after the user has
+      // already switched/started another chat) that would otherwise
+      // clobber the wrong chat's last assistant message.
+      let owningChatId: string | null = chatIdRef.current;
 
       const handleEvent = (ev: ChatEvent) => {
         if (ev.type === "chat") {
+          owningChatId = ev.chatId;
           chatIdRef.current = ev.chatId;
           setChatId(ev.chatId);
           localStorage.setItem(LAST_CHAT_KEY, ev.chatId);
@@ -281,6 +312,17 @@ export function ChatPanel({
           if (ev.sessionId) sessionIdRef.current = ev.sessionId;
           if (ev.error) setError(ev.error);
           else if (ev.isError && ev.result) setError(String(ev.result));
+        } else if (ev.type === "segments-update") {
+          // Late event from the server's post-stream linkify pass. If the
+          // user has since switched chats, chatIdRef.current no longer
+          // matches the chat this stream belongs to — drop it rather than
+          // rewriting the wrong chat's last assistant message.
+          if (chatIdRef.current !== owningChatId) return;
+          updateLastAssistant((m) => ({
+            ...m,
+            segments: ev.segments,
+            text: ev.segments.filter((s) => s.type === "text").map((s) => (s as { text: string }).text).join(""),
+          }));
         }
       };
 
@@ -560,6 +602,15 @@ export function ChatPanel({
   return (
     <main className="chat-panel">
       <div className="chat-panel-header">
+        <button
+          type="button"
+          className="btn btn-ghost btn-small deck-drawer-toggle"
+          onClick={onOpenDeckDrawer}
+          aria-label="Open deck panel"
+          title="Open deck panel"
+        >
+          ☰
+        </button>
         <select
           className="chat-select"
           value={chatId ?? ""}
@@ -610,12 +661,23 @@ export function ChatPanel({
         onMouseOut={onScrollMouseOut}
         onClick={onScrollClick}
       >
-        {messages.length === 0 && (
-          <div className="chat-empty">
-            Ask about your deck — card searches, swaps, quotas, combos.
+        {loadingChat && (
+          <div className="chat-skeleton" aria-hidden="true">
+            {[0, 1, 2, 3].map((i) => (
+              <div className={`skeleton-msg${i % 2 === 0 ? " skeleton-msg-user" : ""}`} key={i}>
+                <div className="skeleton-block skeleton-shimmer" style={{ height: 16 }} />
+              </div>
+            ))}
           </div>
         )}
-        {messages.map((m, i) => (
+        {!loadingChat && messages.length === 0 && (
+          <div className="chat-empty">
+            <div className="chat-empty-icon" aria-hidden="true">💬</div>
+            <p>No messages yet.</p>
+            <p className="chat-empty-hint">Ask about your deck — card searches, swaps, quotas, combos.</p>
+          </div>
+        )}
+        {!loadingChat && messages.map((m, i) => (
           <div className={`msg msg-${m.role}`} key={i}>
             {m.role === "user" ? (
               <div className="msg-text">{m.text}</div>

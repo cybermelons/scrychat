@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Deck, DeckReport, DeckSummary, QuotaCheck, RejectedCard } from "./types";
 import { CARD_ROLES } from "./types";
 import { CardName } from "./CardName";
+import { renderManaSymbols } from "./markdown";
 
 const CURVE_ORDER = ["0", "1", "2", "3", "4", "5", "6", "7+"];
 
@@ -40,14 +41,49 @@ function ManaCurve({ curve }: { curve: Record<string, number> }) {
   );
 }
 
+function DeckSkeleton() {
+  return (
+    <div className="deck-body skeleton-wrap" aria-hidden="true">
+      <div className="commander skeleton-block skeleton-shimmer" style={{ height: 88 }} />
+      <div className="deck-section">
+        <div className="skeleton-line skeleton-shimmer" style={{ width: "40%" }} />
+        <ul className="quota-list">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <li className="quota skeleton-row" key={i}>
+              <div className="skeleton-block skeleton-shimmer" style={{ height: 14, width: "100%" }} />
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="deck-section">
+        <div className="skeleton-line skeleton-shimmer" style={{ width: "30%" }} />
+        <div className="skeleton-block skeleton-shimmer" style={{ height: 110 }} />
+      </div>
+      <div className="deck-section">
+        <div className="skeleton-line skeleton-shimmer" style={{ width: "20%" }} />
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div className="skeleton-row" key={i}>
+            <div className="skeleton-thumb skeleton-shimmer" />
+            <div className="skeleton-block skeleton-shimmer" style={{ height: 12, flex: 1 }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function DeckPanel({
   selected,
   setSelected,
   onDeckNames,
+  open,
+  onClose,
 }: {
   selected: string;
   setSelected: (name: string) => void;
   onDeckNames?: (names: Set<string>) => void;
+  open?: boolean;
+  onClose?: () => void;
 }) {
   const [decks, setDecks] = useState<DeckSummary[]>([]);
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -270,13 +306,13 @@ export function DeckPanel({
     return () => es.close();
   }, [loadDeck]);
 
-  const roleGroups: [string, { name: string; count: number; image?: string | null }[]][] = [];
+  const roleGroups: [string, { name: string; count: number; image?: string | null; manaCost?: string | null }[]][] = [];
   if (deck) {
-    const map = new Map<string, { name: string; count: number; image?: string | null }[]>();
+    const map = new Map<string, { name: string; count: number; image?: string | null; manaCost?: string | null }[]>();
     for (const c of deck.cards) {
       const role = c.role ?? "other";
       if (!map.has(role)) map.set(role, []);
-      map.get(role)!.push({ name: c.name, count: c.count ?? 1, image: c.image });
+      map.get(role)!.push({ name: c.name, count: c.count ?? 1, image: c.image, manaCost: c.manaCost });
     }
     for (const [role, cards] of [...map.entries()].sort((a, b) =>
       a[0].localeCompare(b[0])
@@ -330,9 +366,11 @@ export function DeckPanel({
   );
 
   return (
-    <aside className="deck-panel">
-      <div className="deck-panel-header">
-        <h1 className="app-title">scrychat</h1>
+    <>
+      {open && <div className="drawer-overlay" onClick={onClose} />}
+      <aside className={`deck-panel${open ? " drawer-open" : ""}`}>
+        <div className="deck-panel-header">
+          <h1 className="app-title">scrychat</h1>
         <div className="deck-select-row">
           <select
             className="deck-select"
@@ -362,13 +400,14 @@ export function DeckPanel({
 
       {decks.length === 0 && (
         <div className="empty-state">
-          <p>No decks yet.</p>
+          <div className="empty-state-icon" aria-hidden="true">🂠</div>
+          <p>No decks yet — create one to get started.</p>
           {newDeckForm}
         </div>
       )}
 
-      {loading && !deck && <div className="deck-loading">loading deck…</div>}
-      {reportError && !deck && decks.length > 0 && (
+      {loading && !deck && decks.length > 0 && <DeckSkeleton />}
+      {reportError && !deck && decks.length > 0 && !loading && (
         <div className="chip chip-error">deck error: {reportError}</div>
       )}
 
@@ -376,12 +415,24 @@ export function DeckPanel({
         <div className="deck-body">
           <div className="commander">
             <div className="commander-label">Commander</div>
-            <div className="commander-name">
-              <CardName name={deck.commander} image={deck.commanderImage} />
-            </div>
-            <div className="commander-meta">
-              {deck.commanderIdentity.join("")} · {totalCards + 1} cards
-              {loading && <span className="refreshing"> · refreshing…</span>}
+            <div className="commander-row">
+              {deck.commanderImage && (
+                <img
+                  className="commander-thumb"
+                  src={deck.commanderImage}
+                  alt=""
+                  loading="lazy"
+                />
+              )}
+              <div>
+                <div className="commander-name">
+                  <CardName name={deck.commander} image={deck.commanderImage} />
+                </div>
+                <div className="commander-meta">
+                  {deck.commanderIdentity.join("")} · {totalCards + 1} cards
+                  {loading && <span className="refreshing"> · refreshing…</span>}
+                </div>
+              </div>
             </div>
             <button
               type="button"
@@ -468,37 +519,56 @@ export function DeckPanel({
                 ))}
               </div>
             )}
-            {roleGroups.map(([role, cards]) => (
-              <div className="role-group" key={role}>
-                <div className="role-header">
-                  <span className="role-name">{role}</span>
-                  <span className="role-count">
-                    {cards.reduce((n, c) => n + c.count, 0)}
-                  </span>
-                </div>
-                <ul className="card-list">
-                  {cards.map((c) => (
-                    <li key={c.name} className="card-row">
-                      {c.count > 1 && <span className="card-count">{c.count}× </span>}
-                      <CardName name={c.name} image={c.image} />
-                      <button
-                        type="button"
-                        className="remove-card-btn"
-                        onClick={() => removeCard(c.name)}
-                        disabled={removeBusy === c.name}
-                        aria-label={`Remove ${c.name}`}
-                        title={`Remove ${c.name}`}
-                      >
-                        ×
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            {roleGroups.length > 0 && (
+              <table className="card-table">
+                {roleGroups.map(([role, cards]) => (
+                  <tbody className="role-group" key={role}>
+                    <tr className="role-header-row">
+                      <th className="role-header-cell" colSpan={4}>
+                        <span className="role-name">{role}</span>
+                        <span className="role-count">
+                          {cards.reduce((n, c) => n + c.count, 0)}
+                        </span>
+                      </th>
+                    </tr>
+                    {cards.map((c) => (
+                      <tr key={c.name} className="card-row">
+                        <td className="card-count-cell">
+                          {c.count > 1 ? `${c.count}×` : ""}
+                        </td>
+                        <td className="card-name-cell">
+                          <CardName name={c.name} image={c.image} />
+                        </td>
+                        <td className="card-mana-cell">
+                          {c.manaCost && (
+                            <span
+                              className="card-mana-cost"
+                              dangerouslySetInnerHTML={{ __html: renderManaSymbols(c.manaCost) }}
+                            />
+                          )}
+                        </td>
+                        <td className="card-remove-cell">
+                          <button
+                            type="button"
+                            className="remove-card-btn"
+                            onClick={() => removeCard(c.name)}
+                            disabled={removeBusy === c.name}
+                            aria-label={`Remove ${c.name}`}
+                            title={`Remove ${c.name}`}
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                ))}
+              </table>
+            )}
           </section>
         </div>
       )}
-    </aside>
+      </aside>
+    </>
   );
 }

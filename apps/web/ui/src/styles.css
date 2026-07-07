@@ -78,6 +78,100 @@ body {
   padding: 6px 0;
 }
 
+/* ---------- thumbnails (issue #6) ---------- */
+.commander-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.commander-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  object-position: 50% 8%;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  background: var(--bg-panel);
+}
+
+.card-mana-cost {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.85;
+}
+
+.card-mana-cost .mana-symbol {
+  width: 0.95em;
+  height: 0.95em;
+}
+
+/* ---------- skeleton loaders ---------- */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bg-raised) 25%,
+    var(--border) 37%,
+    var(--bg-raised) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.skeleton-block {
+  border-radius: 6px;
+}
+
+.skeleton-line {
+  height: 10px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.skeleton-thumb {
+  width: 22px;
+  height: 28px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.skeleton-wrap .deck-section {
+  margin-bottom: 16px;
+}
+
+.chat-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 6px;
+}
+
+.skeleton-msg {
+  width: 70%;
+}
+
+.skeleton-msg-user {
+  align-self: flex-end;
+  width: 45%;
+}
+
 .deck-select-row {
   display: flex;
   gap: 8px;
@@ -160,6 +254,12 @@ body {
   color: var(--text-dim);
   text-align: center;
   padding: 20px 4px;
+}
+
+.empty-state-icon {
+  font-size: 2rem;
+  opacity: 0.6;
+  margin-bottom: 6px;
 }
 
 .empty-state p {
@@ -329,18 +429,27 @@ body {
   margin-top: 3px;
 }
 
-/* role groups */
-.role-group {
-  margin-bottom: 10px;
+/* role groups: single table, tbody per role -> shared column tracks across
+   all groups (count | name | mana cost | remove) */
+.card-table {
+  width: 100%;
+  border-collapse: collapse;
 }
 
-.role-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+.card-table td {
+  padding: 1px 4px;
+  font-size: 0.88rem;
+  vertical-align: middle;
+}
+
+.role-header-cell {
   border-bottom: 1px solid var(--border);
-  padding-bottom: 2px;
-  margin-bottom: 4px;
+  padding: 8px 0 2px;
+  text-align: left;
+}
+
+.role-header-cell .role-count {
+  float: right;
 }
 
 .role-name {
@@ -353,28 +462,32 @@ body {
   font-size: 0.78rem;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
+  font-weight: 400;
 }
 
-.card-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.card-count-cell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  padding-left: 6px;
 }
 
-.card-list li {
-  font-size: 0.88rem;
-  padding: 1px 0 1px 6px;
+.card-mana-cell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
 }
 
-.card-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.card-remove-cell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .remove-card-btn {
   visibility: hidden;
-  margin-left: auto;
   background: transparent;
   border: none;
   color: var(--bad);
@@ -391,10 +504,6 @@ body {
 .remove-card-btn:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-.card-count {
-  color: var(--text-dim);
 }
 
 .card-name {
@@ -618,6 +727,22 @@ body {
   border-color: var(--accent);
 }
 
+.chip-tool-pending {
+  color: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.chip-tool-ok {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+.chip-tool-error {
+  color: var(--bad);
+  border-color: var(--bad);
+  background: rgba(224, 108, 117, 0.12);
+}
+
 .chip-streaming {
   color: var(--accent);
   animation: pulse 1.4s ease-in-out infinite;
@@ -675,8 +800,23 @@ body {
 .chat-empty {
   color: var(--text-dim);
   text-align: center;
-  margin-top: 30vh;
+  margin-top: 25vh;
   font-size: 0.95rem;
+}
+
+.chat-empty-icon {
+  font-size: 2rem;
+  opacity: 0.6;
+  margin-bottom: 6px;
+}
+
+.chat-empty p {
+  margin: 0 0 6px;
+}
+
+.chat-empty-hint {
+  font-size: 0.85rem;
+  opacity: 0.8;
 }
 
 .msg {
@@ -842,4 +982,113 @@ body {
 .chat-send:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* ---------- scrollbars (thin, dark) ---------- */
+.deck-panel,
+.chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--bg-panel);
+}
+
+.deck-panel::-webkit-scrollbar,
+.chat-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+
+.deck-panel::-webkit-scrollbar-track,
+.chat-scroll::-webkit-scrollbar-track {
+  background: var(--bg-panel);
+}
+
+.deck-panel::-webkit-scrollbar-thumb,
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 2px solid var(--bg-panel);
+}
+
+.deck-panel::-webkit-scrollbar-thumb:hover,
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* ---------- responsive: deck drawer + hamburger ---------- */
+.deck-drawer-toggle {
+  display: none;
+}
+
+.drawer-overlay {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .deck-drawer-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .deck-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 300px;
+    max-width: 84vw;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 200;
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  }
+
+  .deck-panel.drawer-open {
+    transform: translateX(0);
+    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.5);
+  }
+
+  .drawer-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 190;
+  }
+}
+
+@media (min-width: 901px) {
+  .deck-panel {
+    position: static;
+    transform: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .deck-panel {
+    padding: 10px;
+    font-size: 0.92rem;
+  }
+
+  .chat-panel-header {
+    padding: 8px 12px;
+  }
+
+  .chat-scroll {
+    padding: 12px 12px;
+  }
+
+  .chat-input-row {
+    padding: 10px 12px 12px;
+    gap: 6px;
+  }
+
+  .btn {
+    padding: 6px 9px;
+    font-size: 0.8rem;
+  }
+
+  .commander-thumb {
+    width: 44px;
+    height: 44px;
+  }
 }
