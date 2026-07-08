@@ -185,6 +185,93 @@ function isSubsetIdentity(cardIdentity: string[], commanderIdentity: string[]): 
   return cardIdentity.every((c) => allowed.has(c));
 }
 
+export async function renameDeck(
+  oldName: string,
+  newName: string,
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<Deck> {
+  const deck = await getDeck(oldName, decksDir);
+  if (!deck) {
+    throw new Error(`Deck not found: ${oldName}`);
+  }
+
+  if (sanitizeName(newName) === "") {
+    throw new Error(`Invalid deck name: ${newName}`);
+  }
+
+  const oldPath = deckFilePath(decksDir, oldName);
+  const newPath = deckFilePath(decksDir, newName);
+
+  if (newPath !== oldPath) {
+    const existing = await getDeck(newName, decksDir);
+    if (existing) {
+      throw new Error(`Deck already exists: ${newName}`);
+    }
+  }
+
+  deck.name = newName;
+  deck.updatedAt = new Date().toISOString();
+
+  await ensureDir(decksDir);
+  await atomicWrite(newPath, JSON.stringify(deck, null, 2));
+
+  if (newPath !== oldPath) {
+    await fs.unlink(oldPath);
+  }
+
+  return deck;
+}
+
+export type SetCommanderResult = {
+  deck: Deck;
+  changed: boolean;
+  nowIllegal: RejectedCard[];
+};
+
+export async function setCommander(
+  name: string,
+  newCommander: string,
+  resolver: CardResolver,
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<SetCommanderResult> {
+  const deck = await getDeck(name, decksDir);
+  if (!deck) {
+    throw new Error(`Deck not found: ${name}`);
+  }
+
+  const resolved = await resolver(newCommander);
+  if (!resolved) {
+    throw new Error(`Commander not found: ${newCommander}`);
+  }
+  if (!isLegalCommanderCandidate(resolved)) {
+    throw new Error(`Card is not a legal commander: ${newCommander}`);
+  }
+
+  const changed = resolved.name !== deck.commander;
+
+  deck.commander = resolved.name;
+  deck.commanderIdentity = resolved.colorIdentity;
+  deck.updatedAt = new Date().toISOString();
+
+  const nowIllegal: RejectedCard[] = [];
+  for (const card of deck.cards) {
+    const cardResolved = await resolver(card.name);
+    if (!cardResolved) continue;
+    if (!isSubsetIdentity(cardResolved.colorIdentity, deck.commanderIdentity)) {
+      nowIllegal.push({
+        name: card.name,
+        reason: `Color identity [${cardResolved.colorIdentity.join(
+          ""
+        )}] is not within commander identity [${deck.commanderIdentity.join("")}]`,
+      });
+    }
+  }
+
+  await writeDeckFile(decksDir, deck);
+
+  return { deck, changed, nowIllegal };
+}
+
 export async function addCards(
   name: string,
   cards: CardEntry[],
@@ -295,6 +382,42 @@ export async function setCardTags(
 
   await writeDeckFile(decksDir, deck);
   return deck;
+}
+
+export type SetCardTagsResult = {
+  deck: Deck;
+  updated: { name: string; tags: string[] }[];
+  rejected: RejectedCard[];
+};
+
+export async function setCardTagsResult(
+  name: string,
+  updates: { name: string; tags: string[] }[],
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<SetCardTagsResult> {
+  const deck = await getDeck(name, decksDir);
+  if (!deck) {
+    throw new Error(`Deck not found: ${name}`);
+  }
+
+  const byNameLower = new Map(deck.cards.map((c) => [c.name.toLowerCase(), c]));
+  const updated: { name: string; tags: string[] }[] = [];
+  const rejected: RejectedCard[] = [];
+
+  for (const update of updates) {
+    const card = byNameLower.get(update.name.toLowerCase());
+    if (!card) {
+      rejected.push({ name: update.name, reason: "Card not in deck" });
+      continue;
+    }
+    card.tags = update.tags;
+    updated.push({ name: card.name, tags: update.tags });
+  }
+
+  deck.updatedAt = new Date().toISOString();
+  await writeDeckFile(decksDir, deck);
+
+  return { deck, updated, rejected };
 }
 
 export async function renameTag(

@@ -12,6 +12,9 @@ import {
   deckReport,
   setCardTags,
   renameTag,
+  renameDeck,
+  setCommander,
+  setCardTagsResult,
   type CardResolver,
   type ResolvedCard,
 } from "../src/decks.js";
@@ -57,6 +60,27 @@ const FIXTURES: Record<string, ResolvedCard> = {
     colorIdentity: ["W"],
     cmc: 1,
     typeLine: "Instant",
+    legalCommander: true,
+  },
+  "hallar, the firefletcher": {
+    name: "Hallar, the Firefletcher",
+    colorIdentity: ["R", "G"],
+    cmc: 3,
+    typeLine: "Legendary Creature — Elf Archer",
+    legalCommander: true,
+  },
+  "krenko, mob boss": {
+    name: "Krenko, Mob Boss",
+    colorIdentity: ["R"],
+    cmc: 3,
+    typeLine: "Legendary Creature — Goblin",
+    legalCommander: true,
+  },
+  "grizzly bears": {
+    name: "Grizzly Bears",
+    colorIdentity: ["G"],
+    cmc: 2,
+    typeLine: "Creature — Bear",
     legalCommander: true,
   },
 };
@@ -339,5 +363,104 @@ describe("decks", () => {
     expect(report.total).toBe(99);
     expect(report.targetTotal).toBe(99);
     expect(report.overUnder).toBe(0);
+  });
+
+  it("renameDeck renames the file and name field", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    const renamed = await renameDeck("Selesnya Value", "Selesnya Tokens", decksDir);
+    expect(renamed.name).toBe("Selesnya Tokens");
+
+    const oldFetch = await getDeck("Selesnya Value", decksDir);
+    expect(oldFetch).toBeNull();
+
+    const newFetch = await getDeck("Selesnya Tokens", decksDir);
+    expect(newFetch?.name).toBe("Selesnya Tokens");
+    expect(newFetch?.commander).toBe("Trostani, Selesnya's Voice");
+  });
+
+  it("renameDeck rejects a collision and leaves the target deck untouched", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await createDeck("Gruul Aggro", "Hallar, the Firefletcher", resolver, decksDir);
+    await addCards("Gruul Aggro", [{ name: "Grizzly Bears", tags: ["beater"] }], resolver, decksDir);
+
+    await expect(renameDeck("Selesnya Value", "Gruul Aggro", decksDir)).rejects.toThrow();
+
+    const target = await getDeck("Gruul Aggro", decksDir);
+    expect(target?.commander).toBe("Hallar, the Firefletcher");
+    expect(target?.cards.some((c) => c.name === "Grizzly Bears")).toBe(true);
+
+    const original = await getDeck("Selesnya Value", decksDir);
+    expect(original?.name).toBe("Selesnya Value");
+  });
+
+  it("renameDeck allows a pure display-name change on the same sanitized slug", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await addCards("Selesnya Value", [{ name: "Sol Ring", tags: ["ramp"] }], resolver, decksDir);
+
+    const renamed = await renameDeck("Selesnya Value", "selesnya value", decksDir);
+    expect(renamed.name).toBe("selesnya value");
+    expect(renamed.cards.some((c) => c.name === "Sol Ring")).toBe(true);
+
+    const fetched = await getDeck("selesnya value", decksDir);
+    expect(fetched?.cards.some((c) => c.name === "Sol Ring")).toBe(true);
+  });
+
+  it("setCommander to a narrower identity flags off-identity cards in nowIllegal without removing them", async () => {
+    await createDeck("Gruul Aggro", "Hallar, the Firefletcher", resolver, decksDir);
+    await addCards(
+      "Gruul Aggro",
+      [{ name: "Grizzly Bears", tags: ["beater"] }],
+      resolver,
+      decksDir
+    );
+
+    const result = await setCommander("Gruul Aggro", "Krenko, Mob Boss", resolver, decksDir);
+    expect(result.changed).toBe(true);
+    expect(result.deck.commander).toBe("Krenko, Mob Boss");
+    expect(result.deck.commanderIdentity).toEqual(["R"]);
+    // Grizzly Bears is G; new commander identity is R only -> flagged illegal.
+    expect(result.nowIllegal.some((c) => c.name === "Grizzly Bears")).toBe(true);
+
+    const deck = await getDeck("Gruul Aggro", decksDir);
+    expect(deck?.cards.some((c) => c.name === "Grizzly Bears")).toBe(true);
+  });
+
+  it("setCommander to the same commander is a no-op for changed/nowIllegal", async () => {
+    await createDeck("Gruul Aggro", "Hallar, the Firefletcher", resolver, decksDir);
+    await addCards(
+      "Gruul Aggro",
+      [{ name: "Grizzly Bears", tags: ["beater"] }],
+      resolver,
+      decksDir
+    );
+
+    const result = await setCommander("Gruul Aggro", "Hallar, the Firefletcher", resolver, decksDir);
+    expect(result.changed).toBe(false);
+    expect(result.nowIllegal).toEqual([]);
+  });
+
+  it("setCommander rejects an illegal (non-legendary/non-commander) card", async () => {
+    await createDeck("Gruul Aggro", "Hallar, the Firefletcher", resolver, decksDir);
+    await expect(
+      setCommander("Gruul Aggro", "Grizzly Bears", resolver, decksDir)
+    ).rejects.toThrow();
+  });
+
+  it("setCardTagsResult accepts an existing card update and rejects a non-existent one", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await addCards("Selesnya Value", [{ name: "Sol Ring", tags: ["ramp"] }], resolver, decksDir);
+
+    const result = await setCardTagsResult(
+      "Selesnya Value",
+      [
+        { name: "Sol Ring", tags: ["ramp", "combo piece"] },
+        { name: "Not A Card In Deck", tags: ["draw"] },
+      ],
+      decksDir
+    );
+
+    expect(result.updated).toEqual([{ name: "Sol Ring", tags: ["ramp", "combo piece"] }]);
+    expect(result.rejected).toEqual([{ name: "Not A Card In Deck", reason: "Card not in deck" }]);
+    expect(result.deck.cards.find((c) => c.name === "Sol Ring")?.tags).toEqual(["ramp", "combo piece"]);
   });
 });

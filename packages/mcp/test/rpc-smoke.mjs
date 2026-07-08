@@ -6,7 +6,7 @@
  * `decks/` directory it creates is isolated and easy to clean up), speaks
  * newline-delimited JSON-RPC over stdio, and asserts:
  *   1. initialize succeeds
- *   2. tools/list returns exactly 11 tools
+ *   2. tools/list returns exactly 14 tools
  *   3. tools/call search_cards {query:"otag:token-doubler"} -> total >= 10
  *   4. tools/call search_tags {query:"removal"} -> non-empty array
  *   5. tools/call deck_create + deck_add with an off-identity card -> a
@@ -112,7 +112,7 @@ async function main() {
     // 2. tools/list
     const listRes = await withTimeout(send("tools/list", {}), 10000, "tools/list");
     const tools = listRes.result?.tools ?? [];
-    assert(tools.length === 11, `tools/list returns 11 tools (got ${tools.length}: ${tools.map((t) => t.name).join(", ")})`);
+    assert(tools.length === 14, `tools/list returns 14 tools (got ${tools.length}: ${tools.map((t) => t.name).join(", ")})`);
 
     // 3. search_cards otag:token-doubler
     const searchRes = await withTimeout(
@@ -192,6 +192,23 @@ async function main() {
       `deck_import accounts for junk line in rejected/unparsed (got rejected=${JSON.stringify(
         importJson.rejected,
       )}, unparsed=${JSON.stringify(importJson.unparsed)})`,
+    );
+
+    // 7. deck_rename on the earlier Atraxa deck -> renamed deck reflects the new name
+    const renamedDeckName = `${deckName}-renamed`;
+    const renameRes = await withTimeout(
+      send("tools/call", {
+        name: "deck_rename",
+        arguments: { name: deckName, new_name: renamedDeckName },
+      }),
+      15000,
+      "tools/call deck_rename",
+    );
+    const renameText = renameRes.result?.content?.[0]?.text ?? "{}";
+    const renameJson = JSON.parse(renameText);
+    assert(
+      !renameJson.error && renameJson.name === renamedDeckName,
+      `deck_rename renamed deck to ${renamedDeckName} (got ${JSON.stringify(renameJson)})`,
     );
 
     await deleteDeck(importDeckName, path.join(workDir, "decks"));

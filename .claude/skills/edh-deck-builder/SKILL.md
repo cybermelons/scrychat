@@ -84,6 +84,9 @@ instead of asking.
    cards that carry no quota tag) + mana curve; relay any rejection reasons from `deck_add`
    verbatim.
 8. Iterate additions/swaps until: 100 cards, singleton, quotas green, curve reasonable.
+   After building, `deck_set_card_tags` bulk-retags cards already in the deck, `deck_rename`
+   renames the deck (rejects on name collision), and `deck_set_commander` swaps the commander
+   (reports but does not auto-remove cards outside the new identity, via `nowIllegal`).
 9. If a budget was given, run a final pass replacing over-budget cards via `find_alternatives`
    with `usd<N prefer:usd-low`.
 

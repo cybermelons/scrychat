@@ -25,6 +25,9 @@ import {
   addCards,
   removeCards,
   deckReport,
+  renameDeck,
+  setCommander,
+  setCardTagsResult,
 } from "@scrychat/core";
 import { parseDecklist } from "@scrychat/core";
 import type { CardResolver, CardEntry } from "@scrychat/core";
@@ -483,6 +486,78 @@ export function registerTools(server: McpServer): void {
     },
     async ({ text, deck_name, mode }) => {
       return safe(async () => deckImport(text, deck_name, mode));
+    },
+  );
+
+  server.registerTool(
+    "deck_set_card_tags",
+    {
+      title: "Set card tags",
+      description:
+        "Bulk-sets the strategy tags on cards already in a deck (replaces each card's tags wholesale). " +
+        "Does not add cards. Returns which cards were updated and which were rejected " +
+        "(e.g. card not in deck), per-item.",
+      inputSchema: {
+        deck_name: z.string(),
+        cards: z
+          .array(z.object({ name: z.string(), tags: z.array(z.string()) }))
+          .describe("cards (must already be in deck) with their new full tag list"),
+      },
+    },
+    async ({ deck_name, cards }) => {
+      return safe(async () => {
+        const result = await setCardTagsResult(deck_name, cards, decksDir);
+        return { updated: result.updated, rejected: result.rejected };
+      });
+    },
+  );
+
+  server.registerTool(
+    "deck_rename",
+    {
+      title: "Rename deck",
+      description:
+        "Renames a deck (file + name field); rejects if the target name already exists — never overwrites.",
+      inputSchema: {
+        name: z.string().describe("current deck name"),
+        new_name: z.string().describe("new deck name"),
+      },
+    },
+    async ({ name, new_name }) => {
+      return safe(async () => {
+        const deck = await renameDeck(name, new_name, decksDir);
+        return {
+          name: deck.name,
+          commander: deck.commander,
+          total: deck.cards.reduce((sum, c) => sum + (c.count ?? 1), 0),
+        };
+      });
+    },
+  );
+
+  server.registerTool(
+    "deck_set_commander",
+    {
+      title: "Set deck commander",
+      description:
+        "Changes a deck's commander (must be a legal legendary commander); revalidates all cards against the " +
+        "new color identity and REPORTS newly-illegal cards but does NOT remove them — the caller decides.",
+      inputSchema: {
+        deck_name: z.string(),
+        commander: z.string().describe("new commander card name"),
+      },
+    },
+    async ({ deck_name, commander }) => {
+      return safe(async () => {
+        const r = await setCommander(deck_name, commander, resolveCard, decksDir);
+        return {
+          name: r.deck.name,
+          commander: r.deck.commander,
+          commanderIdentity: r.deck.commanderIdentity.join(""),
+          changed: r.changed,
+          nowIllegal: r.nowIllegal,
+        };
+      });
     },
   );
 }
