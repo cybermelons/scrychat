@@ -5,9 +5,12 @@ import path from "node:path";
 import { openDb } from "../src/db/connection.js";
 import {
   __resetLocalDbCacheForTests,
+  __setStatPathForTests,
+  __stampMtimeCacheForTests,
   getCardLocal,
   findCombosLocal,
   findAlternativesLocal,
+  getLocalDb,
   parseCiMask,
 } from "../src/local.js";
 
@@ -366,5 +369,78 @@ describe("local partial-ingest fallback", () => {
   it("findCombosLocal returns null when combos is empty", () => {
     const result = findCombosLocal(partialDb, ["Doubling Season"], 10);
     expect(result).toBeNull();
+  });
+});
+
+describe("mtime-based cache reset", () => {
+  let statTmpDir: string;
+  let statFile: string;
+
+  beforeEach(() => {
+    statTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrychat-local-mtime-test-"));
+    statFile = path.join(statTmpDir, "stat-target.db");
+    fs.writeFileSync(statFile, "x");
+    __setStatPathForTests(statFile);
+  });
+
+  afterEach(() => {
+    __setStatPathForTests(undefined);
+    fs.rmSync(statTmpDir, { recursive: true, force: true });
+  });
+
+  it("does not invalidate an injected test handle (no prior real stamp)", () => {
+    // __resetLocalDbCacheForTests leaves cachedDbMtimeMs undefined, so the
+    // mtime guard must be a no-op even if the stat'd file's mtime changes.
+    __resetLocalDbCacheForTests(db);
+    fs.utimesSync(statFile, new Date(Date.now() + 10_000), new Date(Date.now() + 10_000));
+
+    expect(getLocalDb()).toBe(db);
+  });
+
+  it("closes the stale handle and clears every memo once the stat'd file's mtime changes past the throttle window", () => {
+    const originalMtimeMs = fs.statSync(statFile).mtimeMs;
+
+    // Simulate: a previous real getLocalDb() open stamped this mtime, and
+    // populate the downstream memos as if accessors had already run.
+    __resetLocalDbCacheForTests(db);
+    __stampMtimeCacheForTests(originalMtimeMs, 0);
+    // Warm the memoized accessors so we can prove they get cleared too.
+    expect(findCombosLocal(db, ["Doubling Season", "Combo Partner"], 10)).not.toBeNull();
+    expect(findAlternativesLocal(db, "Doubling Season", {})).not.toBeNull();
+
+    // Bump the file's mtime (simulating an ingest run) past the throttle
+    // window (lastStatCheckAt = 0 means the guard runs immediately).
+    const bumped = new Date(originalMtimeMs + 60_000);
+    fs.utimesSync(statFile, bumped, bumped);
+    __stampMtimeCacheForTests(originalMtimeMs, 0);
+
+    // getLocalDb() re-checks, finds the mtime mismatch, closes the stale
+    // `db` handle, and re-decides from scratch against the real DB_PATH -
+    // proving the stale cached verdict was discarded rather than reused.
+    const result = getLocalDb();
+    expect(result).not.toBe(db);
+
+    // The stale handle must have been closed as part of invalidation.
+    expect(() => db.prepare("SELECT 1").get()).toThrow();
+
+    // Clean up: whatever getLocalDb() opened against the real DB_PATH
+    // shouldn't leak into other tests/processes.
+    if (result) result.close();
+    __resetLocalDbCacheForTests(undefined);
+  });
+
+  it("throttles repeated invalidation checks: a mismatch within the throttle window is not applied", () => {
+    const originalMtimeMs = fs.statSync(statFile).mtimeMs;
+
+    __resetLocalDbCacheForTests(db);
+    // lastStatCheckAt = Date.now() means we're inside the throttle window.
+    __stampMtimeCacheForTests(originalMtimeMs, Date.now());
+
+    const bumped = new Date(originalMtimeMs + 60_000);
+    fs.utimesSync(statFile, bumped, bumped);
+
+    // Within the throttle window: getLocalDb() must not re-stat, so the
+    // still-open injected handle is returned unchanged.
+    expect(getLocalDb()).toBe(db);
   });
 });

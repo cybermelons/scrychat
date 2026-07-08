@@ -6,8 +6,9 @@
  * absent or empty (fresh clone, ingest not yet run).
  */
 
+import fs from "node:fs";
 import type Database from "better-sqlite3";
-import { openDb } from "./db/connection.js";
+import { openDb, DB_PATH } from "./db/connection.js";
 import type { Card } from "./scryfall.js";
 
 type DbInstance = InstanceType<typeof Database>;
@@ -41,12 +42,74 @@ export function maskToColors(mask: number): string[] {
 let cachedDb: DbInstance | null | undefined;
 
 /**
+ * mtime (ms) of data/scrychat.db as of the last time we opened it ourselves
+ * inside getLocalDb(). Undefined means "we haven't stamped a real open" -
+ * this guards test-injected handles (via __resetLocalDbCacheForTests) from
+ * being spuriously invalidated by the mtime check, since those never stamp
+ * this value.
+ */
+let cachedDbMtimeMs: number | undefined;
+let lastStatCheckAt = 0;
+const STAT_THROTTLE_MS = 5000;
+
+/** Test-only: override the path stat'd for mtime invalidation (default: DB_PATH). */
+let statPathOverrideForTests: string | undefined;
+
+/** Test-only: point mtime invalidation at a temp file, or clear the override (undefined). */
+export function __setStatPathForTests(path: string | undefined): void {
+  statPathOverrideForTests = path;
+}
+
+function statMtimeMs(): number | undefined {
+  try {
+    return fs.statSync(statPathOverrideForTests ?? DB_PATH).mtimeMs;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * If the on-disk db file's mtime has changed since we last opened it
+ * ourselves (e.g. ingest ran after a long-lived server process cached a
+ * "no DB" or stale verdict), reset all memoized state so the next
+ * getLocalDb() call re-decides from scratch. Throttled to avoid a stat(2)
+ * syscall on every request.
+ */
+function maybeInvalidateOnMtimeChange(): void {
+  const now = Date.now();
+  if (now - lastStatCheckAt < STAT_THROTTLE_MS) return;
+  lastStatCheckAt = now;
+
+  // Only relevant once we've stamped a real open ourselves - test-injected
+  // handles never set cachedDbMtimeMs, so they're immune to this check.
+  if (cachedDbMtimeMs === undefined) return;
+
+  const currentMtimeMs = statMtimeMs();
+  if (currentMtimeMs !== cachedDbMtimeMs) {
+    if (cachedDb) {
+      try {
+        cachedDb.close();
+      } catch {
+        // Already closed / unusable - ignore.
+      }
+    }
+    cachedDb = undefined;
+    hasCardTagsCache = undefined;
+    hasCombosCache = undefined;
+    totalTaggedCardsCache = undefined;
+    cachedDbMtimeMs = undefined;
+  }
+}
+
+/**
  * Returns a cached db handle if data/scrychat.db exists and has at least one
  * card, else null (DB absent/empty — callers should use their live/JSON
- * fallback). Detection happens once per process; the result (including the
- * "no DB" verdict) is cached.
+ * fallback). Detection is memoized, but re-checked (throttled) whenever the
+ * db file's mtime changes, so a long-lived process picks up a fresh ingest
+ * without needing a restart.
  */
 export function getLocalDb(): DbInstance | null {
+  maybeInvalidateOnMtimeChange();
   if (cachedDb !== undefined) return cachedDb;
   try {
     const db = openDb();
@@ -57,8 +120,10 @@ export function getLocalDb(): DbInstance | null {
       db.close();
       cachedDb = null;
     }
+    cachedDbMtimeMs = statMtimeMs();
   } catch {
     cachedDb = null;
+    cachedDbMtimeMs = undefined;
   }
   return cachedDb;
 }
@@ -69,6 +134,25 @@ export function __resetLocalDbCacheForTests(db?: DbInstance | null): void {
   totalTaggedCardsCache = undefined;
   hasCardTagsCache = undefined;
   hasCombosCache = undefined;
+  // Test-injected handles never point at DB_PATH, so we must not let
+  // maybeInvalidateOnMtimeChange stat DB_PATH and "invalidate" them: keep
+  // cachedDbMtimeMs undefined (the guard clause) and push the throttle
+  // window out so an immediate getLocalDb() call in the same test doesn't
+  // race a real stat either way.
+  cachedDbMtimeMs = undefined;
+  lastStatCheckAt = Date.now();
+  statPathOverrideForTests = undefined;
+}
+
+/**
+ * Test-only: directly stamp the "last known good open" mtime state and
+ * throttle window, to exercise maybeInvalidateOnMtimeChange's reset branch
+ * without needing a real getLocalDb() open against DB_PATH. Pair with
+ * __setStatPathForTests to point the stat at a controlled temp file.
+ */
+export function __stampMtimeCacheForTests(mtimeMs: number, lastStatCheckAt_ = 0): void {
+  cachedDbMtimeMs = mtimeMs;
+  lastStatCheckAt = lastStatCheckAt_;
 }
 
 let hasCardTagsCache: boolean | undefined;
