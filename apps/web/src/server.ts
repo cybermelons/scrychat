@@ -36,7 +36,7 @@ const CHATS_DIR = path.join(REPO_ROOT, "chats");
 const MCP_SERVER_PATH = path.join(REPO_ROOT, "packages/mcp/dist/index.js");
 const CONFIG_PATH = path.join(REPO_ROOT, "scrychat.config.json");
 
-const PORT = 8787;
+const PORT = Number(process.env.PORT) || 8787;
 
 // ---- config: scrychat.config.json at repo root, tolerate absent file ----
 type ScrychatConfig = { linkifyPass: boolean };

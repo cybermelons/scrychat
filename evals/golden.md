@@ -39,5 +39,28 @@ Rubric: follows skeleton quotas (~36–38 lands, 10–12 ramp, 10–12 draw, 8�
 - Reasons in functional roles, then enumerates from the database — no memory-only card lists.
 - Every search constrained by `legal:commander` and, when a deck is in context, its color identity.
 
+## Tier C — web-layer mechanical (run-tier-c.mjs)
+
+Script starts `apps/web/dist/server.js` itself on a random free port (env stripped of
+`ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`), drives it with plain HTTP, tears it down in
+`finally`. No LLM calls in the default run.
+
+| # | Check | Assert |
+|---|-------|--------|
+| C1 | `POST /api/decks` (name, commander "Trostani, Selesnya's Voice") | 200; deck.commander resolves; commanderIdentity ⊆ {G,W} |
+| C2 | `POST /api/decks/:name/cards` [Sol Ring w/ tags, Lightning Bolt] | Sol Ring added; Lightning Bolt rejected with an "identity" reason |
+| C3 | `GET /api/decks/:name` | Sol Ring card has image containing `cards.scryfall.io` and non-empty manaCost; tags === ["ramp","combo piece"]; report.byTag.ramp/"combo piece" ≥ 1; report.untaggedForQuota is a number |
+| C4 | `PATCH /api/decks/:name/cards` (retag Sol Ring) | 200; GET confirms new tags |
+| C5 | `PATCH /api/decks/:name/tags` (rename "artifact synergy"→"artifacts") | 200; GET confirms rename applied to Sol Ring |
+| C6 | `DELETE /api/decks/:name/cards` [Sol Ring] | deck no longer has Sol Ring |
+| C7 | `DELETE /api/decks/:name` | `{ok:true}`; subsequent GET → 404 |
+| C8 | `GET /api/chats/..%2f..%2fetc` and `GET /api/chats/UPPER_Bad!id` | both 400 (invalid chat id guard); never 500/200 |
+| C9 | open `GET /api/deck-events` SSE, create+delete a second tmp deck | an SSE `data:` line containing the deck's sanitized name arrives within 5s |
+
+**`--with-chat` (skipped by default; LLM-dependent, single message each via `POST /api/chat`):**
+- **C10 — activeDeck context relay.** Create tmp deck, ask "what deck do I have open?" with `activeDeck` set → response mentions the deck name/commander.
+- **C11 — action-log awareness.** After a deck CRUD action, ask "what did I just change?" → response mentions the card/deck acted on.
+- **C12 — chat resume.** Reuse the chatId from C10, ask "what did I ask you before?" → response references the first question.
+
 ## Failure routing
 Tool data wrong → code (reopen WU). Model behavior wrong → SKILL.md edit, re-run. Impossible with current tools → escalate.

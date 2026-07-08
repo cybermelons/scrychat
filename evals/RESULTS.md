@@ -40,3 +40,37 @@ card_tags / 97,520 combos).
 3. `ANTHROPIC_API_KEY` gotcha — documented in README.md ("Requirements" section): unset it before running the web app, since a stale key overrides Max-subscription auth.
 
 **Cards-ingest price-wipe fix:** `packages/core/src/ingest/cards.ts` re-inserting cards (via `--cards` or `--all`) was nulling `price_usd` on every existing row (the `ON CONFLICT` clause unconditionally set `price_usd=excluded.price_usd`, and the insert payload hard-codes `price_usd: null` since prices come from a separate `--prices` pass). Fixed by dropping `price_usd` from the `ON CONFLICT ... DO UPDATE SET` clause entirely, so a re-run of cards ingest leaves any existing price untouched; new rows still insert with `price_usd = NULL` until `--prices` runs. One-transaction-per-row semantics unchanged.
+
+## Tier C gate — 2026-07-05
+
+New `evals/run-tier-c.mjs` (issue #7): mechanical curl-style checks against the built web
+server (`apps/web/dist/server.js`), which the script starts itself on a random free port
+with `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` stripped from its env. No LLM calls in the
+default run.
+
+**One-line server fix required first:** `apps/web/src/server.ts` hardcoded `const PORT = 8787`
+with no env override, which blocks a self-contained eval from picking a free port. Changed to
+`const PORT = Number(process.env.PORT) || 8787;` — the only change made in `apps/`.
+
+**Default run (`node evals/run-tier-c.mjs`): 9/9 PASSED**
+```
+OK: C1 status=200 commander="Trostani, Selesnya's Voice" commanderIdentity=["G","W"]
+OK: C2 status=200 added=["Sol Ring"] rejected=[{"name":"Lightning Bolt","reason":"Color identity [R] is not within commander identity [GW]"}]
+OK: C3 status=200 image=https://cards.scryfall.io/normal/front/9/1/91fdb56b-54d5-4272-8319-505ff987fe9b.jpg?1782682494 manaCost={1} tags=["ramp","combo piece"] byTag={"ramp":1,"combo piece":1} untaggedForQuota=0
+OK: C4 patchStatus=200 tags=["ramp","artifact synergy"]
+OK: C5 patchStatus=200 tags=["ramp","artifacts"]
+OK: C6 delStatus=200 stillHasSolRing=false
+OK: C7 delStatus=200 delBody={"ok":true} getStatus=404
+OK: C8 traversalStatus=400 badIdStatus=400 (want both 400, never 500/200)
+OK: C9 sawDeckNameInSseData=true lines=["data: {\"name\":\"tmp-tier-c-sse-...\"}"]
+SKIP: C10/C11/C12 (LLM-dependent; run with --with-chat)
+
+TIER C: 9/9 PASSED
+```
+
+**`--with-chat` run (LLM-dependent, may be flaky; judged by substring match): 12/12 PASSED**
+in a smoke-test — activeDeck context relay, action-log awareness, and chat resume all
+correctly reflected deck state and prior turns.
+
+No leftover `tmp-tier-c-*` artifacts in `decks/` after either run (script deletes via API in
+each check plus a filesystem sweep in `finally`).
