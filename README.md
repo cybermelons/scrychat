@@ -13,6 +13,15 @@ One MCP server, two frontends:
 No collection tracking. No per-token API billing — everything runs on your
 Claude subscription.
 
+## Demo
+
+![scrychat demo](assets/demo.gif)
+
+One prompt builds a Teysa Karlov aristocrats deck: the chat streams tool chips
+as it searches sac outlets, returns a reply with hoverable `[[card]]` links
+(card image on hover), and clicking a card toggles it into the deck panel —
+role groups, quota bars, and mana curve updating live.
+
 ## Requirements
 
 - Node 24+
