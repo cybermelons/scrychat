@@ -15,8 +15,10 @@ import {
   deleteDeck,
   setCardTags,
   renameTag,
+  getLocalDb,
   type CardResolver,
 } from "@scrychat/core";
+import { hasKnownCardName, wrapTableNameCells } from "./linkify-core.js";
 
 // CRITICAL: strip stale ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the
 // process env at startup, before anything else touches process.env or the
@@ -41,7 +43,7 @@ const PORT = Number(process.env.PORT) || 8787;
 // ---- config: scrychat.config.json at repo root, tolerate absent file ----
 type ScrychatConfig = { linkifyPass: boolean };
 
-const DEFAULT_CONFIG: ScrychatConfig = { linkifyPass: false };
+const DEFAULT_CONFIG: ScrychatConfig = { linkifyPass: true };
 
 function loadConfig(): ScrychatConfig {
   try {
@@ -222,12 +224,42 @@ function titleFromMessage(message: string): string {
 }
 
 // ---- linkify post-pass (opt-in, see scrychat.config.json) ----
-// Cheap gate: does the text look like it has a table row or list line? If
-// so it's plausible bare card names slipped through (see issue #12) — worth
-// the extra cheap-model pass. If not (plain prose), skip: the skill's [[...]]
-// instruction almost always holds outside tabular/list contexts.
-function looksTabularOrListy(text: string): boolean {
-  return /^\s*\|.*\|\s*$/m.test(text) || /^\s*[-*+]\s+\S/m.test(text) || /^\s*\d+[.)]\s+\S/m.test(text);
+// Gating for the expensive Haiku pass now lives at the call site (issue #18,
+// see hasKnownCardName in linkify-core.ts): a deterministic pre-pass wraps
+// table name-cells first, then the outer gate decides whether prose still
+// warrants the Haiku call. linkifySegments itself no longer gates on
+// "looks tabular/listy" — the caller is the sole gate — so a prose reply
+// naming a known card (no table/list at all) still reaches Haiku.
+
+// ---- known-card-name predicate, backed by the local SQLite mirror ----
+// getLocalDb() is called on every invocation (it's memoized+throttled
+// internally, so this is cheap) because the cached handle can be CLOSED
+// out from under us mid-session: getLocalDb() detects data/scrychat.db's
+// mtime changing (e.g. an ingest ran) and closes+invalidates the previously
+// returned handle. Other request paths can trigger that invalidation, so a
+// prepared statement built once at module scope could silently start
+// throwing on a closed handle. Instead, re-fetch the db handle each call and
+// only re-prepare the statement when the handle identity changes. Fail-open
+// to "not known" when the local DB is absent (matches pre-#18 behavior:
+// nothing gets wrapped without a DB) or on any unexpected error.
+let cachedDbForStmt: ReturnType<typeof getLocalDb> | undefined;
+let cardNameStmt: ReturnType<NonNullable<ReturnType<typeof getLocalDb>>["prepare"]> | null = null;
+
+function isKnownCardName(name: string): boolean {
+  const db = getLocalDb();
+  if (db !== cachedDbForStmt) {
+    cachedDbForStmt = db;
+    cardNameStmt = db ? db.prepare("SELECT 1 FROM cards WHERE name = ? COLLATE NOCASE LIMIT 1") : null;
+  }
+  if (!cardNameStmt) return false;
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  try {
+    return !!cardNameStmt.get(trimmed);
+  } catch (err) {
+    console.error("isKnownCardName: statement failed, treating as unknown:", err);
+    return false;
+  }
 }
 
 const LINKIFY_TIMEOUT_MS = 10_000;
@@ -242,7 +274,7 @@ const LINKIFY_PROMPT_PREFIX =
 async function linkifySegments(segments: ChatSegment[]): Promise<ChatSegment[] | null> {
   const textSegments = segments.filter((s): s is { type: "text"; text: string } => s.type === "text");
   const combinedText = textSegments.map((s) => s.text).join("");
-  if (!combinedText.trim() || !looksTabularOrListy(combinedText)) return null;
+  if (!combinedText.trim()) return null;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LINKIFY_TIMEOUT_MS);
@@ -496,10 +528,40 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     // succeeded, original otherwise).
     let finalSegments = segments;
     if (config.linkifyPass && !res.writableEnded) {
-      const linkified = await linkifySegments(segments);
-      if (linkified) {
-        finalSegments = linkified;
-        sseWrite(res, { type: "segments-update", segments: linkified });
+      // The deterministic pre-pass + gate must never take down chat
+      // persistence below (chat.messages.push / writeChatFile / res.end).
+      // On any unexpected failure here, log and fall through with the
+      // original segments untouched.
+      try {
+        // Layer 3: deterministic pre-pass, table name-cells only. Runs
+        // in-place on `segments` so both the persisted segments and the
+        // Haiku input below see the wraps, even if the Haiku call is
+        // skipped by the gate.
+        for (const seg of segments) {
+          if (seg.type === "text") {
+            seg.text = wrapTableNameCells(seg.text, isKnownCardName);
+          }
+        }
+
+        // Layer 2: cost gate. Only pay for the Haiku pass when there's a
+        // real card-name signal (table/list, or a known name in prose).
+        const combinedText = segments
+          .filter((s): s is { type: "text"; text: string } => s.type === "text")
+          .map((s) => s.text)
+          .join("");
+        if (hasKnownCardName(combinedText, isKnownCardName)) {
+          console.log("linkify: gate passed, running Haiku pass");
+          const linkified = await linkifySegments(segments);
+          if (linkified) {
+            finalSegments = linkified;
+            sseWrite(res, { type: "segments-update", segments: linkified });
+          }
+        } else {
+          console.log("linkify: gate skipped Haiku (no card-name signal)");
+        }
+      } catch (err) {
+        console.error("linkify pre-pass failed, skipping:", err);
+        finalSegments = segments;
       }
     }
 

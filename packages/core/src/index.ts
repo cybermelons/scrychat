@@ -6,3 +6,4 @@ export * from "./spellbook.js";
 export * from "./alternatives.js";
 export * from "./decks.js";
 export * from "./import.js";
+export * from "./local.js";
