@@ -688,11 +688,6 @@ export function DeckPanel({
                           </td>
                           <td className="card-name-cell">
                             <CardName name={c.name} image={c.image} />
-                            {c.tags.map((t) => (
-                              <span className="tag-chip" key={t}>
-                                {t}
-                              </span>
-                            ))}
                           </td>
                           <td className="card-mana-cell">
                             {c.manaCost && (
