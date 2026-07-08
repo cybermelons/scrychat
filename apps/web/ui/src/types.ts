@@ -1,6 +1,6 @@
 export type CardEntry = {
   name: string;
-  role?: string;
+  tags?: string[];
   count?: number;
   image?: string | null;
   manaCost?: string | null;
@@ -29,7 +29,8 @@ export type QuotaCheck = {
 
 export type DeckReport = {
   total: number;
-  byRole: Record<string, number>;
+  byTag: Record<string, number>;
+  untaggedForQuota: number;
   curve: Record<string, number>;
   quotaCheck: {
     lands: QuotaCheck;
@@ -53,7 +54,7 @@ export type AddCardsResult = {
   rejected: RejectedCard[];
 };
 
-export const CARD_ROLES = [
+export const LEGACY_ROLE_TAGS = [
   "land",
   "ramp",
   "draw",

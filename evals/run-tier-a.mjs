@@ -340,7 +340,7 @@ async function main() {
         record("A8", false, `threw: ${err.message}`);
       }
 
-      // --- A9: seed a small deck, then deck_get -> byRole, curve, quotaCheck ---
+      // --- A9: seed a small deck, then deck_get -> byTag, curve, quotaCheck ---
       // By this point A1/A2/A4/A5/A7/A8 have already fired ~20+ sequential
       // Scryfall requests (A5's find_alternatives alone does up to ~15: one
       // getCard, up to 10 otag-verification searches, up to 4 role searches).
@@ -350,16 +350,16 @@ async function main() {
       try {
         await sleep(3000);
         const seedCards = [
-          { name: "Forest", role: "land", count: 20 },
-          { name: "Plains", role: "land", count: 16 },
-          { name: "Rampant Growth", role: "ramp" },
-          { name: "Farseek", role: "ramp" },
-          { name: "Elvish Mystic", role: "ramp" },
-          { name: "Return of the Wildspeaker", role: "draw" },
-          { name: "Shamanic Revelation", role: "draw" },
-          { name: "Beast Within", role: "interaction" },
-          { name: "Swords to Plowshares", role: "interaction" },
-          { name: "Wrath of God", role: "wipe" },
+          { name: "Forest", tags: ["land"], count: 20 },
+          { name: "Plains", tags: ["land"], count: 16 },
+          { name: "Rampant Growth", tags: ["ramp"] },
+          { name: "Farseek", tags: ["ramp"] },
+          { name: "Elvish Mystic", tags: ["ramp"] },
+          { name: "Return of the Wildspeaker", tags: ["draw"] },
+          { name: "Shamanic Revelation", tags: ["draw"] },
+          { name: "Beast Within", tags: ["interaction"] },
+          { name: "Swords to Plowshares", tags: ["interaction"] },
+          { name: "Wrath of God", tags: ["wipe"] },
         ];
         const addRes = await callTool("deck_add", { name: deckName, cards: seedCards }, "A9 deck_add seed");
         if (addRes.error) throw new Error(`deck_add error: ${addRes.error}`);
@@ -372,14 +372,14 @@ async function main() {
         const getRes = await callTool("deck_get", { name: deckName }, "A9 deck_get");
         if (getRes.error) throw new Error(`deck_get error: ${getRes.error}`);
 
-        const hasByRole = getRes.byRole && typeof getRes.byRole === "object";
+        const hasByTag = getRes.byTag && typeof getRes.byTag === "object";
         const hasCurve = getRes.report && getRes.report.curve && typeof getRes.report.curve === "object";
         const hasQuotaCheck = getRes.report && getRes.report.quotaCheck && typeof getRes.report.quotaCheck === "object";
-        const ok = Boolean(hasByRole && hasCurve && hasQuotaCheck);
+        const ok = Boolean(hasByTag && hasCurve && hasQuotaCheck);
         record(
           "A9",
           ok,
-          `addRejected=${JSON.stringify(addRes.rejected)} byRole=${JSON.stringify(getRes.byRole)} ` +
+          `addRejected=${JSON.stringify(addRes.rejected)} byTag=${JSON.stringify(getRes.byTag)} ` +
             `curve=${JSON.stringify(getRes.report?.curve)} quotaCheck=${JSON.stringify(getRes.report?.quotaCheck)}`,
         );
       } catch (err) {

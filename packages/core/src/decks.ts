@@ -3,7 +3,7 @@ import path from "node:path";
 
 export type CardEntry = {
   name: string;
-  role?: string;
+  tags?: string[];
   count?: number;
 };
 
@@ -44,7 +44,8 @@ export type DeckReport = {
   total: number;
   targetTotal: number;
   overUnder: number;
-  byRole: Record<string, number>;
+  byTag: Record<string, number>;
+  untaggedForQuota: number;
   curve: Record<string, number>;
   quotaCheck: {
     lands: QuotaCheck;
@@ -87,10 +88,21 @@ async function atomicWrite(filePath: string, data: string): Promise<void> {
   await fs.rename(tmpPath, filePath);
 }
 
+function migrateCardEntry(c: any): CardEntry {
+  if (c && typeof c === "object") {
+    if (Array.isArray(c.tags)) return { name: c.name, tags: c.tags, count: c.count };
+    if (typeof c.role === "string" && c.role.length > 0) return { name: c.name, tags: [c.role], count: c.count };
+    return { name: c.name, count: c.count };
+  }
+  return c;
+}
+
 async function readDeckFile(filePath: string): Promise<Deck | null> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
-    return JSON.parse(raw) as Deck;
+    const deck = JSON.parse(raw) as Deck;
+    deck.cards = (deck.cards ?? []).map(migrateCardEntry);
+    return deck;
   } catch (err: any) {
     if (err?.code === "ENOENT") return null;
     throw err;
@@ -228,9 +240,10 @@ export async function addCards(
       }
     }
 
+    const tags = card.tags ?? (typeof (card as any).role === "string" ? [(card as any).role] : undefined);
     const entry: CardEntry = {
       name: resolved.name,
-      role: card.role,
+      tags,
       count: card.count ?? 1,
     };
     deck.cards.push(entry);
@@ -262,7 +275,58 @@ export async function removeCards(
   return deck;
 }
 
-const LAND_ROLE = "land";
+export async function setCardTags(
+  name: string,
+  updates: { name: string; tags: string[] }[],
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<Deck> {
+  const deck = await getDeck(name, decksDir);
+  if (!deck) {
+    throw new Error(`Deck not found: ${name}`);
+  }
+
+  const byNameLower = new Map(updates.map((u) => [u.name.toLowerCase(), u.tags]));
+  deck.cards = deck.cards.map((c) => {
+    const tags = byNameLower.get(c.name.toLowerCase());
+    if (tags === undefined) return c;
+    return { ...c, tags };
+  });
+  deck.updatedAt = new Date().toISOString();
+
+  await writeDeckFile(decksDir, deck);
+  return deck;
+}
+
+export async function renameTag(
+  name: string,
+  from: string,
+  to: string,
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<Deck> {
+  const deck = await getDeck(name, decksDir);
+  if (!deck) {
+    throw new Error(`Deck not found: ${name}`);
+  }
+
+  deck.cards = deck.cards.map((c) => {
+    if (!c.tags || !c.tags.includes(from)) return c;
+    const renamed = c.tags.map((t) => (t === from ? to : t));
+    const deduped = [...new Set(renamed)];
+    return { ...c, tags: deduped };
+  });
+  deck.updatedAt = new Date().toISOString();
+
+  await writeDeckFile(decksDir, deck);
+  return deck;
+}
+
+const QUOTA_TAG_NAMES = new Set(["land", "ramp", "draw", "interaction", "wipe"]);
+const UNTAGGED = "untagged";
+
+function isRecognizedQuotaTag(tag: string): boolean {
+  const lower = tag.toLowerCase();
+  return QUOTA_TAG_NAMES.has(lower) || INTERACTION_ROLES.has(lower);
+}
 
 function quota(have: number, min: number, max: number): QuotaCheck {
   return {
@@ -282,7 +346,7 @@ export async function deckReport(
     throw new Error(`Deck not found: ${name}`);
   }
 
-  const byRole: Record<string, number> = {};
+  const byTag: Record<string, number> = {};
   const curve: Record<string, number> = {
     "0": 0,
     "1": 0,
@@ -295,13 +359,27 @@ export async function deckReport(
   };
   const identityViolations: string[] = [];
   let total = 0;
+  let untaggedForQuota = 0;
+  let interactionHave = 0;
 
   for (const card of deck.cards) {
     const count = card.count ?? 1;
     total += count;
 
-    const role = card.role ?? "other";
-    byRole[role] = (byRole[role] ?? 0) + count;
+    const tags = card.tags ?? [];
+    if (tags.length === 0) {
+      byTag[UNTAGGED] = (byTag[UNTAGGED] ?? 0) + count;
+    } else {
+      for (const tag of tags) {
+        byTag[tag] = (byTag[tag] ?? 0) + count;
+      }
+    }
+    if (!tags.some((t) => isRecognizedQuotaTag(t))) {
+      untaggedForQuota += count;
+    }
+    if (tags.some((t) => INTERACTION_ROLES.has(t.toLowerCase()))) {
+      interactionHave += count;
+    }
 
     const resolved = await resolver(card.name);
     if (resolved) {
@@ -317,23 +395,17 @@ export async function deckReport(
     }
   }
 
-  const landsHave = byRole[LAND_ROLE] ?? 0;
-  const rampHave = byRole["ramp"] ?? 0;
-  const drawHave = byRole["draw"] ?? 0;
-  const wipesHave = byRole["wipe"] ?? 0;
-
-  let interactionHave = 0;
-  for (const [role, count] of Object.entries(byRole)) {
-    if (INTERACTION_ROLES.has(role.toLowerCase())) {
-      interactionHave += count;
-    }
-  }
+  const landsHave = byTag["land"] ?? 0;
+  const rampHave = byTag["ramp"] ?? 0;
+  const drawHave = byTag["draw"] ?? 0;
+  const wipesHave = byTag["wipe"] ?? 0;
 
   return {
     total,
     targetTotal: EDH_TARGET_TOTAL,
     overUnder: total - EDH_TARGET_TOTAL,
-    byRole,
+    byTag,
+    untaggedForQuota,
     curve,
     quotaCheck: {
       lands: quota(landsHave, 36, 38),

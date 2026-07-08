@@ -297,6 +297,11 @@ body {
   min-width: 84px;
 }
 
+.tags-input {
+  flex: 1;
+  min-width: 120px;
+}
+
 .count-input {
   flex: 0 0 56px;
   min-width: 0;
@@ -463,6 +468,122 @@ body {
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
   font-weight: 400;
+}
+
+.group-rename-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 0 4px;
+  visibility: hidden;
+}
+
+.role-header-cell:hover .group-rename-btn {
+  visibility: visible;
+}
+
+.group-rename-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.group-rename-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* tag chips */
+.tag-chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  margin-left: 5px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.tag-chip-removable,
+.tag-chip-suggestion {
+  cursor: pointer;
+}
+
+.tag-chip-removable:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.tag-chip-suggestion {
+  color: var(--accent);
+}
+
+.tag-chip-suggestion:hover {
+  background: var(--bg-panel);
+}
+
+.card-edit-cell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.edit-tags-btn {
+  visibility: hidden;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.card-row:hover .edit-tags-btn {
+  visibility: visible;
+}
+
+.tag-editor-row td {
+  padding: 6px 4px 10px;
+}
+
+.tag-editor {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tag-editor-current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.tag-editor-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.tag-editor-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* quotas */
+.quota-note {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 4px;
 }
 
 .card-count-cell {

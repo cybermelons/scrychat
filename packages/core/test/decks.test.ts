@@ -10,6 +10,8 @@ import {
   listDecks,
   deleteDeck,
   deckReport,
+  setCardTags,
+  renameTag,
   type CardResolver,
   type ResolvedCard,
 } from "../src/decks.js";
@@ -184,7 +186,7 @@ describe("decks", () => {
     expect(fetched).toBeNull();
   });
 
-  it("produces a report with byRole, curve, and quotaCheck", async () => {
+  it("produces a report with byTag, curve, and quotaCheck", async () => {
     await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
     await addCards(
       "Selesnya Value",
@@ -201,9 +203,9 @@ describe("decks", () => {
     expect(report.total).toBe(38);
     expect(report.targetTotal).toBe(99);
     expect(report.overUnder).toBe(38 - 99);
-    expect(report.byRole.land).toBe(36);
-    expect(report.byRole.ramp).toBe(1);
-    expect(report.byRole.draw).toBe(1);
+    expect(report.byTag.land).toBe(36);
+    expect(report.byTag.ramp).toBe(1);
+    expect(report.byTag.draw).toBe(1);
     expect(report.curve["1"]).toBe(1); // Sol Ring cmc 1
     expect(report.curve["2"]).toBe(1); // Elvish Visionary cmc 2
     expect(report.quotaCheck.lands.have).toBe(36);
@@ -226,13 +228,102 @@ describe("decks", () => {
     );
 
     const report = await deckReport("Selesnya Value", resolver, decksDir);
-    // byRole keeps literal (case-preserved) role keys
-    expect(report.byRole.Removal).toBe(1);
-    expect(report.byRole.COUNTERSPELL).toBe(1);
-    expect(report.byRole.interaction).toBe(1);
+    // byTag keeps literal (case-preserved) tag keys
+    expect(report.byTag.Removal).toBe(1);
+    expect(report.byTag.COUNTERSPELL).toBe(1);
+    expect(report.byTag.interaction).toBe(1);
     // quotaCheck.interaction aggregates all three, case-insensitively
     expect(report.quotaCheck.interaction.have).toBe(3);
     expect(report.quotaCheck.interaction.ok).toBe(false); // below 8-10 quota
+  });
+
+  it("counts a multi-tag interaction card once toward the interaction quota", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await addCards(
+      "Selesnya Value",
+      [{ name: "Swords to Plowshares", tags: ["removal", "counterspell"] }],
+      resolver,
+      decksDir
+    );
+
+    const report = await deckReport("Selesnya Value", resolver, decksDir);
+    expect(report.quotaCheck.interaction.have).toBe(1);
+  });
+
+  it("migrates a legacy role field on read, without a role key in the result", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    const filePath = path.join(decksDir, "selesnya-value.json");
+    const raw = JSON.parse(await fs.readFile(filePath, "utf8"));
+    raw.cards = [{ name: "Sol Ring", role: "ramp", count: 1 }];
+    await fs.writeFile(filePath, JSON.stringify(raw, null, 2), "utf8");
+
+    const deck = await getDeck("Selesnya Value", decksDir);
+    expect(deck?.cards[0]).toEqual({ name: "Sol Ring", tags: ["ramp"], count: 1 });
+    expect((deck?.cards[0] as any).role).toBeUndefined();
+  });
+
+  it("counts a multi-tag card toward every quota/tag bucket it qualifies for", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await addCards(
+      "Selesnya Value",
+      [{ name: "Sol Ring", tags: ["ramp", "combo piece"] }],
+      resolver,
+      decksDir
+    );
+
+    const report = await deckReport("Selesnya Value", resolver, decksDir);
+    expect(report.byTag.ramp).toBe(1);
+    expect(report.byTag["combo piece"]).toBe(1);
+    expect(report.quotaCheck.ramp.have).toBe(1);
+    expect(report.untaggedForQuota).toBe(0);
+  });
+
+  it("counts a card with only unrecognized tags toward untaggedForQuota", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await addCards(
+      "Selesnya Value",
+      [
+        { name: "Sol Ring", tags: ["combo piece"] },
+        { name: "Forest", tags: ["land"], count: 1 },
+      ],
+      resolver,
+      decksDir
+    );
+
+    const report = await deckReport("Selesnya Value", resolver, decksDir);
+    expect(report.untaggedForQuota).toBe(1);
+  });
+
+  it("setCardTags replaces a card's tags, and an empty array clears them", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await addCards("Selesnya Value", [{ name: "Sol Ring", tags: ["ramp"] }], resolver, decksDir);
+
+    let deck = await setCardTags(
+      "Selesnya Value",
+      [{ name: "Sol Ring", tags: ["ramp", "combo piece"] }],
+      decksDir
+    );
+    expect(deck.cards.find((c) => c.name === "Sol Ring")?.tags).toEqual(["ramp", "combo piece"]);
+
+    deck = await setCardTags("Selesnya Value", [{ name: "Sol Ring", tags: [] }], decksDir);
+    expect(deck.cards.find((c) => c.name === "Sol Ring")?.tags).toEqual([]);
+  });
+
+  it("renameTag renames a tag on every card carrying it and dedupes if the target already exists", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await addCards(
+      "Selesnya Value",
+      [
+        { name: "Sol Ring", tags: ["ramp"] },
+        { name: "Elvish Visionary", tags: ["ramp", "draw"] },
+      ],
+      resolver,
+      decksDir
+    );
+
+    const deck = await renameTag("Selesnya Value", "ramp", "draw", decksDir);
+    expect(deck.cards.find((c) => c.name === "Sol Ring")?.tags).toEqual(["draw"]);
+    expect(deck.cards.find((c) => c.name === "Elvish Visionary")?.tags).toEqual(["draw"]);
   });
 
   it("reports total/targetTotal/overUnder against the 99-card EDH target", async () => {

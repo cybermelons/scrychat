@@ -76,10 +76,13 @@ instead of asking.
    - board wipes (`otag:sweeper`)
    - theme payoffs from step 3
 5. `find_combos` filtered to identity for win lines; add 1-3 as the explicit game plan.
-6. `deck_create`, then `deck_add` each pick with a role annotation (land/ramp/draw/interaction/
-   wipe/payoff/wincon).
-7. `deck_get` to check the quota report + mana curve; relay any rejection reasons from
-   `deck_add` verbatim.
+6. `deck_create`, then `deck_add` each pick with `tags`: one quota tag where applicable
+   (land/ramp/draw/interaction/wipe — these drive the quota checklist) plus any free-form
+   strategy tags that fit (e.g. "aristocrats payoff", "combo piece", "sac fodder", "wincon").
+   `role` is still accepted as a legacy single-tag alias, but prefer `tags`.
+7. `deck_get` to check the quota report (now grouped `byTag`, with `untaggedForQuota` flagging
+   cards that carry no quota tag) + mana curve; relay any rejection reasons from `deck_add`
+   verbatim.
 8. Iterate additions/swaps until: 100 cards, singleton, quotas green, curve reasonable.
 9. If a budget was given, run a final pass replacing over-budget cards via `find_alternatives`
    with `usd<N prefer:usd-low`.
@@ -103,8 +106,8 @@ instead of asking.
    `deck_import` + your `deck_add`), M rejected with the verbatim reasons, any unparsed lines you
    resolved (and to what), and any you still couldn't identify (ask the user to clarify those). Do
    NOT silently drop anything. Wrap every card name in `[[Card Name]]` per the presentation rules.
-5. Note: `deck_import` does not assign functional roles (land/ramp/etc). If the user wants a quota
-   report afterward, optionally run a follow-up pass tagging roles via `deck_add`/`deck_remove` or
+5. Note: `deck_import` does not assign functional tags (land/ramp/etc). If the user wants a quota
+   report afterward, optionally run a follow-up pass tagging cards via `deck_add`/`deck_remove` or
    just call `deck_get` — mention curve/quota only if asked.
 
 ## EDH skeleton quotas

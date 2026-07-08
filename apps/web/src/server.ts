@@ -13,6 +13,8 @@ import {
   addCards,
   removeCards,
   deleteDeck,
+  setCardTags,
+  renameTag,
   type CardResolver,
 } from "@scrychat/core";
 
@@ -739,12 +741,56 @@ app.post("/api/decks/:name/cards", async (req: Request, res: Response) => {
     }
     const result = await addCards(req.params.name, cards, resolver, DECKS_DIR);
     for (const c of result.added) {
-      logAction(`added "${c.name}"${c.role ? ` (${c.role})` : ""} to "${req.params.name}"`);
+      logAction(`added "${c.name}"${c.tags?.length ? ` (${c.tags.join(", ")})` : ""} to "${req.params.name}"`);
     }
     for (const r of result.rejected) {
       logAction(`tried to add "${r.name}" to "${req.params.name}" — rejected: ${r.reason}`);
     }
     res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.patch("/api/decks/:name/cards", async (req: Request, res: Response) => {
+  try {
+    const { cards } = req.body ?? {};
+    if (!Array.isArray(cards)) {
+      res.status(400).json({ error: "cards array is required" });
+      return;
+    }
+    const cardsValid = cards.every(
+      (c) =>
+        c &&
+        typeof c === "object" &&
+        typeof c.name === "string" &&
+        Array.isArray(c.tags) &&
+        c.tags.every((t: unknown) => typeof t === "string")
+    );
+    if (!cardsValid) {
+      res.status(400).json({ error: "each card must be {name: string, tags: string[]}" });
+      return;
+    }
+    const deck = await setCardTags(req.params.name, cards, DECKS_DIR);
+    for (const c of cards) {
+      logAction(`tagged "${c.name}" [${(c.tags ?? []).join(", ")}]`);
+    }
+    res.json({ deck });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.patch("/api/decks/:name/tags", async (req: Request, res: Response) => {
+  try {
+    const { from, to } = req.body ?? {};
+    if (typeof from !== "string" || from.length === 0 || typeof to !== "string" || to.length === 0) {
+      res.status(400).json({ error: "from and to are required non-empty strings" });
+      return;
+    }
+    const deck = await renameTag(req.params.name, from, to, DECKS_DIR);
+    logAction(`renamed tag "${from}" → "${to}" in "${req.params.name}"`);
+    res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }

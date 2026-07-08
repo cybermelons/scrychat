@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { Deck, DeckReport, DeckSummary, QuotaCheck, RejectedCard } from "./types";
-import { CARD_ROLES } from "./types";
+import { LEGACY_ROLE_TAGS } from "./types";
 import { CardName } from "./CardName";
 import { renderManaSymbols } from "./markdown";
 
@@ -102,13 +102,24 @@ export function DeckPanel({
 
   // add-card form
   const [addCardName, setAddCardName] = useState("");
-  const [addCardRole, setAddCardRole] = useState<string>("other");
+  const [addCardTags, setAddCardTags] = useState("");
   const [addCardCount, setAddCardCount] = useState("1");
   const [addCardBusy, setAddCardBusy] = useState(false);
   const [rejected, setRejected] = useState<RejectedCard[]>([]);
 
   const [removeBusy, setRemoveBusy] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+
+  // per-card tag editor
+  const [editingCard, setEditingCard] = useState<string | null>(null);
+  const [editorTags, setEditorTags] = useState<string[]>([]);
+  const [editorInput, setEditorInput] = useState("");
+  const [editorBusy, setEditorBusy] = useState(false);
+
+  // group rename
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
 
   const refreshDecks = useCallback(
     (selectName?: string) => {
@@ -172,11 +183,15 @@ export function DeckPanel({
       setAddCardBusy(true);
       setRejected([]);
       const count = Math.max(1, parseInt(addCardCount, 10) || 1);
+      const tags = addCardTags
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
       fetch(`/api/decks/${encodeURIComponent(selected)}/cards`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cards: [{ name: addCardName.trim(), role: addCardRole, count }],
+          cards: [{ name: addCardName.trim(), tags, count }],
         }),
       })
         .then(async (r) => {
@@ -188,6 +203,7 @@ export function DeckPanel({
           setRejected(result.rejected ?? []);
           if ((result.added?.length ?? 0) > 0) {
             setAddCardName("");
+            setAddCardTags("");
             setAddCardCount("1");
           }
           loadDeck(selected);
@@ -196,7 +212,7 @@ export function DeckPanel({
         .finally(() => setAddCardBusy(false));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected, addCardName, addCardRole, addCardCount]
+    [selected, addCardName, addCardTags, addCardCount]
   );
 
   const removeCard = useCallback(
@@ -217,6 +233,69 @@ export function DeckPanel({
         })
         .catch(() => void 0)
         .finally(() => setRemoveBusy(null));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected]
+  );
+
+  const openTagEditor = useCallback((key: string, tags: string[]) => {
+    setEditingCard(key);
+    setEditorTags([...tags]);
+    setEditorInput("");
+  }, []);
+
+  const closeTagEditor = useCallback(() => {
+    setEditingCard(null);
+    setEditorTags([]);
+    setEditorInput("");
+  }, []);
+
+  const saveCardTags = useCallback(
+    (cardName: string, tags: string[]) => {
+      if (!selected) return;
+      setEditorBusy(true);
+      fetch(`/api/decks/${encodeURIComponent(selected)}/cards`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cards: [{ name: cardName, tags }] }),
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const body = await r.json().catch(() => ({}));
+            throw new Error(body.error ?? `HTTP ${r.status}`);
+          }
+          closeTagEditor();
+          loadDeck(selected);
+        })
+        .catch(() => void 0)
+        .finally(() => setEditorBusy(false));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, closeTagEditor]
+  );
+
+  const renameGroup = useCallback(
+    (from: string, to: string) => {
+      if (!selected || !to.trim() || to.trim() === from) {
+        setRenamingGroup(null);
+        return;
+      }
+      setRenameBusy(true);
+      fetch(`/api/decks/${encodeURIComponent(selected)}/tags`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: to.trim() }),
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const body = await r.json().catch(() => ({}));
+            throw new Error(body.error ?? `HTTP ${r.status}`);
+          }
+          setRenamingGroup(null);
+          loadDeck(selected);
+        })
+        .catch(() => void 0)
+        .finally(() => setRenameBusy(false));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selected]
@@ -306,19 +385,34 @@ export function DeckPanel({
     return () => es.close();
   }, [loadDeck]);
 
-  const roleGroups: [string, { name: string; count: number; image?: string | null; manaCost?: string | null }[]][] = [];
+  const UNTAGGED = "untagged";
+  type CardRow = { name: string; tags: string[]; count: number; image?: string | null; manaCost?: string | null };
+  const tagGroups: [string, CardRow[]][] = [];
+  const allDeckTags: string[] = [];
   if (deck) {
-    const map = new Map<string, { name: string; count: number; image?: string | null; manaCost?: string | null }[]>();
+    const map = new Map<string, CardRow[]>();
+    const seenTags = new Set<string>();
     for (const c of deck.cards) {
-      const role = c.role ?? "other";
-      if (!map.has(role)) map.set(role, []);
-      map.get(role)!.push({ name: c.name, count: c.count ?? 1, image: c.image, manaCost: c.manaCost });
+      const tags = c.tags ?? [];
+      const row: CardRow = { name: c.name, tags, count: c.count ?? 1, image: c.image, manaCost: c.manaCost };
+      if (tags.length === 0) {
+        if (!map.has(UNTAGGED)) map.set(UNTAGGED, []);
+        map.get(UNTAGGED)!.push(row);
+      } else {
+        for (const tag of tags) {
+          if (!seenTags.has(tag)) {
+            seenTags.add(tag);
+            allDeckTags.push(tag);
+          }
+          if (!map.has(tag)) map.set(tag, []);
+          map.get(tag)!.push(row);
+        }
+      }
     }
-    for (const [role, cards] of [...map.entries()].sort((a, b) =>
-      a[0].localeCompare(b[0])
-    )) {
-      roleGroups.push([role, cards]);
-    }
+    const entries = [...map.entries()].filter(([tag]) => tag !== UNTAGGED);
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    for (const entry of entries) tagGroups.push(entry);
+    if (map.has(UNTAGGED)) tagGroups.push([UNTAGGED, map.get(UNTAGGED)!]);
   }
 
   const totalCards = deck
@@ -460,6 +554,9 @@ export function DeckPanel({
                     identity violations: {report.identityViolations.join(", ")}
                   </div>
                 )}
+                {report.untaggedForQuota > 0 && (
+                  <div className="quota-note">{report.untaggedForQuota} cards untagged for quota</div>
+                )}
               </section>
 
               <section className="deck-section">
@@ -484,19 +581,20 @@ export function DeckPanel({
                 disabled={addCardBusy}
                 aria-label="Card name to add"
               />
-              <select
-                className="role-select"
-                value={addCardRole}
-                onChange={(e) => setAddCardRole(e.target.value)}
+              <input
+                className="text-input tags-input"
+                placeholder="tags (comma-separated)"
+                value={addCardTags}
+                onChange={(e) => setAddCardTags(e.target.value)}
                 disabled={addCardBusy}
-                aria-label="Card role"
-              >
-                {CARD_ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
+                aria-label="Card tags"
+                list="legacy-role-tags"
+              />
+              <datalist id="legacy-role-tags">
+                {LEGACY_ROLE_TAGS.map((r) => (
+                  <option key={r} value={r} />
                 ))}
-              </select>
+              </datalist>
               <input
                 className="text-input count-input"
                 type="number"
@@ -519,48 +617,188 @@ export function DeckPanel({
                 ))}
               </div>
             )}
-            {roleGroups.length > 0 && (
+            {tagGroups.length > 0 && (
               <table className="card-table">
-                {roleGroups.map(([role, cards]) => (
-                  <tbody className="role-group" key={role}>
+                {tagGroups.map(([tag, cards]) => (
+                  <tbody className="role-group" key={tag}>
                     <tr className="role-header-row">
-                      <th className="role-header-cell" colSpan={4}>
-                        <span className="role-name">{role}</span>
-                        <span className="role-count">
-                          {cards.reduce((n, c) => n + c.count, 0)}
-                        </span>
+                      <th className="role-header-cell" colSpan={5}>
+                        {renamingGroup === tag ? (
+                          <span className="group-rename-row" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              className="text-input group-rename-input"
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              disabled={renameBusy}
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") renameGroup(tag, renameValue);
+                                if (e.key === "Escape") setRenamingGroup(null);
+                              }}
+                              aria-label={`Rename tag ${tag}`}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-small"
+                              onClick={() => renameGroup(tag, renameValue)}
+                              disabled={renameBusy}
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-small"
+                              onClick={() => setRenamingGroup(null)}
+                              disabled={renameBusy}
+                            >
+                              Cancel
+                            </button>
+                          </span>
+                        ) : (
+                          <>
+                            <span className="role-name">{tag}</span>
+                            {tag !== UNTAGGED && (
+                              <button
+                                type="button"
+                                className="group-rename-btn"
+                                onClick={() => {
+                                  setRenamingGroup(tag);
+                                  setRenameValue(tag);
+                                }}
+                                aria-label={`Rename tag ${tag}`}
+                                title="Rename tag"
+                              >
+                                ✎
+                              </button>
+                            )}
+                            <span className="role-count">
+                              {cards.reduce((n, c) => n + c.count, 0)}
+                            </span>
+                          </>
+                        )}
                       </th>
                     </tr>
-                    {cards.map((c) => (
-                      <tr key={c.name} className="card-row">
-                        <td className="card-count-cell">
-                          {c.count > 1 ? `${c.count}×` : ""}
-                        </td>
-                        <td className="card-name-cell">
-                          <CardName name={c.name} image={c.image} />
-                        </td>
-                        <td className="card-mana-cell">
-                          {c.manaCost && (
-                            <span
-                              className="card-mana-cost"
-                              dangerouslySetInnerHTML={{ __html: renderManaSymbols(c.manaCost) }}
-                            />
-                          )}
-                        </td>
-                        <td className="card-remove-cell">
-                          <button
-                            type="button"
-                            className="remove-card-btn"
-                            onClick={() => removeCard(c.name)}
-                            disabled={removeBusy === c.name}
-                            aria-label={`Remove ${c.name}`}
-                            title={`Remove ${c.name}`}
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {cards.map((c) => {
+                      const editKey = `${tag}::${c.name}`;
+                      return (
+                      <Fragment key={c.name}>
+                        <tr className="card-row">
+                          <td className="card-count-cell">
+                            {c.count > 1 ? `${c.count}×` : ""}
+                          </td>
+                          <td className="card-name-cell">
+                            <CardName name={c.name} image={c.image} />
+                            {c.tags.map((t) => (
+                              <span className="tag-chip" key={t}>
+                                {t}
+                              </span>
+                            ))}
+                          </td>
+                          <td className="card-mana-cell">
+                            {c.manaCost && (
+                              <span
+                                className="card-mana-cost"
+                                dangerouslySetInnerHTML={{ __html: renderManaSymbols(c.manaCost) }}
+                              />
+                            )}
+                          </td>
+                          <td className="card-edit-cell">
+                            <button
+                              type="button"
+                              className="edit-tags-btn"
+                              onClick={() =>
+                                editingCard === editKey ? closeTagEditor() : openTagEditor(editKey, c.tags)
+                              }
+                              aria-label={`Edit tags for ${c.name}`}
+                              title="Edit tags"
+                            >
+                              ✎
+                            </button>
+                          </td>
+                          <td className="card-remove-cell">
+                            <button
+                              type="button"
+                              className="remove-card-btn"
+                              onClick={() => removeCard(c.name)}
+                              disabled={removeBusy === c.name}
+                              aria-label={`Remove ${c.name}`}
+                              title={`Remove ${c.name}`}
+                            >
+                              ×
+                            </button>
+                          </td>
+                        </tr>
+                        {editingCard === editKey && (
+                          <tr className="tag-editor-row">
+                            <td colSpan={5}>
+                              <div className="tag-editor">
+                                <div className="tag-editor-current">
+                                  {editorTags.map((t) => (
+                                    <span
+                                      className="tag-chip tag-chip-removable"
+                                      key={t}
+                                      onClick={() => setEditorTags((prev) => prev.filter((x) => x !== t))}
+                                      title="Click to remove"
+                                    >
+                                      {t} ×
+                                    </span>
+                                  ))}
+                                </div>
+                                <div className="tag-editor-input-row">
+                                  <input
+                                    className="text-input"
+                                    placeholder="Add tag, press Enter"
+                                    value={editorInput}
+                                    onChange={(e) => setEditorInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        const v = editorInput.trim();
+                                        if (v && !editorTags.includes(v)) {
+                                          setEditorTags((prev) => [...prev, v]);
+                                        }
+                                        setEditorInput("");
+                                      }
+                                    }}
+                                    disabled={editorBusy}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary btn-small"
+                                    disabled={editorBusy}
+                                    onClick={() => saveCardTags(c.name, editorTags)}
+                                  >
+                                    {editorBusy ? "Saving…" : "Save"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-small"
+                                    disabled={editorBusy}
+                                    onClick={closeTagEditor}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                                <div className="tag-editor-suggestions">
+                                  {[...LEGACY_ROLE_TAGS, ...allDeckTags]
+                                    .filter((t, i, arr) => arr.indexOf(t) === i && !editorTags.includes(t))
+                                    .map((t) => (
+                                      <span
+                                        className="tag-chip tag-chip-suggestion"
+                                        key={t}
+                                        onClick={() => setEditorTags((prev) => [...prev, t])}
+                                      >
+                                        + {t}
+                                      </span>
+                                    ))}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                      );
+                    })}
                   </tbody>
                 ))}
               </table>

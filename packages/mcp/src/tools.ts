@@ -368,7 +368,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Get deck",
       description:
-        "Fetches a deck's full card list (grouped by role) plus a deck report: quota check against " +
+        "Fetches a deck's full card list (grouped by tag) plus a deck report: quota check against " +
         "recommended counts (lands/ramp/draw/interaction/wipes), mana curve, and any color identity violations.",
       inputSchema: {
         name: z.string().describe("Deck name"),
@@ -379,10 +379,16 @@ export function registerTools(server: McpServer): void {
         const deck = await getDeck(name, decksDir);
         if (!deck) return { error: `Deck not found: ${name}` };
 
-        const byRole: Record<string, CardEntry[]> = {};
+        const byTag: Record<string, CardEntry[]> = {};
         for (const card of deck.cards) {
-          const role = card.role ?? "other";
-          (byRole[role] ??= []).push(card);
+          const tags = card.tags ?? [];
+          if (tags.length === 0) {
+            (byTag["untagged"] ??= []).push(card);
+          } else {
+            for (const tag of tags) {
+              (byTag[tag] ??= []).push(card);
+            }
+          }
         }
 
         const report = await deckReport(name, resolveCard, decksDir);
@@ -391,11 +397,13 @@ export function registerTools(server: McpServer): void {
           name: deck.name,
           commander: deck.commander,
           commanderIdentity: deck.commanderIdentity.join(""),
-          byRole,
+          byTag,
           report: {
             total: report.total,
             quotaCheck: report.quotaCheck,
             curve: report.curve,
+            byTag: report.byTag,
+            untaggedForQuota: report.untaggedForQuota,
             identityViolations: report.identityViolations,
           },
         };
@@ -410,6 +418,8 @@ export function registerTools(server: McpServer): void {
       description:
         "Adds one or more cards to a deck. Each card is validated: must exist, be legal in Commander, and stay " +
         "within the commander's color identity; non-basic-land duplicates are rejected (singleton rule). " +
+        "Use free-form 'tags' (e.g. ['ramp'], ['removal', 'combo piece']) to label a card's strategic role(s); " +
+        "'role' is still accepted as a deprecated single-tag alias. " +
         "Returns which cards were added and which were rejected (with reasons).",
       inputSchema: {
         name: z.string().describe("Deck name"),
@@ -417,7 +427,11 @@ export function registerTools(server: McpServer): void {
           .array(
             z.object({
               name: z.string(),
-              role: z.string().optional().describe("Functional role, e.g. 'ramp', 'land', 'removal'"),
+              tags: z
+                .array(z.string())
+                .optional()
+                .describe("Free-form strategy tags, e.g. ['ramp'], ['land'], ['removal', 'combo piece'] (preferred)"),
+              role: z.string().optional().describe("Deprecated back-compat alias for a single tag, e.g. 'ramp', 'land', 'removal'"),
               count: z.number().int().positive().optional().describe("Count, default 1 (only >1 for Basic Land)"),
             }),
           )
