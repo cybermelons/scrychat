@@ -137,6 +137,37 @@ export async function getDeck(
   return readDeckFile(deckFilePath(decksDir, name));
 }
 
+export type DeckExportFormat = "plain" | "mtga" | "moxfield";
+
+function cardLine(card: CardEntry): string {
+  return `${card.count ?? 1} ${card.name}`;
+}
+
+export async function exportDeck(
+  name: string,
+  format: DeckExportFormat = "plain",
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<string> {
+  const deck = await getDeck(name, decksDir);
+  if (!deck) {
+    throw new Error(`Deck not found: ${name}`);
+  }
+
+  const cardLines = deck.cards.map(cardLine);
+
+  if (format === "mtga" || format === "moxfield") {
+    return [
+      "Commander",
+      `1 ${deck.commander}`,
+      "",
+      "Deck",
+      ...cardLines,
+    ].join("\n");
+  }
+
+  return [`1 ${deck.commander} *CMDR*`, "", ...cardLines].join("\n");
+}
+
 function isLegalCommanderCandidate(resolved: ResolvedCard): boolean {
   return resolved.legalCommander && resolved.typeLine.includes("Legendary");
 }

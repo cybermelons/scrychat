@@ -491,6 +491,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
           "mcp__scrychat__deck_set_card_tags",
           "mcp__scrychat__deck_rename",
           "mcp__scrychat__deck_set_commander",
+          "mcp__scrychat__deck_export",
           "Read",
           "Grep",
         ],

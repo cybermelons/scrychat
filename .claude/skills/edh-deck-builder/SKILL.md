@@ -128,6 +128,17 @@ instead of asking.
    report afterward, optionally run a follow-up pass tagging cards via `deck_add`/`deck_remove` or
    just call `deck_get` — mention curve/quota only if asked.
 
+**G. "Export / copy / paste out a decklist"**
+1. When the user asks to export, copy, "give me the decklist", "as a codeblock", or share a deck
+   as importable text, call `deck_export` with `deck_name` (and optional `format`: "plain" default,
+   "mtga", or "moxfield"). Do NOT hand-transcribe the list from `deck_get`.
+2. Paste the returned `text` VERBATIM inside a single markdown code fence (triple backticks).
+   Nothing else inside the fence.
+3. NEVER put `[[card refs]]`, `![[embeds]]`, or `[[group:...]]` chips inside the code fence — a
+   fenced block is a verbatim copy-paste zone; card-ref syntax there would pollute the exported
+   text and break re-import. The normal `[[Card Name]]` presentation mandate is SUSPENDED inside
+   code fences.
+
 ## EDH skeleton quotas
 
 - Lands: ~36-38 (down toward 33-35 with a low curve or heavy ramp package)
@@ -185,6 +196,10 @@ instead of asking.
 - `[[Card Name|alias]]` shows `alias` as the display text while still resolving/hovering the full
   card — use it when prose flow wants a short name (e.g. `[[Teysa Karlov|Teysa]]`), but PREFER
   plain `[[Card Name]]` normally.
+- **Code fences are verbatim zones.** The `[[Card Name]]` wrap mandate does NOT apply inside
+  triple-backtick code blocks — never emit `[[...]]`, `![[...]]`, or `[[group:...]]` there. For
+  decklist export/copy requests use the `deck_export` tool and paste its output raw inside one
+  fence (see workflow G).
 
 ## Pitfalls
 

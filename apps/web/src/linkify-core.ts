@@ -221,6 +221,34 @@ export function wrapTableNameCells(
 }
 
 /**
+ * Fenced code blocks (``` ... ```) are verbatim zones (issue #30): a decklist
+ * pasted inside a fence (e.g. "1 Sol Ring") must never get bare names
+ * wrapped, or the fence's contents get mutated. Mirrors
+ * group-chips-core.ts's detectionProtectedSpans fence tracking: walk lines,
+ * toggle `inFence` on a fence-marker line (trimStart starts with "```"), and
+ * protect the fence-marker line itself plus every line while inFence. Ranges
+ * are [start, end) char offsets into `text`, computed the same way (offset +=
+ * line.length + 1 for the stripped "\n").
+ */
+function fencedCodeSpans(text: string): { start: number; end: number }[] {
+  const spans: { start: number; end: number }[] = [];
+  let offset = 0;
+  let inFence = false;
+  for (const line of text.split("\n")) {
+    const end = offset + line.length;
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("```")) {
+      spans.push({ start: offset, end });
+      inFence = !inFence;
+    } else if (inFence) {
+      spans.push({ start: offset, end });
+    }
+    offset = end + 1; // +1 for the "\n"
+  }
+  return spans;
+}
+
+/**
  * Word-boundary-anchored, longest-first, idempotent bare-name wrapper. Given
  * a list of DB-validated card names, wraps every bare (unbracketed)
  * occurrence of each name in `[[...]]`. Leaves `[[..]]`, `![[..]]`, and
@@ -261,6 +289,11 @@ export function wrapNamesInText(
   for (const m of text.matchAll(/!?\[\[[^\]]*\]\]/g)) {
     claimed.push({ start: m.index!, end: m.index! + m[0].length });
   }
+
+  // Fenced code blocks are verbatim zones (issue #30) — pre-claim them too so
+  // no name match inside a ``` fence (e.g. a pasted decklist) ever gets
+  // wrapped.
+  claimed.push(...fencedCodeSpans(text));
 
   const inserts: Range[] = [];
   for (const name of uniqueNames) {
