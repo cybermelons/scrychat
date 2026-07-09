@@ -48,6 +48,29 @@ export function openDb(options: OpenDbOptions = {}): DbInstance {
   const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
   db.exec(schema);
 
+  // schema.sql's CREATE TABLE IF NOT EXISTS only adds new columns for
+  // freshly-created databases; a pre-existing cards table on disk keeps
+  // whatever columns it had when it was first created. Since schema.sql
+  // runs on every openDb(), these ALTER TABLEs must be applied here
+  // idempotently (checked against PRAGMA table_info) rather than embedded
+  // as raw ALTER statements in the .sql file, which would error on re-run.
+  const cardsColumns = new Set(
+    (db.prepare("PRAGMA table_info(cards)").all() as { name: string }[]).map((row) => row.name),
+  );
+  const newCardsColumns: [string, string][] = [
+    ["arena", "INTEGER"],
+    ["brawl", "TEXT"],
+    ["standardbrawl", "TEXT"],
+    ["historic", "TEXT"],
+    ["timeless", "TEXT"],
+    ["produced_mana", "TEXT"],
+  ];
+  for (const [name, type] of newCardsColumns) {
+    if (!cardsColumns.has(name)) {
+      db.exec(`ALTER TABLE cards ADD COLUMN ${name} ${type}`);
+    }
+  }
+
   return db;
 }
 

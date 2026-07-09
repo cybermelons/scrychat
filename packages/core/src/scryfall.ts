@@ -133,6 +133,12 @@ export interface Card {
   image: string | null;
   uri: string;
   legalCommander: boolean;
+  arena: boolean | null;
+  brawlLegal: boolean | null;
+  standardBrawlLegal: boolean | null;
+  historicLegal: boolean | null;
+  timelessLegal: boolean | null;
+  producedMana: string[] | null;
 }
 
 interface ScryfallCardFace {
@@ -155,7 +161,9 @@ interface ScryfallCardResponse {
   image_uris?: { normal?: string; large?: string };
   card_faces?: ScryfallCardFace[];
   uri: string;
-  legalities: { commander?: string };
+  legalities: { commander?: string; brawl?: string; standardbrawl?: string; historic?: string; timeless?: string };
+  games?: string[];
+  produced_mana?: string[];
 }
 
 function mapCard(raw: ScryfallCardResponse): Card {
@@ -181,6 +189,12 @@ function mapCard(raw: ScryfallCardResponse): Card {
     image,
     uri: raw.uri,
     legalCommander: raw.legalities.commander === "legal",
+    arena: raw.games ? raw.games.includes("arena") : null,
+    brawlLegal: raw.legalities.brawl != null ? raw.legalities.brawl === "legal" : null,
+    standardBrawlLegal: raw.legalities.standardbrawl != null ? raw.legalities.standardbrawl === "legal" : null,
+    historicLegal: raw.legalities.historic != null ? raw.legalities.historic === "legal" : null,
+    timelessLegal: raw.legalities.timeless != null ? raw.legalities.timeless === "legal" : null,
+    producedMana: raw.produced_mana ?? null,
   };
 }
 

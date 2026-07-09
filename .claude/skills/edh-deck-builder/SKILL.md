@@ -18,6 +18,18 @@ are kebab-case and often don't match the obvious English word (e.g. board wipes 
 `sweeper`, not `board-wipe`; there is no `voltron` or `aristocrats` tag — those are playstyles,
 not oracle-text tags, so decompose them into their component mechanics instead).
 
+## Arena / Brawl availability
+
+- NEVER assert Arena/Brawl availability from memory or set name — the system has real data now.
+- When the user mentions Arena or Brawl, add `game:arena` (Arena) or `legal:brawl` / `legal:standardbrawl`
+  (Brawl) to `search_cards` queries so results are pre-filtered live, AND read the `arena` flag on tool
+  results (`get_card` returns `arena` + `brawlLegal`/`historicLegal`/`timelessLegal`; `search_cards`/
+  `find_alternatives` members carry `arena`).
+- `arena: true` = on Arena, `false` = not, `null`/absent = unknown (don't claim either way — say unknown
+  or verify with a `game:arena` search).
+- Building/validating for Arena or Brawl: validate EVERY suggestion against the flag; never present a
+  card as Arena-legal without a true flag.
+
 ## Scryfall query recipes (`search_cards`)
 
 `search_cards` accepts full Scryfall syntax and auto-appends `legal:commander` — don't add it
@@ -82,7 +94,10 @@ instead of asking.
    `role` is still accepted as a legacy single-tag alias, but prefer `tags`.
 7. `deck_get` to check the quota report (now grouped `byTag`, with `untaggedForQuota` flagging
    cards that carry no quota tag) + mana curve; relay any rejection reasons from `deck_add`
-   verbatim.
+   verbatim. After each mutation (`deck_add`/`deck_remove`/`deck_set_card_tags`/
+   `deck_set_commander`/`deck_import`), the returned `summary` (total, quotaCheck,
+   untaggedForQuota, remaining) is enough to track quota progress without a round-trip — only
+   call `deck_get` when you need the full card list (final review, grouped display).
 8. Iterate additions/swaps until: 100 cards, singleton, quotas green, curve reasonable.
    After building, `deck_set_card_tags` bulk-retags cards already in the deck, `deck_rename`
    renames the deck (rejects on name collision), and `deck_set_commander` swaps the commander

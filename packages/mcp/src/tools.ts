@@ -25,6 +25,7 @@ import {
   addCards,
   removeCards,
   deckReport,
+  deckSummary,
   renameDeck,
   setCommander,
   setCardTagsResult,
@@ -78,6 +79,7 @@ function shortCard(card: Card) {
     usd: card.usd,
     r: card.edhrecRank,
     o: truncate(card.oracleText, 200),
+    arena: card.arena,
   };
 }
 
@@ -110,11 +112,13 @@ async function deckImport(
       return { error: `Deck not found: ${deckNameArg}`, parsed: parsedOut };
     }
     const result = await addCards(deckNameArg, parsed.entries.map(toCardEntry), resolveCard, decksDir);
+    const summary = await deckSummary(deckNameArg, resolveCard, decksDir);
     return {
       mode,
       added: result.added,
       rejected: result.rejected,
       unparsed: parsed.unparsed,
+      summary,
     };
   }
 
@@ -178,6 +182,7 @@ async function deckImport(
   }
 
   const result = await addCards(deckName, nonCommanderEntries!.map(toCardEntry), resolveCard, decksDir);
+  const summary = await deckSummary(deckName, resolveCard, decksDir);
 
   return {
     mode,
@@ -190,6 +195,7 @@ async function deckImport(
     added: result.added,
     rejected: result.rejected,
     unparsed: parsed.unparsed,
+    summary,
   };
 }
 
@@ -247,6 +253,12 @@ export function registerTools(server: McpServer): void {
           edhrecRank: card.edhrecRank,
           legalCommander: card.legalCommander,
           uri: card.uri,
+          arena: card.arena,
+          brawlLegal: card.brawlLegal,
+          standardBrawlLegal: card.standardBrawlLegal,
+          historicLegal: card.historicLegal,
+          timelessLegal: card.timelessLegal,
+          producedMana: card.producedMana,
         };
       });
     },
@@ -298,7 +310,7 @@ export function registerTools(server: McpServer): void {
           roles: result.roles.map((role) => ({
             slug: role.slug,
             label: role.label,
-            members: role.members.map((c) => ({ n: c.name, usd: c.usd, ci: c.colorIdentity.join("") })),
+            members: role.members.map((c) => ({ n: c.name, usd: c.usd, ci: c.colorIdentity.join(""), arena: c.arena })),
           })),
         };
       });
@@ -442,7 +454,11 @@ export function registerTools(server: McpServer): void {
       },
     },
     async ({ name, cards }) => {
-      return safe(async () => addCards(name, cards as CardEntry[], resolveCard, decksDir));
+      return safe(async () => {
+        const result = await addCards(name, cards as CardEntry[], resolveCard, decksDir);
+        const summary = await deckSummary(name, resolveCard, decksDir);
+        return { ...result, summary };
+      });
     },
   );
 
@@ -459,10 +475,12 @@ export function registerTools(server: McpServer): void {
     async ({ name, cards }) => {
       return safe(async () => {
         const deck = await removeCards(name, cards, decksDir);
+        const summary = await deckSummary(name, resolveCard, decksDir);
         return {
           name: deck.name,
           commander: deck.commander,
           total: deck.cards.reduce((sum, c) => sum + (c.count ?? 1), 0),
+          summary,
         };
       });
     },
@@ -507,7 +525,8 @@ export function registerTools(server: McpServer): void {
     async ({ deck_name, cards }) => {
       return safe(async () => {
         const result = await setCardTagsResult(deck_name, cards, decksDir);
-        return { updated: result.updated, rejected: result.rejected };
+        const summary = await deckSummary(deck_name, resolveCard, decksDir);
+        return { updated: result.updated, rejected: result.rejected, summary };
       });
     },
   );
@@ -550,12 +569,14 @@ export function registerTools(server: McpServer): void {
     async ({ deck_name, commander }) => {
       return safe(async () => {
         const r = await setCommander(deck_name, commander, resolveCard, decksDir);
+        const summary = await deckSummary(deck_name, resolveCard, decksDir);
         return {
           name: r.deck.name,
           commander: r.deck.commander,
           commanderIdentity: r.deck.commanderIdentity.join(""),
           changed: r.changed,
           nowIllegal: r.nowIllegal,
+          summary,
         };
       });
     },

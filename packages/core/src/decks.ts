@@ -23,6 +23,7 @@ export type ResolvedCard = {
   legalCommander: boolean;
   image?: string | null;
   manaCost?: string | null;
+  producedMana?: string[] | null;
 };
 
 export type CardResolver = (name: string) => Promise<ResolvedCard | null>;
@@ -538,5 +539,26 @@ export async function deckReport(
       wipes: quota(wipesHave, 2, 4),
     },
     identityViolations,
+  };
+}
+
+export type DeckSummary = {
+  total: number;
+  quotaCheck: DeckReport["quotaCheck"];
+  untaggedForQuota: number;
+  remaining: number;
+};
+
+export async function deckSummary(
+  name: string,
+  resolver: CardResolver,
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<DeckSummary> {
+  const report = await deckReport(name, resolver, decksDir);
+  return {
+    total: report.total,
+    quotaCheck: report.quotaCheck,
+    untaggedForQuota: report.untaggedForQuota,
+    remaining: 100 - report.total,
   };
 }

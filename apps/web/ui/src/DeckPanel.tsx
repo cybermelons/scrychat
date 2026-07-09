@@ -386,7 +386,15 @@ export function DeckPanel({
   }, [loadDeck]);
 
   const UNTAGGED = "untagged";
-  type CardRow = { name: string; tags: string[]; count: number; image?: string | null; manaCost?: string | null };
+  type CardRow = {
+    name: string;
+    tags: string[];
+    count: number;
+    image?: string | null;
+    manaCost?: string | null;
+    producedMana?: string[] | null;
+    typeLine?: string | null;
+  };
   const tagGroups: [string, CardRow[]][] = [];
   const allDeckTags: string[] = [];
   if (deck) {
@@ -394,7 +402,15 @@ export function DeckPanel({
     const seenTags = new Set<string>();
     for (const c of deck.cards) {
       const tags = c.tags ?? [];
-      const row: CardRow = { name: c.name, tags, count: c.count ?? 1, image: c.image, manaCost: c.manaCost };
+      const row: CardRow = {
+        name: c.name,
+        tags,
+        count: c.count ?? 1,
+        image: c.image,
+        manaCost: c.manaCost,
+        producedMana: c.producedMana,
+        typeLine: c.typeLine,
+      };
       if (tags.length === 0) {
         if (!map.has(UNTAGGED)) map.set(UNTAGGED, []);
         map.get(UNTAGGED)!.push(row);
@@ -690,12 +706,23 @@ export function DeckPanel({
                             <CardName name={c.name} image={c.image} />
                           </td>
                           <td className="card-mana-cell">
-                            {c.manaCost && (
-                              <span
-                                className="card-mana-cost"
-                                dangerouslySetInnerHTML={{ __html: renderManaSymbols(c.manaCost) }}
-                              />
-                            )}
+                            {(() => {
+                              const isLand = (c.typeLine ?? "").includes("Land");
+                              const producedMana = c.producedMana ?? [];
+                              const symbols = isLand
+                                ? producedMana.length > 0
+                                  ? `{T}: ${producedMana.map((m) => `{${m}}`).join("")}`
+                                  : "{T}"
+                                : c.manaCost;
+                              return (
+                                symbols && (
+                                  <span
+                                    className="card-mana-cost"
+                                    dangerouslySetInnerHTML={{ __html: renderManaSymbols(symbols) }}
+                                  />
+                                )
+                              );
+                            })()}
                           </td>
                           <td className="card-edit-cell">
                             <button

@@ -22,7 +22,13 @@ CREATE TABLE IF NOT EXISTS cards (
   edhrec_rank INTEGER,
   price_usd REAL,
   image TEXT,
-  scryfall_uri TEXT
+  scryfall_uri TEXT,
+  arena INTEGER,
+  brawl TEXT,
+  standardbrawl TEXT,
+  historic TEXT,
+  timeless TEXT,
+  produced_mana TEXT
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS cards_fts USING fts5(

@@ -209,6 +209,12 @@ interface CardRow {
   image: string | null;
   scryfall_uri: string | null;
   legal_commander: number | null;
+  arena: number | null;
+  brawl: string | null;
+  standardbrawl: string | null;
+  historic: string | null;
+  timeless: string | null;
+  produced_mana: string | null;
 }
 
 export function rowToCard(row: CardRow): Card {
@@ -224,12 +230,19 @@ export function rowToCard(row: CardRow): Card {
     image: row.image,
     uri: row.scryfall_uri ?? "",
     legalCommander: row.legal_commander === 1,
+    arena: row.arena == null ? null : row.arena === 1,
+    brawlLegal: row.brawl == null ? null : row.brawl === "legal",
+    standardBrawlLegal: row.standardbrawl == null ? null : row.standardbrawl === "legal",
+    historicLegal: row.historic == null ? null : row.historic === "legal",
+    timelessLegal: row.timeless == null ? null : row.timeless === "legal",
+    producedMana: row.produced_mana ? (JSON.parse(row.produced_mana) as string[]) : null,
   };
 }
 
 const CARD_COLUMNS = `
   oracle_id, name, mana_cost, cmc, type_line, oracle_text, color_identity,
-  ci_mask, edhrec_rank, price_usd, image, scryfall_uri, legal_commander
+  ci_mask, edhrec_rank, price_usd, image, scryfall_uri, legal_commander,
+  arena, brawl, standardbrawl, historic, timeless, produced_mana
 `;
 
 /**

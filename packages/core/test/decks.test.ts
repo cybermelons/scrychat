@@ -10,6 +10,7 @@ import {
   listDecks,
   deleteDeck,
   deckReport,
+  deckSummary,
   setCardTags,
   renameTag,
   renameDeck,
@@ -462,5 +463,30 @@ describe("decks", () => {
     expect(result.updated).toEqual([{ name: "Sol Ring", tags: ["ramp", "combo piece"] }]);
     expect(result.rejected).toEqual([{ name: "Not A Card In Deck", reason: "Card not in deck" }]);
     expect(result.deck.cards.find((c) => c.name === "Sol Ring")?.tags).toEqual(["ramp", "combo piece"]);
+  });
+
+  describe("deckSummary", () => {
+    it("matches deckReport's quotaCheck and derives total/remaining/untaggedForQuota", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards(
+        "Selesnya Value",
+        [
+          { name: "Forest", role: "land", count: 36 },
+          { name: "Sol Ring", role: "ramp" },
+          { name: "Elvish Visionary", tags: ["combo piece"] },
+        ],
+        resolver,
+        decksDir
+      );
+
+      const report = await deckReport("Selesnya Value", resolver, decksDir);
+      const summary = await deckSummary("Selesnya Value", resolver, decksDir);
+
+      expect(summary.quotaCheck).toEqual(report.quotaCheck);
+      expect(summary.total).toBe(report.total);
+      expect(summary.untaggedForQuota).toBe(report.untaggedForQuota);
+      expect(summary.untaggedForQuota).toBe(1);
+      expect(summary.remaining).toBe(100 - summary.total);
+    });
   });
 });

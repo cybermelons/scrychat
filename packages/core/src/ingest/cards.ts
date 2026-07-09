@@ -34,13 +34,20 @@ interface ScryfallCard {
   toughness?: string;
   keywords?: string[];
   layout: string;
-  legalities?: { commander?: string };
+  legalities?: {
+    commander?: string;
+    brawl?: string;
+    standardbrawl?: string;
+    historic?: string;
+    timeless?: string;
+  };
   rarity?: string;
   edhrec_rank?: number;
   prices?: { usd?: string | null };
   image_uris?: { normal?: string };
   card_faces?: ScryfallCardFace[];
   scryfall_uri?: string;
+  produced_mana?: string[];
 }
 
 function colorIdentityMask(identity: string[] | undefined): number {
@@ -92,11 +99,13 @@ export async function ingestCards(db: Database.Database, filePath: string): Prom
     INSERT INTO cards (
       oracle_id, name, mana_cost, cmc, type_line, oracle_text, colors, color_identity,
       ci_mask, power, toughness, keywords, layout, is_commander, legal_commander,
-      rarity, edhrec_rank, price_usd, image, scryfall_uri
+      rarity, edhrec_rank, price_usd, image, scryfall_uri,
+      brawl, standardbrawl, historic, timeless, produced_mana
     ) VALUES (
       @oracle_id, @name, @mana_cost, @cmc, @type_line, @oracle_text, @colors, @color_identity,
       @ci_mask, @power, @toughness, @keywords, @layout, @is_commander, @legal_commander,
-      @rarity, @edhrec_rank, @price_usd, @image, @scryfall_uri
+      @rarity, @edhrec_rank, @price_usd, @image, @scryfall_uri,
+      @brawl, @standardbrawl, @historic, @timeless, @produced_mana
     )
     ON CONFLICT(oracle_id) DO UPDATE SET
       name=excluded.name, mana_cost=excluded.mana_cost, cmc=excluded.cmc,
@@ -105,12 +114,21 @@ export async function ingestCards(db: Database.Database, filePath: string): Prom
       toughness=excluded.toughness, keywords=excluded.keywords, layout=excluded.layout,
       is_commander=excluded.is_commander, legal_commander=excluded.legal_commander,
       rarity=excluded.rarity, edhrec_rank=excluded.edhrec_rank,
-      image=excluded.image, scryfall_uri=excluded.scryfall_uri
+      image=excluded.image, scryfall_uri=excluded.scryfall_uri,
+      brawl=excluded.brawl, standardbrawl=excluded.standardbrawl,
+      historic=excluded.historic, timeless=excluded.timeless,
+      produced_mana=excluded.produced_mana
   `);
   // price_usd is intentionally omitted from the UPDATE SET above: cards
   // ingest has no price data (that's a separate --prices run), and the
   // INSERT's price_usd is only used for brand-new rows. Re-running cards
   // ingest must not wipe prices populated by a prior --prices run.
+  // Similarly, arena is NOT part of this INSERT's column list at all: it is
+  // owned by the prices.ts (default-cards) pass, which aggregates "arena"
+  // legality across ALL printings of an oracle_id. Leaving it out of both
+  // the INSERT columns and UPDATE SET means fresh rows get arena=NULL
+  // (filled in by a later --prices run) and re-running cards ingest never
+  // wipes an arena value already populated by prices.ts.
 
   const insertFts = db.prepare(`
     INSERT INTO cards_fts (rowid, name, type_line, oracle_text)
@@ -155,6 +173,11 @@ export async function ingestCards(db: Database.Database, filePath: string): Prom
       price_usd: null,
       image: resolveImage(card),
       scryfall_uri: card.scryfall_uri ?? null,
+      brawl: card.legalities?.brawl ?? null,
+      standardbrawl: card.legalities?.standardbrawl ?? null,
+      historic: card.legalities?.historic ?? null,
+      timeless: card.legalities?.timeless ?? null,
+      produced_mana: card.produced_mana ? JSON.stringify(card.produced_mana) : null,
     });
     insertFts.run(oracleId);
     inserted++;

@@ -4,6 +4,8 @@ export type CardEntry = {
   count?: number;
   image?: string | null;
   manaCost?: string | null;
+  producedMana?: string[] | null;
+  typeLine?: string | null;
 };
 
 export type Deck = {

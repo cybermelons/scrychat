@@ -848,6 +848,7 @@ const resolver: CardResolver = async (name: string) => {
         legalCommander: card.legalCommander,
         image: card.image,
         manaCost: card.manaCost,
+        producedMana: card.producedMana,
       }
     : null;
   resolverCache.set(key, resolved);
@@ -924,7 +925,13 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
     const cardsWithImages = await Promise.all(
       deck.cards.map(async (c) => {
         const resolved = await resolver(c.name);
-        return { ...c, image: resolved?.image ?? null, manaCost: resolved?.manaCost ?? null };
+        return {
+          ...c,
+          image: resolved?.image ?? null,
+          manaCost: resolved?.manaCost ?? null,
+          producedMana: resolved?.producedMana ?? null,
+          typeLine: resolved?.typeLine ?? null,
+        };
       })
     );
     const deckWithImages = {

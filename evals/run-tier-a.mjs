@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Tier A mechanical eval harness for scrychat (see evals/golden.md, A1-A9).
+ * Tier A mechanical eval harness for scrychat (see evals/golden.md, A1-A9, plus A10 for arena).
  *
  * Plain Node, no deps. Reuses the JSON-RPC-over-stdio spawn pattern from
  * packages/mcp/test/rpc-smoke.mjs: spawn `node packages/mcp/dist/index.js`
@@ -9,7 +9,7 @@
  * then tools/call each assertion in golden.md's Tier A table.
  *
  * Prints one OK/FAIL line per assertion with observed values, exits 1 on
- * any FAIL, and ends with `TIER A: n/9 PASSED`.
+ * any FAIL, and ends with `TIER A: n/10 PASSED`.
  */
 
 import { spawn } from "node:child_process";
@@ -250,6 +250,16 @@ async function main() {
       record("A5", false, `threw: ${err.message}`);
     }
 
+    // --- A10: get_card arena flag (Arena vs. non-Arena card) ---
+    try {
+      const jolly = await callTool("get_card", { name: "The Jolly Balloon Man" }, "A10 get_card jolly");
+      const bell = await callTool("get_card", { name: "Village Bell-Ringer" }, "A10 get_card bell");
+      const ok = jolly.arena === true && bell.arena === false;
+      record("A10", ok, `jolly.arena=${jolly.arena} bell.arena=${bell.arena}`);
+    } catch (err) {
+      record("A10", false, `threw: ${err.message}`);
+    }
+
     // find_alternatives (A5) alone can fire ~15 sequential Scryfall requests
     // (1 getCard + up to 10 otag-verification searches + up to 4 role
     // searches). Give that burst a moment to drain so it doesn't compound
@@ -399,8 +409,8 @@ async function main() {
   }
 
   const passed = results.filter((r) => r.ok).length;
-  console.log(`\nTIER A: ${passed}/9 PASSED`);
-  if (passed < results.length || results.length < 9) {
+  console.log(`\nTIER A: ${passed}/10 PASSED`);
+  if (passed < results.length || results.length < 10) {
     process.exit(1);
   }
 }
