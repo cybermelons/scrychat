@@ -1,0 +1,54 @@
+# scrychat on the NAS (host: noel) — LAN-only, autostarting.
+#
+# The app runs the Claude Agent SDK on your Max SUBSCRIPTION auth, not an API
+# key. That credential lives in ~/.claude.json on the machine you logged in
+# from and is mounted read-write below so the container can use and refresh it.
+# Nothing here bakes secrets into the image.
+#
+# All app state (208MB Scryfall DB, decks, chats) is bind-mounted from the NAS
+# so it survives rebuilds. The DB path is fixed by the repo layout
+# (/app/data/scrychat.db) — there is no env override — so mount targets must be
+# exactly as below.
+#
+# Bring up:   docker compose up -d --build
+# Logs:       docker compose logs -f
+# Restart:    docker compose restart
+
+services:
+  scrychat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: scrychat:latest
+    container_name: scrychat
+    # Autostart with the NAS / Docker daemon; comes back after reboots and
+    # crashes, but stays down if you deliberately `docker compose stop`.
+    restart: unless-stopped
+    # LAN-only: bind the published port to the NAS's LAN address, or drop the
+    # host IP for all-interfaces. Reach it at http://noel:8787/ on your network.
+    # Do NOT port-forward this to the internet — personal subscription auth runs
+    # inside; put a reverse proxy with auth in front if you ever need remote.
+    ports:
+      - "8787:8787"
+    environment:
+      - PORT=8787
+      - NODE_ENV=production
+    volumes:
+      # Subscription auth. Copy your ~/.claude.json onto the NAS first, e.g.
+      #   scp ~/.claude.json noel:/volume1/docker/scrychat/claude.json
+      # Mounted read-write so the SDK can refresh the token in place.
+      - ${SCRYCHAT_CLAUDE_CREDENTIAL:-./secrets/claude.json}:/home/scrychat/.claude.json:rw
+      # Scryfall mirror (208MB). Copy data/scrychat.db onto the NAS once:
+      #   scp data/scrychat.db noel:/volume1/docker/scrychat/data/scrychat.db
+      - ${SCRYCHAT_DATA_DIR:-./data}:/app/data:rw
+      # User decks and chat history — persistent, editable from the app.
+      - ${SCRYCHAT_DECKS_DIR:-./decks}:/app/decks:rw
+      - ${SCRYCHAT_CHATS_DIR:-./chats}:/app/chats:rw
+    # Basic liveness so the NAS/Docker UI shows health and restart policy has a
+    # signal to act on. Hitting the served UI root is enough.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8787/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

@@ -1,0 +1,15 @@
+# Keep the build context small and reproducible. The 208MB DB and all runtime
+# state are bind-mounted at runtime (see docker-compose.yml), never built in.
+node_modules
+**/node_modules
+dist
+**/dist
+data
+chats
+decks
+secrets
+.git
+.DS_Store
+evals/transcripts
+*.log
+scrychat.config.json.local
