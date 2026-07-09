@@ -202,6 +202,25 @@ export function ChatPanel({
       .catch(() => void 0);
   }, [startNewChat, refreshChats]);
 
+  const renameChat = useCallback(() => {
+    const id = chatIdRef.current;
+    if (!id) return;
+    const current = chats.find((c) => c.id === id)?.title ?? "";
+    const next = window.prompt("Rename chat", current);
+    if (next == null) return;
+    const title = next.trim();
+    if (!title) return;
+    fetch(`/api/chats/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    })
+      .then((r) => {
+        if (r.ok) void refreshChats();
+      })
+      .catch(() => void 0);
+  }, [chats, refreshChats]);
+
   // On mount: load chat list, restore last-open chat.
   useEffect(() => {
     refreshChats();
@@ -646,6 +665,11 @@ export function ChatPanel({
         <button type="button" className="btn btn-ghost btn-small" onClick={startNewChat}>
           + New Chat
         </button>
+        {chatId && (
+          <button type="button" className="btn btn-ghost btn-small" onClick={renameChat}>
+            Rename
+          </button>
+        )}
         {chatId && (
           <button type="button" className="btn btn-danger btn-small" onClick={deleteChat}>
             Delete

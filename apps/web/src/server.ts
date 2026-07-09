@@ -833,6 +833,31 @@ app.post("/api/chats/:id/stop", (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+app.patch("/api/chats/:id", async (req: Request, res: Response) => {
+  if (!isValidChatId(req.params.id)) {
+    res.status(400).json({ error: "invalid chat id" });
+    return;
+  }
+  const { title } = req.body ?? {};
+  if (typeof title !== "string" || title.trim().length === 0 || title.length > 200) {
+    res.status(400).json({ error: "invalid title" });
+    return;
+  }
+  try {
+    const chat = await readChatFile(req.params.id);
+    if (!chat) {
+      res.status(404).json({ error: "Chat not found" });
+      return;
+    }
+    chat.title = title.trim();
+    chat.updatedAt = new Date().toISOString();
+    await writeChatFile(chat);
+    res.json({ ok: true, title: chat.title });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // ---- UI action log: recent deck CRUD, surfaced to chat as context ----
 // Indices are absolute (monotonic `pushed` count), not array positions, so
 // trimming the array to ACTION_LOG_MAX entries never desyncs lastSeenMap.
