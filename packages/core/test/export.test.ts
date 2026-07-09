@@ -91,7 +91,43 @@ describe("exportDeck", () => {
     const output = await exportDeck("Selesnya Value", "plain", decksDir);
     const lines = output.split("\n");
     expect(lines[0]).toBe("1 Trostani, Selesnya's Voice *CMDR*");
+    expect(lines[1]).toBe("");
     expect(lines).toContain("16 Forest");
+  });
+
+  it("mtga format uses Commander/Deck section headers and no *CMDR* marker", async () => {
+    await buildDeck();
+    const output = await exportDeck("Selesnya Value", "mtga", decksDir);
+    expect(output.startsWith("Commander\n1 Trostani, Selesnya's Voice\n\nDeck\n")).toBe(true);
+    expect(output.split("\n")).toContain("16 Forest");
+    expect(output).not.toContain("*CMDR*");
+  });
+
+  it("moxfield format has commander *CMDR* line immediately followed by card lines, no section headers", async () => {
+    await buildDeck();
+    const output = await exportDeck("Selesnya Value", "moxfield", decksDir);
+    const lines = output.split("\n");
+    expect(lines[0]).toBe("1 Trostani, Selesnya's Voice *CMDR*");
+    expect(lines[1]).not.toBe("");
+    expect(lines).not.toContain("Deck");
+    expect(lines).not.toContain("Commander");
+  });
+
+  it("mtga, moxfield, and plain formats are pairwise distinct", async () => {
+    await buildDeck();
+    const mtga = await exportDeck("Selesnya Value", "mtga", decksDir);
+    const moxfield = await exportDeck("Selesnya Value", "moxfield", decksDir);
+    const plain = await exportDeck("Selesnya Value", "plain", decksDir);
+    expect(mtga).not.toBe(moxfield);
+    expect(moxfield).not.toBe(plain);
+    expect(plain).not.toBe(mtga);
+  });
+
+  it("defaults to mtga format when no format is given", async () => {
+    await buildDeck();
+    const defaulted = await exportDeck("Selesnya Value", undefined, decksDir);
+    const explicitMtga = await exportDeck("Selesnya Value", "mtga", decksDir);
+    expect(defaulted).toStrictEqual(explicitMtga);
   });
 
   it("throws for a missing deck", async () => {

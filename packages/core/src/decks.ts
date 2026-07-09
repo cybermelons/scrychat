@@ -145,7 +145,7 @@ function cardLine(card: CardEntry): string {
 
 export async function exportDeck(
   name: string,
-  format: DeckExportFormat = "plain",
+  format: DeckExportFormat = "mtga",
   decksDir: string = DEFAULT_DECKS_DIR()
 ): Promise<string> {
   const deck = await getDeck(name, decksDir);
@@ -155,17 +155,21 @@ export async function exportDeck(
 
   const cardLines = deck.cards.map(cardLine);
 
-  if (format === "mtga" || format === "moxfield") {
-    return [
-      "Commander",
-      `1 ${deck.commander}`,
-      "",
-      "Deck",
-      ...cardLines,
-    ].join("\n");
+  switch (format) {
+    case "mtga":
+      return [
+        "Commander",
+        `1 ${deck.commander}`,
+        "",
+        "Deck",
+        ...cardLines,
+      ].join("\n");
+    case "moxfield":
+      return [`1 ${deck.commander} *CMDR*`, ...cardLines].join("\n");
+    case "plain":
+    default:
+      return [`1 ${deck.commander} *CMDR*`, "", ...cardLines].join("\n");
   }
-
-  return [`1 ${deck.commander} *CMDR*`, "", ...cardLines].join("\n");
 }
 
 function isLegalCommanderCandidate(resolved: ResolvedCard): boolean {

@@ -130,8 +130,9 @@ instead of asking.
 
 **G. "Export / copy / paste out a decklist"**
 1. When the user asks to export, copy, "give me the decklist", "as a codeblock", or share a deck
-   as importable text, call `deck_export` with `deck_name` (and optional `format`: "plain" default,
-   "mtga", or "moxfield"). Do NOT hand-transcribe the list from `deck_get`.
+   as importable text, call `deck_export` with `deck_name`. `format` defaults to "mtga" (Arena
+   import shape) — leave it unset unless the user says Moxfield/paper/spreadsheet (use "moxfield")
+   or wants a bare list (use "plain"). Do NOT hand-transcribe the list from `deck_get`.
 2. Paste the returned `text` VERBATIM inside a single markdown code fence (triple backticks).
    Nothing else inside the fence.
 3. NEVER put `[[card refs]]`, `![[embeds]]`, or `[[group:...]]` chips inside the code fence — a

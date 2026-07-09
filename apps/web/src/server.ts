@@ -9,6 +9,7 @@ import {
   listDecks,
   getDeck,
   deckReport,
+  exportDeck,
   createDeck,
   addCards,
   removeCards,
@@ -1006,6 +1007,25 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
     res.json({ deck: deckWithImages, report });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get("/api/decks/:name/export", async (req: Request, res: Response) => {
+  try {
+    const allowedFormats = ["plain", "mtga", "moxfield"] as const;
+    const rawFormat = req.query.format;
+    const format = allowedFormats.includes(rawFormat as (typeof allowedFormats)[number])
+      ? (rawFormat as (typeof allowedFormats)[number])
+      : "mtga";
+    const text = await exportDeck(req.params.name, format, DECKS_DIR);
+    res.type("text/plain").send(text);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/not found/i.test(message)) {
+      res.status(404).json({ error: message });
+    } else {
+      res.status(500).json({ error: message });
+    }
   }
 });
 

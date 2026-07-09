@@ -109,6 +109,7 @@ export function DeckPanel({
 
   const [removeBusy, setRemoveBusy] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   // per-card tag editor
   const [editingCard, setEditingCard] = useState<string | null>(null);
@@ -319,6 +320,25 @@ export function DeckPanel({
       .finally(() => setDeleteBusy(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, refreshDecks]);
+
+  const copyExport = useCallback(() => {
+    if (!selected) return;
+    fetch(`/api/decks/${encodeURIComponent(selected)}/export?format=mtga`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const text = await r.text();
+        if (!navigator.clipboard) throw new Error("clipboard unavailable");
+        await navigator.clipboard.writeText(text);
+      })
+      .then(() => {
+        setCopyState("copied");
+        setTimeout(() => setCopyState("idle"), 1500);
+      })
+      .catch(() => {
+        setCopyState("error");
+        setTimeout(() => setCopyState("idle"), 1500);
+      });
+  }, [selected]);
 
   const loadDeck = useCallback((name: string) => {
     if (!name) return;
@@ -544,6 +564,13 @@ export function DeckPanel({
                 </div>
               </div>
             </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-small export-deck-btn"
+              onClick={copyExport}
+            >
+              {copyState === "copied" ? "Copied ✓" : copyState === "error" ? "Copy failed" : "Export"}
+            </button>
             <button
               type="button"
               className="btn btn-danger btn-small delete-deck-btn"

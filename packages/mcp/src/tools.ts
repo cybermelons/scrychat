@@ -588,18 +588,20 @@ export function registerTools(server: McpServer): void {
     {
       title: "Export decklist",
       description:
-        "Exports a saved deck as plain decklist TEXT for copy-paste (Moxfield/Archidekt/MTGA import-compatible). " +
-        "format: 'plain' (default; commander marked with *CMDR*), 'mtga', or 'moxfield' (both use Commander/Deck section headers). " +
+        "Exports a saved deck as plain decklist TEXT for copy-paste. " +
+        "format: 'mtga' (default; Arena import shape with Commander/Deck section headers), " +
+        "'moxfield' (N Name lines, commander line suffixed *CMDR*, no section headers), " +
+        "'plain' (commander line with *CMDR* suffix, blank line, then card lines). " +
         "Returns { text } — the raw decklist. The model should paste this VERBATIM inside a markdown code fence; " +
         "never add [[card refs]] inside the fenced block.",
       inputSchema: {
         deck_name: z.string().describe("Deck name to export"),
-        format: z.enum(["plain", "mtga", "moxfield"]).optional().describe("Export format, default 'plain'"),
+        format: z.enum(["plain", "mtga", "moxfield"]).optional().describe("Export format, default 'mtga'"),
       },
     },
     async ({ deck_name, format }) => {
       return safe(async () => {
-        const text = await exportDeck(deck_name, format ?? "plain", decksDir);
+        const text = await exportDeck(deck_name, format ?? "mtga", decksDir);
         return { text };
       });
     },
