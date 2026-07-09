@@ -130,6 +130,7 @@ export function ChatPanel({
     loading: boolean;
   } | null>(null);
   const groupImageCache = useRef(new Map<string, string | null>());
+  const groupCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Transient hint/rejection chip near a click ("no deck selected", server
   // rejection reason). Auto-dismisses after a few seconds.
@@ -449,6 +450,19 @@ export function ChatPanel({
     [resolveCardImages]
   );
 
+  const cancelGroupClose = useCallback(() => {
+    if (groupCloseTimer.current) {
+      clearTimeout(groupCloseTimer.current);
+      groupCloseTimer.current = null;
+    }
+  }, []);
+  const scheduleGroupClose = useCallback(() => {
+    cancelGroupClose();
+    groupCloseTimer.current = setTimeout(() => setGroupPopover(null), 180);
+  }, [cancelGroupClose]);
+
+  useEffect(() => () => cancelGroupClose(), [cancelGroupClose]);
+
   const onScrollMouseOver = useCallback(
     (e: React.MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -464,6 +478,7 @@ export function ChatPanel({
 
       const groupEl = target.closest<HTMLElement>(".card-group");
       if (groupEl) {
+        cancelGroupClose();
         const rect = groupEl.getBoundingClientRect();
         openGroupPopover(groupEl, rect.left, rect.bottom + 4);
         return;
@@ -487,7 +502,7 @@ export function ChatPanel({
         });
       }
     },
-    [resolveCardImage, openGroupPopover]
+    [resolveCardImage, openGroupPopover, cancelGroupClose]
   );
 
   // Embedded card images (![[Name]]) render as an <img data-card-name> with
@@ -529,9 +544,9 @@ export function ChatPanel({
       setCardPopover(null);
     }
     if (target.closest(".card-group") && !related?.closest(".card-group, .card-group-popover")) {
-      setGroupPopover(null);
+      scheduleGroupClose();
     }
-  }, []);
+  }, [scheduleGroupClose]);
 
   // Click-to-toggle: clicking a card-ref, card-embed, or gallery card toggles
   // its membership in the selected deck. Dismisses hover popovers so a click
@@ -580,6 +595,7 @@ export function ChatPanel({
       const groupEl = target.closest<HTMLElement>(".card-group");
       if (groupEl) {
         // Click (re)opens the gallery popover at this chip's position.
+        cancelGroupClose();
         openGroupPopover(groupEl, e.clientX, e.clientY);
         return;
       }
@@ -588,6 +604,7 @@ export function ChatPanel({
       if (galleryCard) {
         const name = galleryCard.getAttribute("data-card-name");
         if (name) toggleDeckCard(name, e.clientX, e.clientY);
+        cancelGroupClose();
         setGroupPopover(null);
         return;
       }
@@ -599,7 +616,7 @@ export function ChatPanel({
         if (name) toggleDeckCard(name, e.clientX, e.clientY);
       }
     },
-    [toggleDeckCard, openGroupPopover]
+    [toggleDeckCard, openGroupPopover, cancelGroupClose]
   );
 
   // In-deck badges: after every render of message content (or when the
@@ -743,6 +760,8 @@ export function ChatPanel({
               left: Math.min(groupPopover.x, window.innerWidth - 340),
               top: Math.min(groupPopover.y, window.innerHeight - 260),
             }}
+            onMouseEnter={cancelGroupClose}
+            onMouseLeave={scheduleGroupClose}
           >
             <div className="card-group-popover-label">{groupPopover.label}</div>
             <div className="card-gallery">
