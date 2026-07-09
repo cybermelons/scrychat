@@ -145,6 +145,9 @@ instead of asking.
   output), never from memory. This renders as a clickable chip that opens a scrollable card
   gallery. Reserve standout single picks (the commander, a centerpiece, a top recommendation) for
   `[[..]]`/`![[..]]` as above — don't wrap a single card in a one-member group.
+- `[[Card Name|alias]]` shows `alias` as the display text while still resolving/hovering the full
+  card — use it when prose flow wants a short name (e.g. `[[Teysa Karlov|Teysa]]`), but PREFER
+  plain `[[Card Name]]` normally.
 
 ## Pitfalls
 

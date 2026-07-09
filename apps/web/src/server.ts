@@ -18,7 +18,11 @@ import {
   getLocalDb,
   type CardResolver,
 } from "@scrychat/core";
-import { hasKnownCardName, wrapTableNameCells } from "./linkify-core.js";
+import {
+  wrapTableNameCells,
+  wrapNamesInText,
+  classifyLinkifyCandidates,
+} from "./linkify-core.js";
 
 // CRITICAL: strip stale ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the
 // process env at startup, before anything else touches process.env or the
@@ -224,12 +228,14 @@ function titleFromMessage(message: string): string {
 }
 
 // ---- linkify post-pass (opt-in, see scrychat.config.json) ----
-// Gating for the expensive Haiku pass now lives at the call site (issue #18,
-// see hasKnownCardName in linkify-core.ts): a deterministic pre-pass wraps
-// table name-cells first, then the outer gate decides whether prose still
-// warrants the Haiku call. linkifySegments itself no longer gates on
-// "looks tabular/listy" — the caller is the sole gate — so a prose reply
-// naming a known card (no table/list at all) still reaches Haiku.
+// Deterministic-first flow (issue #18 rework): a Layer-3 pre-pass wraps
+// table name-cells first, then classifyLinkifyCandidates (linkify-core.ts)
+// splits every DB-validated candidate into unambiguous (multi-word, or a
+// single word not on the common-English list — auto-wrapped with zero LLM
+// calls) vs ambiguous (a single word that's also common English, e.g. "Opt",
+// "Fog" — escalated to a cheap Haiku span-verdict pass that only decides
+// keep-vs-drop for that residue, never rewrites the full text). This means
+// prose with only unambiguous names never touches Haiku at all.
 
 // ---- known-card-name predicate, backed by the local SQLite mirror ----
 // getLocalDb() is called on every invocation (it's memoized+throttled
@@ -263,24 +269,63 @@ function isKnownCardName(name: string): boolean {
 }
 
 const LINKIFY_TIMEOUT_MS = 10_000;
-const LINKIFY_PROMPT_PREFIX =
-  "Re-emit this text EXACTLY, but wrap every Magic: The Gathering card name that is not already " +
-  "inside [[...]], ![[...]], or [[group:...]] in [[...]]. Change nothing else — same words, same " +
-  "whitespace, same markdown, same order. Output only the rewritten text, nothing else.\n\n---\n\n";
 
-// Runs the opt-in Haiku linkify pass over a finished assistant message's text
-// segments. Returns the rewritten segments, or null on any failure/timeout —
-// callers must treat null as "skip silently, original stands" per issue #12.
-async function linkifySegments(segments: ChatSegment[]): Promise<ChatSegment[] | null> {
-  const textSegments = segments.filter((s): s is { type: "text"; text: string } => s.type === "text");
-  const combinedText = textSegments.map((s) => s.text).join("");
-  if (!combinedText.trim()) return null;
+// Span-verdict prompt (deterministic-first flow, issue #18 rework): Haiku is
+// no longer asked to rewrite the whole text and find card names itself — the
+// deterministic classifier already found every DB-validated candidate and
+// auto-wrapped the unambiguous ones. Haiku's only job is to disambiguate the
+// residue: single common-English words that are ALSO real card names (e.g.
+// "Opt", "Fog"), deciding per-occurrence whether the text is using the word
+// AS a Magic card or as ordinary English. Output is a small JSON array, not
+// a full-text rewrite, so parsing is cheap and robust.
+function buildSpanVerdictPrompt(text: string, candidates: string[]): string {
+  return (
+    "You are given a piece of text and a list of candidate words. Each candidate word is the name of " +
+    "a real Magic: The Gathering card, but is also an ordinary English word. Decide, for THIS text, " +
+    "which candidates are being used to refer to the Magic card (not as ordinary English words).\n\n" +
+    "Respond with ONLY a JSON array of strings — the subset of the candidate list (verbatim, exact " +
+    "spelling/case) that are being used as Magic card names in this text. If none are, respond with " +
+    "an empty array []. Output nothing else — no prose, no explanation.\n\n" +
+    `Candidates: ${JSON.stringify(candidates)}\n\n---\n\n${text}`
+  );
+}
+
+// Extracts the first top-level JSON array substring from arbitrary model
+// output (Haiku sometimes wraps JSON in prose or code fences despite
+// instructions not to). Returns null if no balanced `[...]` span is found.
+function extractJsonArraySubstring(s: string): string | null {
+  const start = s.indexOf("[");
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = start; i < s.length; i++) {
+    if (s[i] === "[") depth++;
+    else if (s[i] === "]") {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+// Runs the Haiku span-verdict pass over the ambiguous candidate words found
+// in a finished assistant message's text segments. Returns the subset of
+// `ambiguousCandidates` that Haiku says are being used as MTG cards in this
+// text, validated against the candidate list and isKnownCardName. Fail-open:
+// returns [] (nothing kept) on any timeout/parse-failure/error — callers
+// must treat that as "skip silently, auto-wrapped unambiguous names still
+// stand" per issue #12.
+async function haikuSpanVerdict(
+  combinedText: string,
+  ambiguousCandidates: string[],
+  isKnownCardName: (name: string) => boolean
+): Promise<string[]> {
+  if (ambiguousCandidates.length === 0) return [];
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LINKIFY_TIMEOUT_MS);
   try {
     const q = query({
-      prompt: `${LINKIFY_PROMPT_PREFIX}${combinedText}`,
+      prompt: buildSpanVerdictPrompt(combinedText, ambiguousCandidates),
       options: {
         cwd: REPO_ROOT,
         env: SDK_ENV,
@@ -293,39 +338,32 @@ async function linkifySegments(segments: ChatSegment[]): Promise<ChatSegment[] |
       },
     });
 
-    let rewritten = "";
+    let raw = "";
     for await (const msg of q) {
       if (msg.type === "assistant") {
         for (const block of msg.message.content) {
-          if (block.type === "text") rewritten += block.text;
+          if (block.type === "text") raw += block.text;
         }
       }
     }
     clearTimeout(timer);
-    if (!rewritten.trim()) return null;
+    if (!raw.trim()) return [];
 
-    // Single combined text segment stood in for N text segments above; any
-    // interleaved tool segments are preserved as-is, text segments collapse
-    // into one rewritten block at the position of the first text segment.
-    const firstTextIdx = segments.findIndex((s) => s.type === "text");
-    if (firstTextIdx === -1) return null;
-    const out: ChatSegment[] = [];
-    let inserted = false;
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      if (seg.type === "text") {
-        if (!inserted) {
-          out.push({ type: "text", text: rewritten });
-          inserted = true;
-        }
-        // subsequent text segments are dropped: folded into the rewrite above
-      } else {
-        out.push(seg);
-      }
+    const jsonSubstr = extractJsonArraySubstring(raw);
+    if (!jsonSubstr) return [];
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonSubstr);
+    } catch {
+      return [];
     }
-    return out;
+    if (!Array.isArray(parsed) || !parsed.every((x) => typeof x === "string")) return [];
+
+    const candidateSet = new Set(ambiguousCandidates);
+    return parsed.filter((name) => candidateSet.has(name) && isKnownCardName(name));
   } catch {
-    return null;
+    return [];
   } finally {
     clearTimeout(timer);
   }
@@ -536,28 +574,78 @@ app.post("/api/chat", async (req: Request, res: Response) => {
         // Layer 3: deterministic pre-pass, table name-cells only. Runs
         // in-place on `segments` so both the persisted segments and the
         // Haiku input below see the wraps, even if the Haiku call is
-        // skipped by the gate.
+        // skipped by the gate. `changed` tracks every in-place mutation
+        // below (table cells, unambiguous auto-wrap, kept ambiguous spans)
+        // so exactly one segments-update fires when anything changed — a
+        // table-only change with no prose candidates still emits.
+        let changed = false;
         for (const seg of segments) {
           if (seg.type === "text") {
-            seg.text = wrapTableNameCells(seg.text, isKnownCardName);
+            const wrapped = wrapTableNameCells(seg.text, isKnownCardName);
+            if (wrapped !== seg.text) changed = true;
+            seg.text = wrapped;
           }
         }
 
-        // Layer 2: cost gate. Only pay for the Haiku pass when there's a
-        // real card-name signal (table/list, or a known name in prose).
-        const combinedText = segments
+        // Deterministic-first classification: split DB-validated candidates
+        // into unambiguous (auto-wrap, zero LLM) vs ambiguous (single common-
+        // English words that are also real card names — escalate to a Haiku
+        // span-verdict pass). The classifier itself is the detector now; the
+        // old hasKnownCardName gate only decided whether to *call* Haiku, but
+        // is no longer the sole entry point since unambiguous names get
+        // wrapped even when nothing is ambiguous enough to need Haiku.
+        let combinedText = segments
           .filter((s): s is { type: "text"; text: string } => s.type === "text")
           .map((s) => s.text)
           .join("");
-        if (hasKnownCardName(combinedText, isKnownCardName)) {
-          console.log("linkify: gate passed, running Haiku pass");
-          const linkified = await linkifySegments(segments);
-          if (linkified) {
-            finalSegments = linkified;
-            sseWrite(res, { type: "segments-update", segments: linkified });
-          }
+        const { unambiguous, ambiguous } = classifyLinkifyCandidates(combinedText, isKnownCardName);
+
+        if (unambiguous.length === 0 && ambiguous.length === 0) {
+          console.log("linkify: no candidates, skipping");
         } else {
-          console.log("linkify: gate skipped Haiku (no card-name signal)");
+          console.log(
+            `linkify: ${unambiguous.length} unambiguous auto-wrapped, ${ambiguous.length} ambiguous -> Haiku`
+          );
+
+          // Auto-wrap unambiguous names deterministically, zero LLM.
+          if (unambiguous.length > 0) {
+            for (const seg of segments) {
+              if (seg.type === "text") {
+                const wrapped = wrapNamesInText(seg.text, unambiguous, isKnownCardName);
+                if (wrapped !== seg.text) changed = true;
+                seg.text = wrapped;
+              }
+            }
+          }
+
+          // Re-derive combinedText for the Haiku span-verdict pass so it
+          // sees the already-auto-wrapped unambiguous names in context.
+          combinedText = segments
+            .filter((s): s is { type: "text"; text: string } => s.type === "text")
+            .map((s) => s.text)
+            .join("");
+
+          if (ambiguous.length > 0 && config.linkifyPass) {
+            const kept = await haikuSpanVerdict(combinedText, ambiguous, isKnownCardName);
+            console.log("linkify: Haiku kept", kept);
+            if (kept.length > 0) {
+              for (const seg of segments) {
+                if (seg.type === "text") {
+                  const wrapped = wrapNamesInText(seg.text, kept, isKnownCardName);
+                  if (wrapped !== seg.text) changed = true;
+                  seg.text = wrapped;
+                }
+              }
+            }
+          }
+        }
+
+        // Single emit covering all in-place changes above (table pre-pass
+        // included, so a table-only rewrite with zero prose candidates still
+        // reaches the client).
+        if (changed) {
+          finalSegments = segments;
+          sseWrite(res, { type: "segments-update", segments });
         }
       } catch (err) {
         console.error("linkify pre-pass failed, skipping:", err);

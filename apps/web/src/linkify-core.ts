@@ -8,6 +8,11 @@ const TABLE_ROW_RE = /^\s*\|.*\|\s*$/m;
 const BULLET_LIST_RE = /^\s*[-*+]\s+\S/m;
 const NUMBERED_LIST_RE = /^\s*\d+[.)]\s+\S/m;
 
+/** Escape a string for safe interpolation into a RegExp source. */
+export function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // Title-Case word runs, e.g. "Blood Artist", "Yahenni", "Skullclamp". Allows
 // short connector words (of/the/and/a/to) inside a multi-word run so names
 // like "Sword of Fire and Ice" are captured as one candidate. Also allows a
@@ -188,4 +193,231 @@ export function wrapTableNameCells(
   }
 
   return out.join("\n");
+}
+
+/**
+ * Word-boundary-anchored, longest-first, idempotent bare-name wrapper. Given
+ * a list of DB-validated card names, wraps every bare (unbracketed)
+ * occurrence of each name in `[[...]]`. Leaves `[[..]]`, `![[..]]`, and
+ * `[[group:..]]` spans untouched (never matches inside an existing bracket
+ * pair, and never re-wraps something already wrapped). Longest names are
+ * matched first so a shorter name that is a substring of a longer one (e.g.
+ * "Opt" inside a hypothetical "Opt of Fire") never steals the match.
+ */
+export function wrapNamesInText(
+  text: string,
+  names: string[],
+  isKnownCardName: (name: string) => boolean
+): string {
+  const uniqueNames = [...new Set(names.map((n) => n.trim()).filter(Boolean))].filter((n) =>
+    isKnownCardName(n)
+  );
+  if (uniqueNames.length === 0) return text;
+
+  // Longest first (by character length) so overlapping/substring names don't
+  // shadow the longer, more specific match.
+  uniqueNames.sort((a, b) => b.length - a.length);
+
+  // Claim-interval algorithm: every match decision is made against the
+  // ORIGINAL text offsets, and the output is built in one splice pass at the
+  // end. This is what makes overlap handling correct — a naive sequential
+  // per-name String.replace mutates the string as it goes, so a shorter name
+  // (e.g. "Remembrance") could later match INSIDE the brackets of a longer
+  // name ("Bastion of Remembrance") just inserted, producing nested
+  // "[[Bastion of [[Remembrance]]]]" wraps.
+
+  type Range = { start: number; end: number }; // [start, end)
+  const overlaps = (start: number, end: number, r: Range) => start < r.end && end > r.start;
+
+  // Anything already inside [[...]], ![[...]], or [[group:...]] is
+  // pre-claimed: matches overlapping those spans are rejected, which keeps
+  // the function idempotent.
+  const claimed: Range[] = [];
+  for (const m of text.matchAll(/!?\[\[[^\]]*\]\]/g)) {
+    claimed.push({ start: m.index!, end: m.index! + m[0].length });
+  }
+
+  const inserts: Range[] = [];
+  for (const name of uniqueNames) {
+    const re = new RegExp(`\\b${escapeRegExp(name)}\\b`, "g");
+    for (const m of text.matchAll(re)) {
+      const start = m.index!;
+      const end = start + m[0].length;
+      if (claimed.some((r) => overlaps(start, end, r))) continue;
+      claimed.push({ start, end });
+      inserts.push({ start, end });
+    }
+  }
+  if (inserts.length === 0) return text;
+
+  inserts.sort((a, b) => a.start - b.start);
+  let out = "";
+  let cursor = 0;
+  for (const { start, end } of inserts) {
+    out += `${text.slice(cursor, start)}[[${text.slice(start, end)}]]`;
+    cursor = end;
+  }
+  out += text.slice(cursor);
+  return out;
+}
+
+// ~90 lowercased common English words that also happen to be real MTG card
+// names. A DB-validated single-word candidate is treated as AMBIGUOUS (needs
+// Haiku span-verdict) iff its lowercase form is in this set — everything
+// else (multi-word names, or single words not in this list) is UNAMBIGUOUS
+// and safe to auto-wrap deterministically. When unsure whether a word reads
+// as "common English", err toward INCLUDING it here (escalate to Haiku
+// rather than risk mis-auto-wrapping ordinary prose).
+export const AMBIGUOUS_WORDLIST: ReadonlySet<string> = new Set([
+  // the five basic land names — real cards AND ultra-common English words
+  "island",
+  "mountain",
+  "forest",
+  "plains",
+  "swamp",
+  "fear",
+  "balance",
+  "damn",
+  "stasis",
+  "opt",
+  "fog",
+  "counterspell",
+  "anger",
+  "arena",
+  "wish",
+  "gnaw",
+  "brainstorm",
+  "ponder",
+  "negate",
+  "dismiss",
+  "duress",
+  "thoughtseize",
+  "regrowth",
+  "growth",
+  "harmony",
+  "control",
+  "dominate",
+  "banish",
+  "exhaustion",
+  "fireball",
+  "shock",
+  "doom",
+  "plague",
+  "brutality",
+  "cultivate",
+  "terror",
+  "murder",
+  "opportunity",
+  "dictate",
+  "revival",
+  "unearth",
+  "cremate",
+  "animate",
+  "reanimate",
+  "entomb",
+  "rest",
+  "meditate",
+  "contemplate",
+  "guidance",
+  "insight",
+  "foresight",
+  "prophecy",
+  "augury",
+  "portent",
+  "omen",
+  "glimpse",
+  "peek",
+  "reveal",
+  "expose",
+  "exile",
+  "banishment",
+  "corruption",
+  "despair",
+  "torment",
+  "agony",
+  "anguish",
+  "misery",
+  "sorrow",
+  "vengeance",
+  "wrath",
+  "fury",
+  "rage",
+  "frenzy",
+  "havoc",
+  "chaos",
+  "discord",
+  "disorder",
+  "confusion",
+  "distortion",
+  "warp",
+  "shatter",
+  "demolish",
+  "annihilate",
+  "obliterate",
+  "eradicate",
+  "extinction",
+  "genesis",
+  "creation",
+  "renewal",
+  "rebirth",
+  "salvation",
+  "redemption",
+  "absolution",
+  "penance",
+  "devotion",
+  "faith",
+  "conviction",
+  "resolve",
+  "defiance",
+  "triumph",
+  "victory",
+  "conquest",
+  "domination",
+  "supremacy",
+  "ascendancy",
+  "ascension",
+  "awakening",
+  "recall",
+  "recollect",
+  "memory",
+  "vision",
+  "clarity",
+  "focus",
+]);
+
+/**
+ * Splits DB-validated candidate card names found in `text` into unambiguous
+ * (auto-wrap, zero LLM) vs ambiguous (escalate to a Haiku span-verdict pass).
+ * Only bare (not-already-bracketed) occurrences count as candidates — a name
+ * that only appears inside an existing `[[..]]` is not re-listed in either
+ * output list.
+ */
+export function classifyLinkifyCandidates(
+  text: string,
+  isKnownCardName: (name: string) => boolean
+): { unambiguous: string[]; ambiguous: string[] } {
+  const unambiguous = new Set<string>();
+  const ambiguous = new Set<string>();
+
+  for (const candidate of candidatePhrases(text)) {
+    if (!isKnownCardName(candidate)) continue;
+
+    // Only consider candidates that appear as a bare (non-bracketed)
+    // whole-word occurrence in text — this excludes names whose only
+    // occurrence in `text` is inside an existing [[...]] (candidatePhrases
+    // extracts bracket contents too, so without this check an already-linked
+    // name would be re-proposed here).
+    const escaped = escapeRegExp(candidate);
+    const bareRe = new RegExp(`(?<!\\[)\\b${escaped}\\b(?!\\])`);
+    if (!bareRe.test(text)) continue;
+
+    const isSingleWord = !/\s/.test(candidate);
+    if (isSingleWord && AMBIGUOUS_WORDLIST.has(candidate.toLowerCase())) {
+      ambiguous.add(candidate);
+    } else {
+      unambiguous.add(candidate);
+    }
+  }
+
+  return { unambiguous: [...unambiguous], ambiguous: [...ambiguous] };
 }

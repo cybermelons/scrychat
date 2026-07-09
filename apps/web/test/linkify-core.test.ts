@@ -1,13 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { hasKnownCardName, wrapTableNameCells } from "../src/linkify-core.js";
+import {
+  hasKnownCardName,
+  wrapTableNameCells,
+  wrapNamesInText,
+  classifyLinkifyCandidates,
+} from "../src/linkify-core.js";
 
 const KNOWN_CARDS = new Set([
   "Skullclamp",
   "Counterspell",
   "Opt",
+  "Fog",
   "Blood Artist",
   "Yahenni, Undying Partisan",
   "Viscera Seer",
+  "Bastion of Remembrance",
+  "Remembrance",
+  "Island",
 ]);
 
 function isKnownCardName(name: string): boolean {
@@ -172,5 +181,167 @@ describe("wrapTableNameCells (Layer 3 deterministic pre-pass)", () => {
     const input = ["| Card | Why |", "|-|", "| Skullclamp | draw |"].join("\n");
     const output = wrapTableNameCells(input, isKnownCardName);
     expect(output).toBe(input);
+  });
+});
+
+describe("wrapNamesInText (DB-validated, word-boundary-anchored auto-wrap)", () => {
+  it("wraps a bare known name in prose", () => {
+    expect(wrapNamesInText("You should run Skullclamp here.", ["Skullclamp"], isKnownCardName)).toBe(
+      "You should run [[Skullclamp]] here."
+    );
+  });
+
+  it("wraps multiple distinct names, longest-first, without double-wrapping", () => {
+    const out = wrapNamesInText(
+      "Blood Artist and Viscera Seer are a classic combo.",
+      ["Blood Artist", "Viscera Seer"],
+      isKnownCardName
+    );
+    expect(out).toBe("[[Blood Artist]] and [[Viscera Seer]] are a classic combo.");
+  });
+
+  it("leaves an already-wrapped [[Name]] untouched (idempotent)", () => {
+    const input = "Run [[Skullclamp]] for value.";
+    expect(wrapNamesInText(input, ["Skullclamp"], isKnownCardName)).toBe(input);
+  });
+
+  it("leaves ![[Name]] embeds and [[group:...]] chips untouched", () => {
+    const input = "See ![[Skullclamp]] and [[group:ramp|Skullclamp; Opt]] for context.";
+    expect(wrapNamesInText(input, ["Skullclamp", "Opt"], isKnownCardName)).toBe(input);
+  });
+
+  it("only wraps names that pass isKnownCardName", () => {
+    const out = wrapNamesInText("Run Skullclamp and Fakecard here.", ["Skullclamp", "Fakecard"], isKnownCardName);
+    expect(out).toBe("Run [[Skullclamp]] and Fakecard here.");
+  });
+
+  it("returns text unchanged when names list is empty", () => {
+    const input = "Nothing to wrap here.";
+    expect(wrapNamesInText(input, [], isKnownCardName)).toBe(input);
+  });
+
+  it("wraps a comma-containing legendary name in prose", () => {
+    const out = wrapNamesInText(
+      "Yahenni, Undying Partisan is a great sac outlet.",
+      ["Yahenni, Undying Partisan"],
+      isKnownCardName
+    );
+    expect(out).toBe("[[Yahenni, Undying Partisan]] is a great sac outlet.");
+  });
+
+  it("does not nest wraps when a proposed name is a substring of a longer proposed name", () => {
+    // Regression: sequential per-name replace let "Remembrance" match inside
+    // the just-inserted [[Bastion of Remembrance]] brackets, producing
+    // "[[Bastion of [[Remembrance]]]]".
+    const out = wrapNamesInText(
+      "Bastion of Remembrance serves a similar role.",
+      ["Bastion of Remembrance", "Remembrance"],
+      isKnownCardName
+    );
+    expect(out).toBe("[[Bastion of Remembrance]] serves a similar role.");
+    expect(out).not.toContain("[[[[");
+    expect(out).not.toMatch(/\[\[[^\]]*\[\[/);
+  });
+
+  it("still wraps a shorter name's own standalone occurrence elsewhere in the same text", () => {
+    const out = wrapNamesInText(
+      "Remembrance is fine. Bastion of Remembrance too.",
+      ["Bastion of Remembrance", "Remembrance"],
+      isKnownCardName
+    );
+    expect(out).toBe("[[Remembrance]] is fine. [[Bastion of Remembrance]] too.");
+  });
+
+  it("classify -> wrap end-to-end produces a single clean wrap for nested candidates", () => {
+    const text = "Bastion of Remembrance serves a similar role.";
+    const { unambiguous, ambiguous } = classifyLinkifyCandidates(text, isKnownCardName);
+    // classify surfaces both the full name and the inner substring name
+    expect(unambiguous).toContain("Bastion of Remembrance");
+    expect(unambiguous).toContain("Remembrance");
+    const out = wrapNamesInText(text, [...unambiguous, ...ambiguous], isKnownCardName);
+    expect(out).toBe("[[Bastion of Remembrance]] serves a similar role.");
+    expect(out).not.toMatch(/\[\[[^\]]*\[\[/);
+  });
+});
+
+describe("classifyLinkifyCandidates (deterministic-first matcher)", () => {
+  it("classifies a multi-word known name as unambiguous", () => {
+    const { unambiguous, ambiguous } = classifyLinkifyCandidates(
+      "Blood Artist is great in sacrifice decks.",
+      isKnownCardName
+    );
+    expect(unambiguous).toContain("Blood Artist");
+    expect(ambiguous).not.toContain("Blood Artist");
+  });
+
+  it("classifies a single common-English-word known name as ambiguous", () => {
+    const r1 = classifyLinkifyCandidates("You could run Opt in this deck.", isKnownCardName);
+    expect(r1.ambiguous).toContain("Opt");
+    expect(r1.unambiguous).not.toContain("Opt");
+
+    const r2 = classifyLinkifyCandidates("Fog can save you from combat damage.", isKnownCardName);
+    expect(r2.ambiguous).toContain("Fog");
+    expect(r2.unambiguous).not.toContain("Fog");
+  });
+
+  it("classifies a basic land name in prose as ambiguous (never auto-wrapped)", () => {
+    const { unambiguous, ambiguous } = classifyLinkifyCandidates(
+      "Tap an Island for mana.",
+      isKnownCardName
+    );
+    expect(ambiguous).toContain("Island");
+    expect(unambiguous).not.toContain("Island");
+  });
+
+  it("classifies a single non-common-English known name as unambiguous", () => {
+    const { unambiguous, ambiguous } = classifyLinkifyCandidates(
+      "Skullclamp is a strong card draw engine.",
+      isKnownCardName
+    );
+    expect(unambiguous).toContain("Skullclamp");
+    expect(ambiguous).not.toContain("Skullclamp");
+  });
+
+  it("does not list an unknown candidate in either list", () => {
+    const { unambiguous, ambiguous } = classifyLinkifyCandidates(
+      "Totally Madeup Cardname is not real.",
+      isKnownCardName
+    );
+    expect(unambiguous).not.toContain("Totally Madeup Cardname");
+    expect(ambiguous).not.toContain("Totally Madeup Cardname");
+  });
+
+  it("does not re-list a name that only occurs already wrapped in [[...]]", () => {
+    const { unambiguous, ambiguous } = classifyLinkifyCandidates(
+      "See [[Opt]] for details, no other mention here.",
+      isKnownCardName
+    );
+    expect(unambiguous).not.toContain("Opt");
+    expect(ambiguous).not.toContain("Opt");
+  });
+
+  it("does list a name that appears both wrapped and bare elsewhere", () => {
+    const { ambiguous } = classifyLinkifyCandidates(
+      "See [[Opt]] here, and also consider Opt in another slot.",
+      isKnownCardName
+    );
+    expect(ambiguous).toContain("Opt");
+  });
+
+  it("dedups repeated occurrences of the same name", () => {
+    const { unambiguous } = classifyLinkifyCandidates(
+      "Skullclamp is good. Skullclamp is really good. Skullclamp wins games.",
+      isKnownCardName
+    );
+    expect(unambiguous.filter((n) => n === "Skullclamp").length).toBe(1);
+  });
+
+  it("handles mixed unambiguous and ambiguous candidates in the same text", () => {
+    const { unambiguous, ambiguous } = classifyLinkifyCandidates(
+      "Blood Artist pairs well with Opt and Skullclamp.",
+      isKnownCardName
+    );
+    expect(unambiguous.sort()).toEqual(["Blood Artist", "Skullclamp"]);
+    expect(ambiguous).toEqual(["Opt"]);
   });
 });

@@ -39,20 +39,32 @@ function renderCardGroups(s: string): string {
 }
 
 // Card references: [[Card Name]] -> hover-preview span; ![[Card Name]] ->
-// embedded inline thumbnail. Resolved client-side via GET /api/card-image
-// (see ChatPanel). Unknown names degrade to plain text (no error styling).
-// Matched on already-escaped text; must run before the markdown-link regex
-// below since both use `[`, and before mana symbols (no overlap in practice).
-// Card groups are parsed first since they also start with `[[`.
+// embedded inline thumbnail. Both forms also accept a piped alias —
+// [[Card Name|alias]] / ![[Card Name|alias]] — which resolves/hovers the
+// full Card Name but displays `alias` as the visible text/caption (issue
+// #22); useful when prose flow wants a shorter name. Resolved client-side
+// via GET /api/card-image (see ChatPanel). Unknown names degrade to plain
+// text (no error styling). Matched on already-escaped text; must run before
+// the markdown-link regex below since both use `[`, and before mana symbols
+// (no overlap in practice). Card groups are parsed first since they also
+// start with `[[` and also use `|` — group replacement consumes the whole
+// well-formed `[[group:..|..]]` span before these regexes run. A MALFORMED
+// group (e.g. `[[group:ramp]]` with no pipe) survives that pass, so the
+// ref callbacks below explicitly skip any name starting with "group:" and
+// leave it as literal text rather than mint a bogus card-ref for it.
 function renderCardRefs(s: string): string {
   return renderCardGroups(s)
-    .replace(/!\[\[([^\]|]+)\]\]/g, (_whole, name: string) => {
+    .replace(/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (whole, name: string, alias: string | undefined) => {
       const n = name.trim();
-      return `<span class="card-embed" data-card-name="${n}"><img class="card-embed-img" data-card-name="${n}" alt="${n}"><span class="card-embed-caption">${n}</span></span>`;
+      if (n.startsWith("group:")) return whole;
+      const caption = alias !== undefined ? alias.trim() : n;
+      return `<span class="card-embed" data-card-name="${n}"><img class="card-embed-img" data-card-name="${n}" alt="${caption}"><span class="card-embed-caption">${caption}</span></span>`;
     })
-    .replace(/\[\[([^\]|]+)\]\]/g, (_whole, name: string) => {
+    .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (whole, name: string, alias: string | undefined) => {
       const n = name.trim();
-      return `<span class="card-ref" data-card-name="${n}">${n}</span>`;
+      if (n.startsWith("group:")) return whole;
+      const display = alias !== undefined ? alias.trim() : n;
+      return `<span class="card-ref" data-card-name="${n}">${display}</span>`;
     });
 }
 
