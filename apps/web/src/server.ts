@@ -16,6 +16,8 @@ import {
   setCardTags,
   renameTag,
   getLocalDb,
+  categoryTagMembersLocal,
+  parseCiMask,
   type CardResolver,
 } from "@scrychat/core";
 import {
@@ -23,6 +25,11 @@ import {
   wrapNamesInText,
   classifyLinkifyCandidates,
 } from "./linkify-core.js";
+import {
+  populateGroupChipsInText,
+  detectCategoryChipsInText,
+  type CategoryResolver,
+} from "./group-chips-core.js";
 
 // CRITICAL: strip stale ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the
 // process env at startup, before anything else touches process.env or the
@@ -418,12 +425,17 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   let prompt = message;
   const recentActions = recentActionsForChat(chat);
   let contextLine: string | null = null;
+  // Captured alongside contextLine for the group-chip population post-pass
+  // (issue #20/#21): filters chip-completion members to the active deck's
+  // color identity, same as the deck panel itself would.
+  let activeDeckIdentity: string[] | null = null;
   if (typeof activeDeck === "string" && activeDeck.length > 0) {
     try {
       const deck = await getDeck(activeDeck, DECKS_DIR);
       if (deck) {
         const cardCount = deck.cards.reduce((n, c) => n + (c.count ?? 1), 0) + 1; // +1 for commander
         contextLine = `[UI context: the user has deck "${deck.name}" (commander: ${deck.commander}, ${cardCount} cards) open in the deck panel. Treat ambiguous references — "my deck", the commander's name, "my payoffs" — as referring to this deck; call deck_get "${deck.name}" for its current list before answering deck-specific questions. The user may still ask about unrelated cards/decks; this is context, not a restriction.`;
+        activeDeckIdentity = deck.commanderIdentity ?? null;
       }
     } catch {
       // tolerate missing/unreadable deck: ignore and fall back to plain message
@@ -584,6 +596,63 @@ app.post("/api/chat", async (req: Request, res: Response) => {
             const wrapped = wrapTableNameCells(seg.text, isKnownCardName);
             if (wrapped !== seg.text) changed = true;
             seg.text = wrapped;
+          }
+        }
+
+        // Group-chip population post-pass (issue #20/#21): the model rarely
+        // hand-lists a full/accurate member set for [[group:LABEL|...]]
+        // chips, so deterministically complete/repair them from the local
+        // SQLite mirror, filtered to the active deck's color identity. Must
+        // run before classifyLinkifyCandidates/wrapNamesInText below so their
+        // protected-region logic (matches on `[[...]]` spans) sees chips in
+        // final form. Fail-open: a null db (no local mirror yet) makes the
+        // resolver return null for everything, leaving chips unchanged.
+        {
+          const localDb = getLocalDb();
+          const ciMask = activeDeckIdentity ? parseCiMask(activeDeckIdentity.join("")) : null;
+          const resolveCategory: CategoryResolver = (phrase) => {
+            if (!localDb) return null;
+            try {
+              return categoryTagMembersLocal(localDb, phrase, { ciMask, limit: 10 });
+            } catch {
+              return null;
+            }
+          };
+
+          let chipsChanged = 0;
+          for (const seg of segments) {
+            if (seg.type === "text") {
+              const populated = populateGroupChipsInText(seg.text, resolveCategory, 10);
+              if (populated !== seg.text) chipsChanged++;
+              seg.text = populated;
+            }
+          }
+          if (chipsChanged > 0) {
+            changed = true;
+            console.log(`group-chips: populated ${chipsChanged} chips`);
+          }
+
+          // Deterministic category-phrase detection (issue #20): the model
+          // often answers from memory without loading the skill, so chips
+          // may never be emitted at all. Detect curated category phrases in
+          // prose and replace them with populated chips — after population
+          // above (so model-emitted chips suppress duplicate detection via
+          // the label check) and still before the linkify classify/wrap
+          // steps (their protected-region logic must see final chips).
+          let detected = 0;
+          for (const seg of segments) {
+            if (seg.type === "text") {
+              const withDetected = detectCategoryChipsInText(seg.text, resolveCategory, {
+                cap: 10,
+                maxChips: 5,
+              });
+              if (withDetected !== seg.text) detected++;
+              seg.text = withDetected;
+            }
+          }
+          if (detected > 0) {
+            changed = true;
+            console.log(`group-chips: detected ${detected} category phrases`);
           }
         }
 

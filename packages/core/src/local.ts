@@ -295,11 +295,25 @@ function parentsForTagId(db: DbInstance, tagId: string): string[] {
 
 const TAG_COUNT_SQL = `(SELECT COUNT(*) FROM card_tags ct WHERE ct.tag_id = t.id)`;
 
-export function searchTagsLocal(db: DbInstance, query: string, limit: number): LocalTagRow[] {
+interface RankedTagRow {
+  id: string;
+  slug: string;
+  label: string;
+  description: string | null;
+  count: number;
+  rank: number;
+}
+
+/**
+ * Internal: ranked tag search shared by searchTagsLocal (public, rank-opaque
+ * shape) and categoryTagMembersLocal (needs the tag id + rank to pick the
+ * best slug/label/alias match). Rank: 0 slug/label, 1 alias, 2 description.
+ */
+function searchTagsRankedLocal(db: DbInstance, query: string, limit: number): RankedTagRow[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
 
-  const rows = db
+  return db
     .prepare(
       `
       SELECT t.id AS id, t.slug AS slug, t.label AS label, t.description AS description,
@@ -322,13 +336,11 @@ export function searchTagsLocal(db: DbInstance, query: string, limit: number): L
       LIMIT ?
       `,
     )
-    .all(q, q, q, q, q, q, q, q, limit) as {
-    id: string;
-    slug: string;
-    label: string;
-    description: string | null;
-    count: number;
-  }[];
+    .all(q, q, q, q, q, q, q, q, limit) as RankedTagRow[];
+}
+
+export function searchTagsLocal(db: DbInstance, query: string, limit: number): LocalTagRow[] {
+  const rows = searchTagsRankedLocal(db, query, limit);
 
   return rows.map((r) => ({
     slug: r.slug,
@@ -337,6 +349,72 @@ export function searchTagsLocal(db: DbInstance, query: string, limit: number): L
     count: r.count,
     parents: parentsForTagId(db, r.id),
   }));
+}
+
+export interface CategoryTagMembers {
+  slug: string;
+  label: string;
+  members: string[];
+}
+
+/**
+ * Resolves a free-text category/role phrase (e.g. "token doubler", "sac
+ * outlet") to a functional tag, then returns its top card-name members.
+ * Used by the server-side group-chip population post-pass to complete/repair
+ * `[[group:LABEL|...]]` chips the model emits without (or with a short)
+ * member list.
+ *
+ * Resolution: search both the raw phrase and a hyphenated variant (spaces ->
+ * hyphens, so "token doubler" also matches a "token-doubler" slug), keep only
+ * candidates with rank <= 1 (slug/label/alias match — description-only hits
+ * are too loose for this use case), then pick the candidate with the highest
+ * member count (ties broken by the underlying rank/slug ordering). Returns
+ * null when nothing resolves.
+ */
+export function categoryTagMembersLocal(
+  db: DbInstance,
+  phrase: string,
+  opts: { ciMask?: number | null; limit?: number } = {},
+): CategoryTagMembers | null {
+  const trimmed = phrase.trim();
+  if (!trimmed) return null;
+
+  const hyphenated = trimmed.replace(/\s+/g, "-");
+  const candidates = [...searchTagsRankedLocal(db, trimmed, 10), ...searchTagsRankedLocal(db, hyphenated, 10)];
+
+  const bestByTagId = new Map<string, RankedTagRow>();
+  for (const c of candidates) {
+    if (c.rank > 1) continue; // slug/label/alias only, not description-only
+    const existing = bestByTagId.get(c.id);
+    if (!existing || c.count > existing.count) bestByTagId.set(c.id, c);
+  }
+  if (bestByTagId.size === 0) return null;
+
+  const best = [...bestByTagId.values()].sort((a, b) => b.count - a.count)[0];
+
+  const ciMask = opts.ciMask ?? null;
+  const limit = opts.limit ?? 10;
+
+  const memberRows = db
+    .prepare(
+      `
+      SELECT c.name AS name
+      FROM card_tags ct
+      JOIN cards c ON c.oracle_id = ct.oracle_id
+      WHERE ct.tag_id = ?
+        AND c.legal_commander = 1
+        AND (? IS NULL OR (c.ci_mask & ~?) = 0)
+      ORDER BY c.edhrec_rank IS NULL, c.edhrec_rank ASC
+      LIMIT ?
+      `,
+    )
+    .all(best.id, ciMask, ciMask, limit) as { name: string }[];
+
+  return {
+    slug: best.slug,
+    label: best.label,
+    members: memberRows.map((r) => r.name),
+  };
 }
 
 export function getTagLocal(db: DbInstance, slug: string): LocalTagRow | null {

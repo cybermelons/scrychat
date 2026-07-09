@@ -12,6 +12,7 @@ import {
   findAlternativesLocal,
   getLocalDb,
   parseCiMask,
+  categoryTagMembersLocal,
 } from "../src/local.js";
 
 type DbHandle = ReturnType<typeof openDb>;
@@ -368,6 +369,98 @@ describe("local partial-ingest fallback", () => {
 
   it("findCombosLocal returns null when combos is empty", () => {
     const result = findCombosLocal(partialDb, ["Doubling Season"], 10);
+    expect(result).toBeNull();
+  });
+});
+
+describe("local.categoryTagMembersLocal", () => {
+  beforeEach(() => {
+    // edhrec_rank ordering: give the token-doubler members distinct ranks so
+    // we can assert ORDER BY edhrec_rank IS NULL, edhrec_rank ASC.
+    db.prepare(`UPDATE cards SET edhrec_rank = 500 WHERE oracle_id = 'member-strong'`).run();
+    db.prepare(`UPDATE cards SET edhrec_rank = 100 WHERE oracle_id = 'member-token-only'`).run();
+    // member-offcolor (Blue) and member-expensive/member-illegal/member-unpriced
+    // all also carry token-doubler; leave their edhrec_rank NULL so they sort
+    // after the ranked ones (but member-offcolor/illegal are filtered out by
+    // ci/legality anyway).
+
+    // Alias resolution: "cheap doubler" is an alias for counter-doubler.
+    db.prepare(`INSERT INTO tag_aliases (alias, tag_id) VALUES ('cheap doubler', 'tag-counter-doubler')`).run();
+
+    // A second, higher-member-count tag also matching "doubler" by label, to
+    // exercise "pick the one with the highest member count" tie-breaking.
+    // token-doubler already has 5 taggings (target-1, member-strong,
+    // member-token-only, member-offcolor, member-expensive, member-illegal,
+    // member-unpriced = 7); counter-doubler has 2 (target-1, member-strong).
+  });
+
+  it("resolves a tag by label", () => {
+    const result = categoryTagMembersLocal(db, "token doubler");
+    expect(result).not.toBeNull();
+    expect(result!.slug).toBe("token-doubler");
+  });
+
+  it("resolves a tag via a hyphenated slug variant of the phrase", () => {
+    // "token doubler" (space) must also resolve via the "token-doubler" slug.
+    const result = categoryTagMembersLocal(db, "token doubler");
+    expect(result!.slug).toBe("token-doubler");
+  });
+
+  it("resolves a tag via an alias", () => {
+    const result = categoryTagMembersLocal(db, "cheap doubler");
+    expect(result).not.toBeNull();
+    expect(result!.slug).toBe("counter-doubler");
+  });
+
+  it("picks the tag with the higher member count when multiple candidates match", () => {
+    // "doubler" substring-matches token-doubler (7 taggings), counter-doubler
+    // (2 taggings), and synergy-generic does not match "doubler" at all.
+    const result = categoryTagMembersLocal(db, "doubler");
+    expect(result).not.toBeNull();
+    expect(result!.slug).toBe("token-doubler");
+  });
+
+  it("filters members by ci mask", () => {
+    const gMask = parseCiMask("g");
+    const result = categoryTagMembersLocal(db, "token doubler", { ciMask: gMask });
+    expect(result).not.toBeNull();
+    // member-offcolor is Blue-identity; must be excluded under a green-only mask.
+    expect(result!.members).not.toContain("Offcolor Doubler");
+    // member-token-only is White-identity; also excluded under green-only.
+    expect(result!.members).not.toContain("Token Only Doubler");
+  });
+
+  it("includes members within an expanded ci mask", () => {
+    const gwMask = parseCiMask("gw");
+    const result = categoryTagMembersLocal(db, "token doubler", { ciMask: gwMask });
+    expect(result!.members).toContain("Token Only Doubler");
+  });
+
+  it("orders members by edhrec_rank ascending, NULLs last", () => {
+    const result = categoryTagMembersLocal(db, "token doubler", { limit: 10 });
+    expect(result).not.toBeNull();
+    const names = result!.members;
+    const tokenOnlyIdx = names.indexOf("Token Only Doubler"); // rank 100
+    const strongIdx = names.indexOf("Strong Doubler"); // rank 500
+    expect(tokenOnlyIdx).toBeGreaterThanOrEqual(0);
+    expect(strongIdx).toBeGreaterThanOrEqual(0);
+    expect(tokenOnlyIdx).toBeLessThan(strongIdx);
+  });
+
+  it("respects the limit option", () => {
+    const result = categoryTagMembersLocal(db, "token doubler", { limit: 1 });
+    expect(result!.members.length).toBe(1);
+  });
+
+  it("returns null when no tag matches", () => {
+    const result = categoryTagMembersLocal(db, "totally nonexistent role zzz");
+    expect(result).toBeNull();
+  });
+
+  it("returns null for a description-only match (rank 2)", () => {
+    // "generic synergy" tag has description "Broad synergy grouping"; a query
+    // matching only the description (not slug/label/alias) must not resolve.
+    const result = categoryTagMembersLocal(db, "grouping");
     expect(result).toBeNull();
   });
 });

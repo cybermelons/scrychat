@@ -46,16 +46,17 @@ function candidatePhrases(text: string): string[] {
     if (inner) out.add(inner);
   }
 
-  outer: for (const m of text.matchAll(TITLE_CASE_RUN_RE)) {
-    const run = m[0].trim();
-    if (!run) continue;
-    const words = run.split(/\s+/);
+  // Windows every contiguous word-window of `segment` into `out`. Returns
+  // false once the global candidate cap is hit (caller must stop).
+  const windowSegment = (segment: string): boolean => {
+    const trimmed = segment.trim();
+    if (!trimmed) return true;
+    const words = trimmed.split(/\s+/);
     if (words.length > MAX_RUN_WORDS_FOR_WINDOWING) {
-      // Too long to window exhaustively; still test the full run and
-      // prefixes/suffixes of length 1 as a cheap fallback.
+      // Too long to window exhaustively; still test the full segment as a
+      // cheap fallback.
       out.add(words.join(" "));
-      if (out.size >= MAX_CANDIDATES_PER_TEXT) break outer;
-      continue;
+      return out.size < MAX_CANDIDATES_PER_TEXT;
     }
     // All contiguous word-windows: drop words from the front (suffixes) and
     // from the back (prefixes), so a name sitting anywhere inside the run —
@@ -63,7 +64,31 @@ function candidatePhrases(text: string): string[] {
     for (let start = 0; start < words.length; start++) {
       for (let end = start + 1; end <= words.length; end++) {
         out.add(words.slice(start, end).join(" "));
-        if (out.size >= MAX_CANDIDATES_PER_TEXT) break outer;
+        if (out.size >= MAX_CANDIDATES_PER_TEXT) return false;
+      }
+    }
+    return true;
+  };
+
+  outer: for (const m of text.matchAll(TITLE_CASE_RUN_RE)) {
+    const run = m[0].trim();
+    if (!run) continue;
+
+    // Window the raw run first: comma-carrying names like "Yahenni, Undying
+    // Partisan" only surface from raw-run windows (the comma split below
+    // would sever them).
+    if (!windowSegment(run)) break outer;
+
+    // ALSO split the run on commas and window each trimmed sub-segment. A
+    // comma-separated list of names ("Viscera Seer, Carrion Feeder, Altar of
+    // Dementia") matches TITLE_CASE_RUN_RE as ONE run whose raw whitespace-
+    // split windows keep trailing commas on words ("Seer," / "Feeder,"), so
+    // joined windows like "Viscera Seer," fail exact-match validation while
+    // a bare inner word ("Carrion") validates and gets mis-wrapped inside
+    // the longer name. Comma-split sub-segments yield the clean full names.
+    if (run.includes(",")) {
+      for (const segment of run.split(",")) {
+        if (!windowSegment(segment)) break outer;
       }
     }
   }

@@ -126,7 +126,8 @@ instead of asking.
 
 ## Presentation
 
-- Group every suggestion list by functional role, and name the role.
+- Group every suggestion list by functional role, and name the role — and when you name a role,
+  emit its `[[group:role|...]]` chip inline (see below) rather than only a heading.
 - Show price (`usd`) whenever budget is a stated or implied constraint.
 - For decks, always show the quota checklist (lands/ramp/draw/interaction/wipes/payoffs vs.
   target) and a mana curve summary from `deck_get`.
@@ -139,12 +140,16 @@ instead of asking.
   never bare text. Use `![[Card Name]]` sparingly for showcase-worthy cards (the commander, a
   centerpiece suggestion, a top pick) to embed an inline thumbnail — one line each, not every
   mention.
-- When suggesting a functional category (e.g. "ramp", "sac outlets", "token doublers") as a group
-  rather than a single standout pick, emit `[[group:role|Name A; Name B; Name C]]` — a semicolon-
-  separated list of members from your actual tool results (`search_cards`/`find_alternatives`
-  output), never from memory. This renders as a clickable chip that opens a scrollable card
-  gallery. Reserve standout single picks (the commander, a centerpiece, a top recommendation) for
-  `[[..]]`/`![[..]]` as above — don't wrap a single card in a one-member group.
+- Emit a `[[group:LABEL|...]]` chip ANY time a reply recommends a category/role/bucket of cards
+  rather than one specific card — "add a few sac outlets", "you need more board wipes", "run a
+  token doubler", role buckets in deck reviews. Emit it INLINE where the category is named, e.g.
+  `[[group:token doubler|Anointed Procession; Doubling Season]]` or `[[group:sac outlet|Viscera
+  Seer; Ashnod's Altar]]`. This renders as a clickable chip that opens a scrollable card gallery.
+  The server auto-completes chip members from the card database (filtered to the active deck's
+  colors), so listing 2-3 members from your actual tool results (`search_cards`/`find_alternatives`
+  output, never from memory) is enough — the label being a real tag/role name matters more than an
+  exhaustive member list. Reserve standout single picks (the commander, a centerpiece, a top
+  recommendation) for `[[..]]`/`![[..]]` as above — don't wrap a single card in a one-member group.
 - `[[Card Name|alias]]` shows `alias` as the display text while still resolving/hovering the full
   card — use it when prose flow wants a short name (e.g. `[[Teysa Karlov|Teysa]]`), but PREFER
   plain `[[Card Name]]` normally.

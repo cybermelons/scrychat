@@ -14,6 +14,9 @@ const KNOWN_CARDS = new Set([
   "Blood Artist",
   "Yahenni, Undying Partisan",
   "Viscera Seer",
+  "Carrion Feeder",
+  "Altar of Dementia",
+  "Carrion",
   "Bastion of Remembrance",
   "Remembrance",
   "Island",
@@ -343,5 +346,40 @@ describe("classifyLinkifyCandidates (deterministic-first matcher)", () => {
     );
     expect(unambiguous.sort()).toEqual(["Blood Artist", "Skullclamp"]);
     expect(ambiguous).toEqual(["Opt"]);
+  });
+
+  it("surfaces all full names from a comma-separated list line (comma sub-segment fix)", () => {
+    // Regression: TITLE_CASE_RUN_RE matches the whole comma-separated run,
+    // and raw whitespace-split windows keep trailing commas ("Seer,",
+    // "Feeder,"), so "Viscera Seer,"/"Carrion Feeder," failed exact-match
+    // validation while the bare inner word "Carrion" validated — producing
+    // "[[Carrion]] Feeder" and missing the full names. Comma-split
+    // sub-segments must yield the clean full names.
+    const { unambiguous } = classifyLinkifyCandidates(
+      "- Viscera Seer, Carrion Feeder, Altar of Dementia",
+      isKnownCardName
+    );
+    expect(unambiguous).toContain("Viscera Seer");
+    expect(unambiguous).toContain("Carrion Feeder");
+    expect(unambiguous).toContain("Altar of Dementia");
+  });
+
+  it("classify -> wrap on a comma-separated list wraps full names, never [[Carrion]] Feeder", () => {
+    const text = "- Viscera Seer, Carrion Feeder, Altar of Dementia";
+    const { unambiguous, ambiguous } = classifyLinkifyCandidates(text, isKnownCardName);
+    const out = wrapNamesInText(text, [...unambiguous, ...ambiguous], isKnownCardName);
+    expect(out).toBe("- [[Viscera Seer]], [[Carrion Feeder]], [[Altar of Dementia]]");
+    expect(out).not.toContain("[[Carrion]] Feeder");
+  });
+
+  it("still classifies and wraps a comma-connected legendary name after the comma-split fix", () => {
+    // The comma split severs "Yahenni, Undying Partisan" into sub-segments,
+    // but the raw-run windows (kept alongside the split) must still surface
+    // the full comma-carrying name.
+    const text = "Yahenni, Undying Partisan is great";
+    const { unambiguous, ambiguous } = classifyLinkifyCandidates(text, isKnownCardName);
+    expect([...unambiguous, ...ambiguous]).toContain("Yahenni, Undying Partisan");
+    const out = wrapNamesInText(text, [...unambiguous, ...ambiguous], isKnownCardName);
+    expect(out).toBe("[[Yahenni, Undying Partisan]] is great");
   });
 });
