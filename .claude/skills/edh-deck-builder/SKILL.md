@@ -152,9 +152,25 @@ instead of asking.
 - The chat UI renders card names specially: wrap card names in `[[Card Name]]` to get a hover
   preview. MANDATORY for every card name anywhere in output — prose, list items, AND table cells.
   Table cells are not exempt: a card name inside a markdown table row still needs `[[Card Name]]`,
-  never bare text. Use `![[Card Name]]` sparingly for showcase-worthy cards (the commander, a
-  centerpiece suggestion, a top pick) to embed an inline thumbnail — one line each, not every
-  mention.
+  never bare text.
+
+  **When to embed an inline image `![[Card]]` vs a hover link `[[Card]]`:**
+  - **Embed `![[Card]]`** when the card is FOCAL: the single headline recommendation of a reply,
+    the commander being discussed, a 2-3 card side-by-side comparison, or a "check this card out"
+    moment.
+  - **Hover `[[Card]]`** for everything enumerable: lists, tables, role groups, passing mentions,
+    and any second-or-later mention of a card already embedded above.
+  - **Group chips `[[group:...]]`** stay the form for categories (unchanged, see below).
+  - Cap: ~2-3 embeds per reply. NEVER embed inside a markdown table or a bullet list — those
+    always use hover `[[Card]]`.
+
+  Example A — embed-worthy (single focal card): user asks "tell me about Doubling Season."
+  Reply opens with `![[Doubling Season]]` (exactly ONE embed), then discusses it; any other
+  card mentioned in the discussion uses hover `[[Card Name]]`, not another embed.
+
+  Example B — list reply (zero embeds): user asks "list some token doublers." Reply is a
+  bulleted/grouped list where every card is `[[Card Name]]` or a `[[group:...]]` chip — NO
+  `![[...]]` embeds anywhere, because a list is enumerable, not focal.
 - Emit a `[[group:LABEL|...]]` chip ANY time a reply recommends a category/role/bucket of cards
   rather than one specific card — "add a few sac outlets", "you need more board wipes", "run a
   token doubler", role buckets in deck reviews. Emit it INLINE where the category is named, e.g.
@@ -164,7 +180,8 @@ instead of asking.
   colors), so listing 2-3 members from your actual tool results (`search_cards`/`find_alternatives`
   output, never from memory) is enough — the label being a real tag/role name matters more than an
   exhaustive member list. Reserve standout single picks (the commander, a centerpiece, a top
-  recommendation) for `[[..]]`/`![[..]]` as above — don't wrap a single card in a one-member group.
+  recommendation) for `[[..]]`/`![[..]]` per the embed-vs-hover rubric above — don't wrap a
+  single card in a one-member group.
 - `[[Card Name|alias]]` shows `alias` as the display text while still resolving/hovering the full
   card — use it when prose flow wants a short name (e.g. `[[Teysa Karlov|Teysa]]`), but PREFER
   plain `[[Card Name]]` normally.

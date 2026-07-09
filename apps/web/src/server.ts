@@ -500,6 +500,12 @@ app.post("/api/chat", async (req: Request, res: Response) => {
           "KillShell",
         ],
         permissionMode: "dontAsk",
+        systemPrompt: {
+          type: "preset",
+          preset: "claude_code",
+          append:
+            "Card-image rubric: embed ![[Card]] only for a FOCAL card (the single headline recommendation, the commander under discussion, or a 2-3 card side-by-side comparison), capped at 2-3 per reply, never inside tables or bullet lists. Use hover [[Card]] for everything enumerable (lists, tables, passing or repeat mentions). Group chips [[group:...]] stay for categories.",
+        },
       },
     });
 
