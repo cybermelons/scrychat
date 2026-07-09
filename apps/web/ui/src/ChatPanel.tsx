@@ -73,6 +73,7 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
           </div>
         )
       )}
+      {msg.interrupted && <span className="msg-interrupted">stopped</span>}
     </>
   );
 }
@@ -312,6 +313,7 @@ export function ChatPanel({
           if (ev.sessionId) sessionIdRef.current = ev.sessionId;
           if (ev.error) setError(ev.error);
           else if (ev.isError && ev.result) setError(String(ev.result));
+          if (ev.interrupted) updateLastAssistant((m) => ({ ...m, interrupted: true }));
         } else if (ev.type === "segments-update") {
           // Late event from the server's post-stream linkify pass. If the
           // user has since switched chats, chatIdRef.current no longer
@@ -359,6 +361,12 @@ export function ChatPanel({
       void refreshChats();
     }
   }, [input, streaming, updateLastAssistant, selected, refreshChats]);
+
+  const stop = useCallback(() => {
+    const id = chatIdRef.current;
+    if (!id) return;
+    void fetch(`/api/chats/${encodeURIComponent(id)}/stop`, { method: "POST" }).catch(() => void 0);
+  }, []);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -751,13 +759,19 @@ export function ChatPanel({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
         />
-        <button
-          className="chat-send"
-          onClick={() => void send()}
-          disabled={streaming || input.trim().length === 0}
-        >
-          Send
-        </button>
+        {streaming ? (
+          <button className="chat-stop" onClick={stop}>
+            Stop
+          </button>
+        ) : (
+          <button
+            className="chat-send"
+            onClick={() => void send()}
+            disabled={input.trim().length === 0}
+          >
+            Send
+          </button>
+        )}
       </div>
     </main>
   );

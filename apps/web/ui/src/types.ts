@@ -76,7 +76,7 @@ export type ChatEvent =
   | { type: "text-delta"; text: string }
   | { type: "tool-use"; name: string; input: unknown }
   | { type: "tool-result"; toolIndex: number; result: string }
-  | { type: "done"; sessionId?: string; result?: string | null; isError?: boolean; error?: string }
+  | { type: "done"; sessionId?: string; result?: string | null; isError?: boolean; error?: string; interrupted?: boolean }
   | { type: "segments-update"; segments: ChatSegment[] };
 
 export type ChatMessage = {
@@ -84,6 +84,7 @@ export type ChatMessage = {
   text: string;
   tools: { name: string; input: unknown }[];
   segments: ChatSegment[];
+  interrupted?: boolean;
 };
 
 export type ChatSummary = {

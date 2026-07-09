@@ -78,6 +78,9 @@ app.use(express.json());
 const SESSION_MAP_MAX = 100;
 const sessionMap = new Map<string, string>();
 
+// chat.id -> in-flight turn, so POST /api/chats/:id/stop can interrupt it.
+const activeTurns = new Map<string, { q: ReturnType<typeof query>; interrupted: boolean }>();
+
 function setSession(clientSessionId: string, sdkSessionId: string): void {
   sessionMap.delete(clientSessionId); // reinsert at newest position
   sessionMap.set(clientSessionId, sdkSessionId);
@@ -102,6 +105,7 @@ type ChatMsg = {
   tools?: { name: string; input: unknown }[];
   segments?: ChatSegment[];
   activeDeck?: string;
+  interrupted?: boolean;
   at: string;
 };
 
@@ -455,6 +459,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   // tool_use_id -> index into `segments` of the {type:"tool"} segment, so a
   // later tool_result (arrives as a "user" message) can attach to it.
   const toolSegmentByUseId = new Map<string, number>();
+  let turnInterrupted = false;
 
   try {
     const q = query({
@@ -508,6 +513,8 @@ app.post("/api/chat", async (req: Request, res: Response) => {
         },
       },
     });
+
+    activeTurns.set(chat.id, { q, interrupted: false });
 
     res.on("close", () => {
       if (!res.writableEnded) {
@@ -576,6 +583,11 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   } catch (err) {
     sseWrite(res, { type: "done", error: err instanceof Error ? err.message : String(err) });
   } finally {
+    const entry = activeTurns.get(chat.id);
+    if (entry) {
+      turnInterrupted = entry.interrupted;
+      activeTurns.delete(chat.id);
+    }
     // Opt-in linkify post-pass (issue #12): runs after "done" has already
     // streamed (the reply is final either way), so a slow/failed pass never
     // delays the visible response — it only ever arrives as a later
@@ -733,10 +745,14 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       text: assistantText,
       tools: assistantTools,
       segments: finalSegments,
+      interrupted: turnInterrupted || undefined,
       at: new Date().toISOString(),
     });
     chat.updatedAt = new Date().toISOString();
     await writeChatFile(chat);
+    if (turnInterrupted && !res.writableEnded) {
+      sseWrite(res, { type: "done", interrupted: true });
+    }
     res.end();
   }
 });
@@ -800,6 +816,21 @@ app.delete("/api/chats/:id", async (req: Request, res: Response) => {
     }
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+app.post("/api/chats/:id/stop", (req: Request, res: Response) => {
+  if (!isValidChatId(req.params.id)) {
+    res.status(400).json({ error: "invalid chat id" });
+    return;
+  }
+  const entry = activeTurns.get(req.params.id);
+  if (!entry) {
+    res.status(404).json({ error: "no active turn" });
+    return;
+  }
+  entry.interrupted = true;
+  void entry.q.interrupt();
+  res.json({ ok: true });
 });
 
 // ---- UI action log: recent deck CRUD, surfaced to chat as context ----

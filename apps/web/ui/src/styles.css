@@ -1105,6 +1105,25 @@ body {
   cursor: default;
 }
 
+.chat-stop {
+  background: var(--bad);
+  color: #1a0e0e;
+  border: none;
+  border-radius: 8px;
+  padding: 0 20px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.msg-interrupted {
+  display: inline-block;
+  font-size: 0.76rem;
+  font-style: italic;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
 /* ---------- scrollbars (thin, dark) ---------- */
 .deck-panel,
 .chat-scroll {
