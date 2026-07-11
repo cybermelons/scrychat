@@ -139,8 +139,17 @@ export async function getDeck(
 
 export type DeckExportFormat = "plain" | "mtga" | "moxfield";
 
-function cardLine(card: CardEntry): string {
-  return `${card.count ?? 1} ${card.name}`;
+function cardLine(card: CardEntry, useFrontFace = false): string {
+  const name = useFrontFace ? frontFace(card.name) : card.name;
+  return `${card.count ?? 1} ${name}`;
+}
+
+// MTG Arena's decklist importer rejects the full "Front // Back" name stored
+// for transform/DFC cards — it only accepts the front face. Other formats
+// (Moxfield, plain) accept and round-trip the full name, so this is only
+// applied for mtga export.
+function frontFace(name: string): string {
+  return name.split(" // ")[0];
 }
 
 export async function exportDeck(
@@ -153,22 +162,26 @@ export async function exportDeck(
     throw new Error(`Deck not found: ${name}`);
   }
 
-  const cardLines = deck.cards.map(cardLine);
-
   switch (format) {
-    case "mtga":
+    case "mtga": {
+      const cardLines = deck.cards.map((c) => cardLine(c, true));
       return [
         "Commander",
-        `1 ${deck.commander}`,
+        `1 ${frontFace(deck.commander)}`,
         "",
         "Deck",
         ...cardLines,
       ].join("\n");
-    case "moxfield":
+    }
+    case "moxfield": {
+      const cardLines = deck.cards.map((c) => cardLine(c));
       return [`1 ${deck.commander} *CMDR*`, ...cardLines].join("\n");
+    }
     case "plain":
-    default:
+    default: {
+      const cardLines = deck.cards.map((c) => cardLine(c));
       return [`1 ${deck.commander} *CMDR*`, "", ...cardLines].join("\n");
+    }
   }
 }
 

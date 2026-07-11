@@ -16,9 +16,11 @@ import {
   renameDeck,
   setCommander,
   setCardTagsResult,
+  exportDeck,
   type CardResolver,
   type ResolvedCard,
 } from "../src/decks.js";
+import { parseDecklist } from "../src/import.js";
 
 const FIXTURES: Record<string, ResolvedCard> = {
   "trostani, selesnya's voice": {
@@ -82,6 +84,20 @@ const FIXTURES: Record<string, ResolvedCard> = {
     colorIdentity: ["G"],
     cmc: 2,
     typeLine: "Creature — Bear",
+    legalCommander: true,
+  },
+  "kefka, court mage // kefka, ruler of ruin": {
+    name: "Kefka, Court Mage // Kefka, Ruler of Ruin",
+    colorIdentity: ["U", "B", "R"],
+    cmc: 4,
+    typeLine: "Legendary Creature — Human Wizard // Legendary Planeswalker — Kefka",
+    legalCommander: true,
+  },
+  "fable of the mirror-breaker // reflection of kiki-jiki": {
+    name: "Fable of the Mirror-Breaker // Reflection of Kiki-Jiki",
+    colorIdentity: ["R"],
+    cmc: 2,
+    typeLine: "Enchantment Creature — Faerie Wizard // Legendary Creature — Kobold Shaman",
     legalCommander: true,
   },
 };
@@ -487,6 +503,69 @@ describe("decks", () => {
       expect(summary.untaggedForQuota).toBe(report.untaggedForQuota);
       expect(summary.untaggedForQuota).toBe(1);
       expect(summary.remaining).toBe(100 - summary.total);
+    });
+  });
+
+  describe("exportDeck", () => {
+    async function makeDfcDeck(): Promise<void> {
+      await createDeck(
+        "Kefka Chaos",
+        "Kefka, Court Mage // Kefka, Ruler of Ruin",
+        resolver,
+        decksDir
+      );
+      await addCards(
+        "Kefka Chaos",
+        [
+          { name: "Fable of the Mirror-Breaker // Reflection of Kiki-Jiki", tags: ["value"] },
+          { name: "Sol Ring", tags: ["ramp"] },
+        ],
+        resolver,
+        decksDir
+      );
+    }
+
+    it("mtga export uses front-face-only names and strips all ' // ' separators", async () => {
+      await makeDfcDeck();
+      const out = await exportDeck("Kefka Chaos", "mtga", decksDir);
+
+      const lines = out.split("\n");
+      expect(lines[1]).toBe("1 Kefka, Court Mage");
+      expect(out).toContain("1 Fable of the Mirror-Breaker");
+      expect(out).not.toContain(" // ");
+    });
+
+    it("moxfield export keeps full DFC names", async () => {
+      await makeDfcDeck();
+      const out = await exportDeck("Kefka Chaos", "moxfield", decksDir);
+
+      expect(out).toContain("Kefka, Court Mage // Kefka, Ruler of Ruin");
+      expect(out).toContain("Fable of the Mirror-Breaker // Reflection of Kiki-Jiki");
+    });
+
+    it("plain export keeps full DFC names", async () => {
+      await makeDfcDeck();
+      const out = await exportDeck("Kefka Chaos", "plain", decksDir);
+
+      expect(out).toContain("Kefka, Court Mage // Kefka, Ruler of Ruin");
+      expect(out).toContain("Fable of the Mirror-Breaker // Reflection of Kiki-Jiki");
+    });
+
+    it("round-trips mtga export through parseDecklist with front-face names and no unparsed lines", async () => {
+      await makeDfcDeck();
+      const out = await exportDeck("Kefka Chaos", "mtga", decksDir);
+
+      const result = parseDecklist(out);
+      expect(result.unparsed).toEqual([]);
+
+      const names = result.entries.map((e) => e.name);
+      expect(names).toContain("Kefka, Court Mage");
+      expect(names).toContain("Fable of the Mirror-Breaker");
+      expect(names).toContain("Sol Ring");
+      expect(names.some((n) => n.includes(" // "))).toBe(false);
+
+      const commanderEntry = result.entries.find((e) => e.name === "Kefka, Court Mage");
+      expect(commanderEntry?.commander).toBe(true);
     });
   });
 });
