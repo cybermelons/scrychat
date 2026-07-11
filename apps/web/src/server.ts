@@ -607,9 +607,17 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   } catch (err) {
     sseWrite(res, { type: "done", sessionId: clientSessionId, error: err instanceof Error ? err.message : String(err) });
   } finally {
-    const entry = activeTurns.get(chat.id);
-    if (entry) {
-      turnInterrupted = entry.interrupted;
+    // Read/delete via the LOCAL `turnEntry` reference captured at
+    // registration, not a fresh activeTurns.get(chat.id) lookup: a second
+    // stream for the same chat.id can start (and register its own entry)
+    // while this stream is still in its post-done linkify pass below, and a
+    // get-then-delete by key would read/delete THAT turn's entry instead of
+    // this one — leaking a stale interrupted flag and making the second
+    // turn's Stop button silently no-op. Only delete the map entry if it
+    // still points at this stream's turnEntry (i.e. no newer turn replaced
+    // it in the meantime).
+    turnInterrupted = turnEntry.interrupted;
+    if (activeTurns.get(chat.id) === turnEntry) {
       activeTurns.delete(chat.id);
     }
     // Opt-in linkify post-pass (issue #12): runs after "done" has already

@@ -174,8 +174,10 @@ export function DeckPanel({
   // inline delete-deck confirm
   const [confirmingDeleteDeck, setConfirmingDeleteDeck] = useState(false);
 
-  // undo chip for card removal (× button)
-  const [undo, setUndo] = useState<{ name: string; tags: string[]; count: number } | null>(null);
+  // undo chip for card removal (× button). Captures `deck` (the selection AT
+  // REMOVAL TIME) alongside name/tags/count so a deck switch while the chip
+  // is armed can't make undo silently re-add to the WRONG (now-current) deck.
+  const [undo, setUndo] = useState<{ deck: string; name: string; tags: string[]; count: number } | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshDecks = useCallback(
@@ -284,9 +286,9 @@ export function DeckPanel({
     [selected, addCardName, addCardTags, addCardCount]
   );
 
-  const armUndo = useCallback((name: string, tags: string[], count: number) => {
+  const armUndo = useCallback((deck: string, name: string, tags: string[], count: number) => {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    setUndo({ name, tags, count });
+    setUndo({ deck, name, tags, count });
     undoTimerRef.current = setTimeout(() => setUndo(null), 4000);
   }, []);
 
@@ -311,7 +313,7 @@ export function DeckPanel({
             const body = await r.json().catch(() => ({}));
             throw new Error(body.error ?? `HTTP ${r.status}`);
           }
-          armUndo(name, tags, count);
+          armUndo(selected, name, tags, count);
           loadDeck(selected);
         })
         .catch((e: Error) => setActionError(e.message))
@@ -322,11 +324,13 @@ export function DeckPanel({
   );
 
   const undoRemove = useCallback(() => {
-    if (!undo || !selected) return;
+    if (!undo) return;
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    const { name, tags, count } = undo;
+    // Re-add to `undo.deck` — the deck captured AT REMOVAL TIME — not the
+    // (possibly since-switched) current `selected`.
+    const { deck, name, tags, count } = undo;
     setUndo(null);
-    fetch(`/api/decks/${encodeURIComponent(selected)}/cards`, {
+    fetch(`/api/decks/${encodeURIComponent(deck)}/cards`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cards: [{ name, tags, count }] }),
@@ -336,10 +340,10 @@ export function DeckPanel({
           const body = await r.json().catch(() => ({}));
           throw new Error(body.error ?? `HTTP ${r.status}`);
         }
-        loadDeck(selected);
+        if (selectedRef.current === deck) loadDeck(deck);
       })
       .catch((e: Error) => setActionError(e.message));
-  }, [undo, selected]);
+  }, [undo]);
 
   const openTagEditor = useCallback((key: string, tags: string[], trigger: HTMLButtonElement | null) => {
     editTriggerRef.current = trigger;
@@ -352,8 +356,16 @@ export function DeckPanel({
     setEditingCard(null);
     setEditorTags([]);
     setEditorInput("");
-    editTriggerRef.current?.focus();
+    // Defer the focus() call: editingCard flipping to null causes the
+    // card-row (and this trigger button) to re-render, so calling .focus()
+    // synchronously here — before React has flushed that re-render — can
+    // lose focus rather than land it on the trigger. A headless-browser
+    // check confirmed this: editorClosed=true but focus not on the trigger.
+    // setTimeout(0) runs after the DOM update, so the trigger is stable by
+    // the time we focus it.
+    const trigger = editTriggerRef.current;
     editTriggerRef.current = null;
+    setTimeout(() => trigger?.focus(), 0);
   }, []);
 
   const saveCardTags = useCallback(
@@ -383,7 +395,10 @@ export function DeckPanel({
 
   const cancelGroupRename = useCallback((tag: string) => {
     setRenamingGroup(null);
-    groupRenameTriggerRefs.current.get(tag)?.focus();
+    // Same re-render-loses-focus hazard as closeTagEditor above: defer past
+    // the state-flush re-render so the trigger button is focusable again.
+    const trigger = groupRenameTriggerRefs.current.get(tag);
+    setTimeout(() => trigger?.focus(), 0);
   }, []);
 
   const renameGroup = useCallback(
@@ -768,9 +783,6 @@ export function DeckPanel({
                   value={manualCopyText}
                   autoFocus
                   onFocus={(e) => e.currentTarget.select()}
-                  ref={(el) => {
-                    if (el) el.select();
-                  }}
                 />
                 <button
                   type="button"

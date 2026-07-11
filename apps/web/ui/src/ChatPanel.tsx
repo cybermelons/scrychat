@@ -252,7 +252,11 @@ export function ChatPanel({
 
   const cancelRenameChat = useCallback(() => {
     setRenamingChat(false);
-    renameTriggerRef.current?.focus();
+    // Deferred past the state-flush re-render (same hazard as DeckPanel's
+    // closeTagEditor/cancelGroupRename): calling .focus() synchronously here
+    // can lose focus if the trigger button re-renders in response to
+    // renamingChat flipping to false.
+    setTimeout(() => renameTriggerRef.current?.focus(), 0);
   }, []);
 
   const saveRenameChat = useCallback(() => {
@@ -276,7 +280,7 @@ export function ChatPanel({
           throw new Error(body.error ?? `HTTP ${r.status}`);
         }
         setRenamingChat(false);
-        renameTriggerRef.current?.focus();
+        setTimeout(() => renameTriggerRef.current?.focus(), 0);
         void refreshChats();
       })
       .catch((e: Error) => setChatError(e.message))
@@ -363,6 +367,13 @@ export function ChatPanel({
       let owningChatId: string | null = chatIdRef.current;
 
       const handleEvent = (ev: ChatEvent) => {
+        // Drop late events from a prior chat's still-draining stream: once
+        // the user has switched/started another chat, chatIdRef.current no
+        // longer matches the chat this stream belongs to. The "chat" event
+        // itself is exempt (it's what establishes owningChatId for a
+        // brand-new chat — both are null until then, so null===null passes
+        // and the very next event to arrive is always "chat" first).
+        if (ev.type !== "chat" && chatIdRef.current !== owningChatId) return;
         if (ev.type === "chat") {
           owningChatId = ev.chatId;
           chatIdRef.current = ev.chatId;
@@ -400,11 +411,8 @@ export function ChatPanel({
           else if (ev.isError && ev.result) setError(String(ev.result));
           if (ev.interrupted) updateLastAssistant((m) => ({ ...m, interrupted: true }));
         } else if (ev.type === "segments-update") {
-          // Late event from the server's post-stream linkify pass. If the
-          // user has since switched chats, chatIdRef.current no longer
-          // matches the chat this stream belongs to — drop it rather than
-          // rewriting the wrong chat's last assistant message.
-          if (chatIdRef.current !== owningChatId) return;
+          // Late event from the server's post-stream linkify pass; the
+          // top-of-function gate above already dropped it if stale.
           updateLastAssistant((m) => ({
             ...m,
             segments: ev.segments,
@@ -539,21 +547,38 @@ export function ChatPanel({
 
   useEffect(() => () => cancelGroupClose(), [cancelGroupClose]);
 
-  // Global Escape: dismiss whichever popover/confirm is currently open so
-  // keyboard users can always back out. Group-rename input in DeckPanel and
-  // this panel's own rename input handle Escape themselves (stopPropagation
-  // not required since each closes its own state here too, idempotently).
+  // Global Escape: peel ONE layer per press, topmost-first, matching
+  // DeckPanel's pattern — check the highest-priority open layer and `return`
+  // immediately after closing it, so a press never closes more than one
+  // layer at once. Order: any open popover group first, then
+  // confirmingDeleteChat, then renamingChat. Group-rename input in DeckPanel
+  // and this panel's own rename input handle Escape themselves
+  // (stopPropagation not required since each closes its own state here too,
+  // idempotently).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (toolPopover) setToolPopover(null);
-      if (cardPopover) setCardPopover(null);
+      if (toolPopover) {
+        setToolPopover(null);
+        return;
+      }
+      if (cardPopover) {
+        setCardPopover(null);
+        return;
+      }
       if (groupPopover) {
         cancelGroupClose();
         setGroupPopover(null);
+        return;
       }
-      if (confirmingDeleteChat) setConfirmingDeleteChat(false);
-      if (renamingChat) cancelRenameChat();
+      if (confirmingDeleteChat) {
+        setConfirmingDeleteChat(false);
+        return;
+      }
+      if (renamingChat) {
+        cancelRenameChat();
+        return;
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -1031,7 +1056,7 @@ export function ChatPanel({
         )}
         {cardUndo && (
           <div className="chip chip-hint-inline chat-card-undo">
-            Removed {cardUndo.name}
+            Removed {cardUndo.name} from {cardUndo.deck}
             <button type="button" className="chip-retry" onClick={undoCardRemove}>
               Undo
             </button>
