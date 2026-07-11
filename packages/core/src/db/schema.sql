@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS cards (
   image TEXT,
   scryfall_uri TEXT,
   arena INTEGER,
+  arena_id INTEGER,
   brawl TEXT,
   standardbrawl TEXT,
   historic TEXT,

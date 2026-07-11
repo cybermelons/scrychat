@@ -59,6 +59,7 @@ export function openDb(options: OpenDbOptions = {}): DbInstance {
   );
   const newCardsColumns: [string, string][] = [
     ["arena", "INTEGER"],
+    ["arena_id", "INTEGER"],
     ["brawl", "TEXT"],
     ["standardbrawl", "TEXT"],
     ["historic", "TEXT"],

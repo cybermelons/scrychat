@@ -8,6 +8,7 @@ interface ScryfallDefaultCard {
   oracle_id?: string;
   prices?: { usd?: string | null };
   games?: string[];
+  arena_id?: number;
 }
 
 export interface IngestPricesResult {
@@ -15,6 +16,7 @@ export interface IngestPricesResult {
   oraclesPriced: number;
   updated: number;
   arenaCount: number;
+  arenaIdCount: number;
 }
 
 /**
@@ -32,6 +34,7 @@ export async function ingestPrices(db: Database.Database, filePath: string): Pro
   const minByOracle = new Map<string, number>();
   const oraclesSeen = new Set<string>();
   const arenaByOracle = new Set<string>();
+  const arenaIdByOracle = new Map<string, number>();
   let read = 0;
 
   const pipeline = Chain.chain([
@@ -51,6 +54,9 @@ export async function ingestPrices(db: Database.Database, filePath: string): Pro
       // can be arena-legal with no market price).
       if ((value.games ?? []).includes("arena")) {
         arenaByOracle.add(oracleId);
+      }
+      if (value.arena_id != null && oracleId) {
+        arenaIdByOracle.set(oracleId, value.arena_id);
       }
 
       const raw = value.prices?.usd;
@@ -85,10 +91,20 @@ export async function ingestPrices(db: Database.Database, filePath: string): Pro
   const allOracleIds = [...oraclesSeen];
   updateArenaAll(allOracleIds);
 
+  const updateArenaId = db.prepare("UPDATE cards SET arena_id = ? WHERE oracle_id = ?");
+  const updateArenaIdAll = db.transaction((entries: [string, number][]) => {
+    for (const [oracleId, arenaId] of entries) {
+      updateArenaId.run(arenaId, oracleId);
+    }
+  });
+  const arenaIdEntries = [...arenaIdByOracle.entries()];
+  updateArenaIdAll(arenaIdEntries);
+
   return {
     read,
     oraclesPriced: minByOracle.size,
     updated: entries.length,
     arenaCount: arenaByOracle.size,
+    arenaIdCount: arenaIdByOracle.size,
   };
 }
