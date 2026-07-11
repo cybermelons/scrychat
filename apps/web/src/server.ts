@@ -87,7 +87,11 @@ const SESSION_MAP_MAX = 100;
 const sessionMap = new Map<string, string>();
 
 // chat.id -> in-flight turn, so POST /api/chats/:id/stop can interrupt it.
-const activeTurns = new Map<string, { q: ReturnType<typeof query>; interrupted: boolean }>();
+// `q` starts null: the turn is registered before the SDK query is
+// constructed (see /api/chat) so a Stop click can't race ahead of
+// registration; `interrupted` may be set before `q` lands, in which case
+// the query is interrupted as soon as it's assigned.
+const activeTurns = new Map<string, { q: ReturnType<typeof query> | null; interrupted: boolean }>();
 
 function setSession(clientSessionId: string, sdkSessionId: string): void {
   sessionMap.delete(clientSessionId); // reinsert at newest position
@@ -427,6 +431,13 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   await updateDeckRefs(chat);
   await writeChatFile(chat);
 
+  // Register the turn as stoppable before the client can possibly see the
+  // chat id (the "chat" SSE event below): otherwise a Stop click that races
+  // the async deck/query setup below would hit activeTurns.get() finding
+  // nothing (404, silently swallowed by the client) until `q` exists.
+  const turnEntry: { q: ReturnType<typeof query> | null; interrupted: boolean } = { q: null, interrupted: false };
+  activeTurns.set(chat.id, turnEntry);
+
   if (isNewChat) {
     sseWrite(res, { type: "chat", chatId: chat.id });
   }
@@ -523,7 +534,11 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       },
     });
 
-    activeTurns.set(chat.id, { q, interrupted: false });
+    // Fill in the placeholder registered above (pre-query) now that `q`
+    // exists; preserve any interrupt already requested while we were
+    // building the query (see /api/chats/:id/stop).
+    turnEntry.q = q;
+    if (turnEntry.interrupted) void q.interrupt();
 
     res.on("close", () => {
       if (!res.writableEnded) {
@@ -838,7 +853,11 @@ app.post("/api/chats/:id/stop", (req: Request, res: Response) => {
     return;
   }
   entry.interrupted = true;
-  void entry.q.interrupt();
+  // q may not exist yet if the turn was registered before the SDK query
+  // finished being constructed (see /api/chat) — once it lands, the
+  // deferred interrupt above (`if (turnEntry.interrupted) void q.interrupt()`)
+  // fires immediately.
+  if (entry.q) void entry.q.interrupt();
   res.json({ ok: true });
 });
 

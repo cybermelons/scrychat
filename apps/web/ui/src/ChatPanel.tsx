@@ -102,6 +102,12 @@ export function ChatPanel({
   const chatIdRef = useRef<string | null>(null);
   const lastUserMessageRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Stick-to-bottom only while the user is already near the bottom; set by
+  // onScroll, read (not reacted to) by the [messages] auto-scroll effect
+  // below so we don't force-scroll away from a message the user scrolled
+  // up to read.
+  const stickToBottomRef = useRef(true);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   const deckCardNamesRef = useRef(deckCardNames);
@@ -148,8 +154,14 @@ export function ChatPanel({
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  const onChatScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  }, []);
 
   const refreshChats = useCallback(() => {
     return fetch("/api/chats")
@@ -165,6 +177,7 @@ export function ChatPanel({
   const loadChat = useCallback((id: string) => {
     setChatError(null);
     setLoadingChat(true);
+    stickToBottomRef.current = true; // open the newly-loaded chat scrolled to bottom
     return fetch(`/api/chats/${encodeURIComponent(id)}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -194,6 +207,7 @@ export function ChatPanel({
     sessionIdRef.current = null;
     setMessages([]);
     setError(null);
+    stickToBottomRef.current = true;
     localStorage.removeItem(LAST_CHAT_KEY);
   }, []);
 
@@ -399,6 +413,10 @@ export function ChatPanel({
         return msgs;
       });
       void refreshChats();
+      // Refocus the textarea now that streaming has ended. Deferred a tick
+      // so the `disabled` attribute (cleared by setStreaming(false) above)
+      // has actually been removed from the DOM before we try to focus it.
+      setTimeout(() => textareaRef.current?.focus(), 0);
     }
   }, [input, streaming, updateLastAssistant, selected, refreshChats]);
 
@@ -748,6 +766,7 @@ export function ChatPanel({
       <div
         className="chat-scroll"
         ref={scrollRef}
+        onScroll={onChatScroll}
         onMouseOver={onScrollMouseOver}
         onMouseMove={onScrollMouseMove}
         onMouseOut={onScrollMouseOut}
@@ -852,6 +871,7 @@ export function ChatPanel({
       <div className="chat-input-row">
         {selected && <span className="chip chip-context">context: {selected}</span>}
         <textarea
+          ref={textareaRef}
           className="chat-input"
           value={input}
           placeholder={streaming ? "waiting for response…" : "Message scrychat"}
