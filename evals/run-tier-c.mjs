@@ -8,7 +8,12 @@
  * and drives its HTTP API with plain fetch/http calls. No LLM calls in the default run.
  *
  * Mirrors run-tier-a.mjs's style: one OK/FAIL line per check, exit 1 on any FAIL,
- * ends with `TIER C: n/10 PASSED`.
+ * ends with `TIER C: n/11 PASSED`.
+ *
+ * C13: GET /api/health sanity check (issue #40 — Arena requests failing on NAS,
+ * suspected skill-not-loaded / stale DB). Asserts the skill file is readable and
+ * the local DB is present with Arena data populated (repo has a post-#28 ingested
+ * DB, so cardCount/arenaPopulated should both be > 0).
  *
  * C-COLLECT: Arena-collection import e2e (POST/GET /api/collection + owned flag via
  * a spawned MCP server's get_card, mirroring packages/mcp/test/rpc-smoke.mjs). Uses a
@@ -371,6 +376,27 @@ async function main() {
       }
     }
 
+    // --- C13: health endpoint (issue #40 diagnostics) ---
+    try {
+      const res = await fetch(`${baseUrl}/api/health`);
+      const json = await res.json();
+      const ok =
+        res.status === 200 &&
+        json?.skillLoaded === true &&
+        json?.db?.exists === true &&
+        typeof json?.db?.cardCount === "number" &&
+        json.db.cardCount > 0 &&
+        typeof json?.db?.arenaPopulated === "number" &&
+        json.db.arenaPopulated > 0;
+      record(
+        "C13",
+        ok,
+        `status=${res.status} skillLoaded=${json?.skillLoaded} dbExists=${json?.db?.exists} cardCount=${json?.db?.cardCount} arenaPopulated=${json?.db?.arenaPopulated} ingestStamp=${json?.db?.ingestStamp}`,
+      );
+    } catch (err) {
+      record("C13", false, `threw: ${err.message}`);
+    }
+
     // --- --with-chat: three LLM-dependent checks, skipped by default ---
     if (!WITH_CHAT) {
       skip("C10", "activeDeck context relay (LLM-dependent; run with --with-chat)");
@@ -414,9 +440,9 @@ async function main() {
     }
   }
 
-  const expectedCount = WITH_CHAT ? 13 : 10;
+  const expectedCount = WITH_CHAT ? 14 : 11;
   const passed = results.filter((r) => r.ok).length;
-  const label = WITH_CHAT ? `TIER C: ${passed}/13 PASSED` : `TIER C: ${passed}/10 PASSED`;
+  const label = WITH_CHAT ? `TIER C: ${passed}/14 PASSED` : `TIER C: ${passed}/11 PASSED`;
   console.log(`\n${label}`);
   if (passed < results.length || results.length < expectedCount) {
     process.exit(1);

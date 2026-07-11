@@ -1270,6 +1270,65 @@ app.get("/api/collection", async (_req: Request, res: Response) => {
   }
 });
 
+// ---- health check: diagnose skill-loading / DB-staleness issues (issue #40) ----
+app.get("/api/health", (_req: Request, res: Response) => {
+  const skillPath = path.join(REPO_ROOT, ".claude/skills/edh-deck-builder/SKILL.md");
+  let skillLoaded = false;
+  try {
+    fs.accessSync(skillPath, fs.constants.R_OK);
+    skillLoaded = true;
+  } catch {
+    skillLoaded = false;
+  }
+
+  const dbPath = path.join(REPO_ROOT, "data/scrychat.db");
+  let dbExists = false;
+  let cardCount: number | null = null;
+  let arenaPopulated: number | null = null;
+  let ingestStamp: string | null = null;
+
+  try {
+    const db = getLocalDb();
+    dbExists = db !== null;
+    if (db) {
+      try {
+        const row = db.prepare("SELECT COUNT(*) AS n FROM cards").get() as { n: number };
+        cardCount = row?.n ?? null;
+      } catch {
+        cardCount = null;
+      }
+      try {
+        const row = db.prepare("SELECT COUNT(*) AS n FROM cards WHERE arena IS NOT NULL").get() as { n: number };
+        arenaPopulated = row?.n ?? null;
+      } catch {
+        arenaPopulated = null;
+      }
+    }
+  } catch {
+    dbExists = false;
+  }
+
+  try {
+    ingestStamp = fs.statSync(dbPath).mtime.toISOString();
+  } catch {
+    ingestStamp = null;
+  }
+
+  res.json({
+    ok: true,
+    repoRoot: REPO_ROOT,
+    skillLoaded,
+    skillPath,
+    db: {
+      exists: dbExists,
+      path: dbPath,
+      cardCount,
+      arenaPopulated,
+      ingestStamp,
+    },
+  });
+});
+
 // ---- static UI (built by apps/web/ui -> ui/dist) ----
 const UI_DIST = path.resolve(__dirname, "../ui/dist");
 app.use(express.static(UI_DIST));
