@@ -19,6 +19,12 @@ import {
   getLocalDb,
   categoryTagMembersLocal,
   parseCiMask,
+  COLLECTION_PATH,
+  writeCollectionFile,
+  mapArenaIdsToOracle,
+  parseArenaLog,
+  collectionStats,
+  getOwnedIndex,
   type CardResolver,
 } from "@scrychat/core";
 import {
@@ -31,6 +37,7 @@ import {
   detectCategoryChipsInText,
   type CategoryResolver,
 } from "./group-chips-core.js";
+import { parseCollectionBody, buildImportResult } from "./collection-core.js";
 
 // CRITICAL: strip stale ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the
 // process env at startup, before anything else touches process.env or the
@@ -985,6 +992,15 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
     }
     const report = await deckReport(req.params.name, resolver, DECKS_DIR);
 
+    const owned = getOwnedIndex();
+    function isOwnedName(name: string): boolean {
+      if (!owned) return false;
+      const lower = name.toLowerCase();
+      if (owned.names.has(lower)) return true;
+      const frontFace = lower.split(" // ")[0];
+      return owned.names.has(frontFace);
+    }
+
     const commanderResolved = await resolver(deck.commander);
     const cardsWithImages = await Promise.all(
       deck.cards.map(async (c) => {
@@ -995,16 +1011,30 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
           manaCost: resolved?.manaCost ?? null,
           producedMana: resolved?.producedMana ?? null,
           typeLine: resolved?.typeLine ?? null,
+          ...(owned ? { owned: isOwnedName(c.name) } : {}),
         };
       })
     );
     const deckWithImages = {
       ...deck,
       commanderImage: commanderResolved?.image ?? null,
+      ...(owned ? { commanderOwned: isOwnedName(deck.commander) } : {}),
       cards: cardsWithImages,
     };
 
-    res.json({ deck: deckWithImages, report });
+    const collectionMeta = owned
+      ? {
+          importedAt: owned.importedAt,
+          ownedCount: cardsWithImages.filter((c) => c.owned).length,
+          missingCount: cardsWithImages.filter((c) => !c.owned).length,
+        }
+      : undefined;
+
+    res.json({
+      deck: deckWithImages,
+      report,
+      ...(collectionMeta ? { collection: collectionMeta } : {}),
+    });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -1157,6 +1187,68 @@ app.get("/api/deck-events", (req: Request, res: Response) => {
   req.on("close", () => {
     watcher.close();
   });
+});
+
+// ---- Arena collection import ----
+app.post("/api/collection", express.text({ type: "text/plain", limit: "64mb" }), async (req: Request, res: Response) => {
+  try {
+    const contentType = req.headers["content-type"];
+    const parsed = parseCollectionBody(contentType, req.body);
+    if ("error" in parsed) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+
+    let cards: Record<string, number>;
+    if (parsed.kind === "log") {
+      const logResult = parseArenaLog(parsed.text);
+      if (!logResult) {
+        res.status(400).json({ error: "no collection data found in log (enable Detailed Logs in Arena?)" });
+        return;
+      }
+      cards = logResult.cards;
+    } else {
+      cards = parsed.cards;
+    }
+
+    const db = getLocalDb();
+    if (!db) {
+      res.status(503).json({ error: "local card DB required — run: pnpm --filter @scrychat/core ingest" });
+      return;
+    }
+
+    const mapResult = mapArenaIdsToOracle(db, Object.keys(cards));
+    const importedAt = new Date().toISOString();
+    writeCollectionFile({
+      importedAt,
+      source: parsed.kind === "log" ? "player-log" : "parsed",
+      cards,
+    });
+
+    res.json({ ok: true, stats: { ...buildImportResult(cards, mapResult), importedAt } });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get("/api/collection", async (_req: Request, res: Response) => {
+  try {
+    const stats = collectionStats(COLLECTION_PATH);
+    if (!stats.exists) {
+      res.json({ exists: false });
+      return;
+    }
+    res.json({
+      exists: true,
+      importedAt: stats.importedAt,
+      source: stats.source,
+      uniqueOwned: stats.uniqueOwned,
+      totalCards: stats.totalCards,
+      unmatchedCount: stats.unmatchedCount,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // ---- static UI (built by apps/web/ui -> ui/dist) ----

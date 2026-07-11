@@ -6,19 +6,21 @@
  * `decks/` directory it creates is isolated and easy to clean up), speaks
  * newline-delimited JSON-RPC over stdio, and asserts:
  *   1. initialize succeeds
- *   2. tools/list returns exactly 14 tools
+ *   2. tools/list returns exactly 16 tools
  *   3. tools/call search_cards {query:"otag:token-doubler"} -> total >= 10
  *   4. tools/call search_tags {query:"removal"} -> non-empty array
  *   5. tools/call deck_create + deck_add with an off-identity card -> a
  *      rejection with a reason is present
  *   6. tools/call deck_import with a *CMDR*-marked new-mode decklist ->
  *      creates a deck, adds valid cards, and accounts for a junk line
+ *   7. tools/call collection_stats -> well-formed response, and exists
+ *      matches whether a real collection.json is present at repo root
  *
  * Cleans up the temp cwd (and any decks/ it created) on exit.
  */
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +28,26 @@ import { deleteDeck } from "../dist/tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(__dirname, "..", "dist", "index.js");
+
+// Walk up from this file to find the monorepo root (matches the logic in
+// packages/core/src/db/connection.ts), so we can check whether a real
+// collection.json happens to exist there in this dev environment.
+function findRepoRoot(startDir) {
+  let dir = startDir;
+  for (;;) {
+    if (existsSync(path.join(dir, "pnpm-workspace.yaml"))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      throw new Error(`Could not locate repo root (pnpm-workspace.yaml) above ${startDir}`);
+    }
+    dir = parent;
+  }
+}
+
+const repoRoot = findRepoRoot(__dirname);
+const repoRootCollectionPath = path.join(repoRoot, "collection.json");
 
 const workDir = mkdtempSync(path.join(tmpdir(), "scrychat-mcp-smoke-"));
 
@@ -112,7 +134,7 @@ async function main() {
     // 2. tools/list
     const listRes = await withTimeout(send("tools/list", {}), 10000, "tools/list");
     const tools = listRes.result?.tools ?? [];
-    assert(tools.length === 14, `tools/list returns 14 tools (got ${tools.length}: ${tools.map((t) => t.name).join(", ")})`);
+    assert(tools.length === 16, `tools/list returns 16 tools (got ${tools.length}: ${tools.map((t) => t.name).join(", ")})`);
 
     // 3. search_cards otag:token-doubler
     const searchRes = await withTimeout(
@@ -212,6 +234,31 @@ async function main() {
     );
 
     await deleteDeck(importDeckName, path.join(workDir, "decks"));
+
+    // 8. collection_stats -> no collection.json at repo root in this environment
+    const collectionRes = await withTimeout(
+      send("tools/call", { name: "collection_stats", arguments: {} }),
+      15000,
+      "tools/call collection_stats",
+    );
+    const collectionText = collectionRes.result?.content?.[0]?.text ?? "{}";
+    const collectionJson = JSON.parse(collectionText);
+    assert(
+      typeof collectionJson.exists === "boolean",
+      `collection_stats returns well-formed response (got ${JSON.stringify(collectionJson)})`,
+    );
+    const repoRootCollectionExists = existsSync(repoRootCollectionPath);
+    if (!repoRootCollectionExists) {
+      assert(
+        collectionJson.exists === false,
+        `collection_stats exists === false (no collection.json at repo root; got ${JSON.stringify(collectionJson)})`,
+      );
+    } else {
+      assert(
+        collectionJson.exists === true,
+        `collection_stats exists === true (repo root collection.json exists at ${repoRootCollectionPath}; got ${JSON.stringify(collectionJson)})`,
+      );
+    }
   } finally {
     child.stdin.end();
     child.kill();
