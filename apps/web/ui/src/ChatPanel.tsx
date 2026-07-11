@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
+import type { AppConfig, ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
 import { renderMarkdown } from "./markdown";
+import { SettingsDrawer } from "./SettingsDrawer";
 
 const LAST_CHAT_KEY = "scrychat.lastChat";
 const SHOW_IN_DECK_KEY = "scrychat.showInDeck";
@@ -82,10 +83,14 @@ export function ChatPanel({
   selected,
   deckCardNames,
   onOpenDeckDrawer,
+  config,
+  onConfigChange,
 }: {
   selected: string;
   deckCardNames: Set<string>;
   onOpenDeckDrawer?: () => void;
+  config: AppConfig | null;
+  onConfigChange: (config: AppConfig) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -165,6 +170,11 @@ export function ChatPanel({
   const [renameChatBusy, setRenameChatBusy] = useState(false);
   const [confirmingDeleteChat, setConfirmingDeleteChat] = useState(false);
   const renameTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // Settings drawer (gear icon in header): Escape-close + focus-return to
+  // the gear button is handled inside SettingsDrawer itself.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -923,14 +933,24 @@ export function ChatPanel({
         )}
         <button
           type="button"
-          className={`btn btn-ghost btn-small in-deck-toggle${showInDeck ? " active" : ""}`}
-          onClick={() => setShowInDeck((s) => !s)}
-          title="Toggle in-deck checkmarks on card references"
-          aria-pressed={showInDeck}
+          className="btn btn-ghost btn-small settings-drawer-toggle"
+          ref={settingsTriggerRef}
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Open settings"
+          title="Settings"
         >
-          ✓ in-deck
+          ⚙
         </button>
       </div>
+      <SettingsDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        config={config}
+        onConfigChange={onConfigChange}
+        triggerRef={settingsTriggerRef}
+        showInDeck={showInDeck}
+        onShowInDeckChange={setShowInDeck}
+      />
       {chatError && (
         <div className="chip chip-error chip-dismissible chat-header-error">
           {chatError}

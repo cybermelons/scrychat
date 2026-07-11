@@ -30,6 +30,8 @@ import {
   parseArenaLog,
   collectionStats,
   getOwnedIndex,
+  resolveQuotaTargets,
+  RECOGNIZED_QUOTA_TAGS,
   type CardResolver,
 } from "@scrychat/core";
 import {
@@ -44,6 +46,7 @@ import {
 } from "./group-chips-core.js";
 import { parseCollectionBody, buildImportResult } from "./collection-core.js";
 import { isValidDeckName } from "./deck-name-core.js";
+import { parseConfig, applyConfigPatch, DEFAULT_CONFIG, type ScrychatConfig } from "./config-core.js";
 
 // CRITICAL: strip stale ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the
 // process env at startup, before anything else touches process.env or the
@@ -66,20 +69,24 @@ const CONFIG_PATH = path.join(REPO_ROOT, "scrychat.config.json");
 const PORT = Number(process.env.PORT) || 8787;
 
 // ---- config: scrychat.config.json at repo root, tolerate absent file ----
-type ScrychatConfig = { linkifyPass: boolean };
-
-const DEFAULT_CONFIG: ScrychatConfig = { linkifyPass: true };
-
+// Parsing/validation lives in config-core.ts (pure, unit-tested); this just
+// owns the fs read/write. `config` is a single mutable object reused for the
+// process lifetime so per-request reads (e.g. config.linkifyPass) hot-apply
+// as soon as a PATCH mutates it in place — never reassign `config`.
 function loadConfig(): ScrychatConfig {
   try {
     const raw = fs.readFileSync(CONFIG_PATH, "utf8");
-    const parsed = JSON.parse(raw);
-    return {
-      linkifyPass: typeof parsed.linkifyPass === "boolean" ? parsed.linkifyPass : DEFAULT_CONFIG.linkifyPass,
-    };
+    return parseConfig(JSON.parse(raw));
   } catch {
-    return DEFAULT_CONFIG;
+    return { ...DEFAULT_CONFIG };
   }
+}
+
+function persistConfig(cfg: ScrychatConfig): void {
+  const dir = path.dirname(CONFIG_PATH);
+  const tmpPath = path.join(dir, `.${path.basename(CONFIG_PATH)}.tmp-${process.pid}-${Date.now()}`);
+  fs.writeFileSync(tmpPath, JSON.stringify(cfg, null, 2), "utf8");
+  fs.renameSync(tmpPath, CONFIG_PATH);
 }
 
 const config = loadConfig();
@@ -1028,7 +1035,7 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Deck not found" });
       return;
     }
-    const report = await deckReport(req.params.name, resolver, DECKS_DIR);
+    const report = await deckReport(req.params.name, resolver, DECKS_DIR, config.quotaTargets);
 
     const owned = getOwnedIndex();
     function isOwnedName(name: string): boolean {
@@ -1089,7 +1096,7 @@ app.get("/api/decks/:name/export", async (req: Request, res: Response) => {
     const rawFormat = req.query.format;
     const format = allowedFormats.includes(rawFormat as (typeof allowedFormats)[number])
       ? (rawFormat as (typeof allowedFormats)[number])
-      : "mtga";
+      : config.defaultExportFormat;
     const text = await exportDeck(req.params.name, format, DECKS_DIR);
     res.type("text/plain").send(text);
   } catch (err) {
@@ -1251,7 +1258,12 @@ app.post("/api/decks/import", async (req: Request, res: Response) => {
       res.status(400).json({ error: 'mode must be "new" or "existing"' });
       return;
     }
-    const result = (await importDecklist(text, { deckName, mode }, resolver, DECKS_DIR)) as {
+    const result = (await importDecklist(
+      text,
+      { deckName, mode, targets: config.quotaTargets },
+      resolver,
+      DECKS_DIR
+    )) as {
       created?: { name: string };
       added?: { name: string }[];
     };
@@ -1447,6 +1459,41 @@ app.get("/api/collection", async (_req: Request, res: Response) => {
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+// ---- settings surface: scrychat.config.json read/write over HTTP (issue #37) ----
+app.get("/api/config", (_req: Request, res: Response) => {
+  res.json({
+    ...config,
+    recognizedQuotaTags: RECOGNIZED_QUOTA_TAGS,
+    effectiveQuotaTargets: resolveQuotaTargets(config.quotaTargets),
+  });
+});
+
+app.patch("/api/config", (req: Request, res: Response) => {
+  const { config: next, errors } = applyConfigPatch(config, req.body);
+  if (errors.length > 0) {
+    res.status(400).json({ errors });
+    return;
+  }
+  Object.assign(config, next);
+  // PATCH only ever adds/replaces quotaTargets; explicitly delete it from the
+  // live object when the patch cleared the override, since Object.assign
+  // can't remove keys that `next` no longer has.
+  if (!("quotaTargets" in next)) {
+    delete config.quotaTargets;
+  }
+  try {
+    persistConfig(config);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  res.json({
+    ...config,
+    recognizedQuotaTags: RECOGNIZED_QUOTA_TAGS,
+    effectiveQuotaTargets: resolveQuotaTargets(config.quotaTargets),
+  });
 });
 
 // ---- health check: diagnose skill-loading / DB-staleness issues (issue #40) ----

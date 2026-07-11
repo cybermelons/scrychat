@@ -19,8 +19,12 @@ import {
   setCommander,
   setCardTagsResult,
   exportDeck,
+  resolveQuotaTargets,
+  DEFAULT_QUOTA_TARGETS,
+  RECOGNIZED_QUOTA_TAGS,
   type CardResolver,
   type ResolvedCard,
+  type QuotaTargets,
 } from "../src/decks.js";
 import { parseDecklist } from "../src/import.js";
 
@@ -339,6 +343,117 @@ describe("decks", () => {
 
     const report = await deckReport("Selesnya Value", resolver, decksDir);
     expect(report.untaggedForQuota).toBe(1);
+  });
+
+  it("RECOGNIZED_QUOTA_TAGS is the union of quota tag names and interaction roles", () => {
+    expect(new Set(RECOGNIZED_QUOTA_TAGS)).toEqual(
+      new Set(["land", "ramp", "draw", "interaction", "wipe", "removal", "counterspell"])
+    );
+  });
+
+  describe("configurable quota targets", () => {
+    it("global targets override the default want/ok", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards(
+        "Selesnya Value",
+        [{ name: "Sol Ring", tags: ["ramp"] }],
+        resolver,
+        decksDir
+      );
+
+      const globalTargets: Partial<QuotaTargets> = { ramp: [1, 1] };
+      const report = await deckReport("Selesnya Value", resolver, decksDir, globalTargets);
+      expect(report.quotaCheck.ramp.want).toBe("1-1");
+      expect(report.quotaCheck.ramp.ok).toBe(true);
+      // untouched fields still use built-in defaults
+      expect(report.quotaCheck.lands.want).toBe("36-38");
+    });
+
+    it("per-deck quotaTargets in the deck file beats global targets", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards(
+        "Selesnya Value",
+        [{ name: "Sol Ring", tags: ["ramp"] }],
+        resolver,
+        decksDir
+      );
+
+      const filePath = path.join(decksDir, "selesnya-value.json");
+      const raw = JSON.parse(await fs.readFile(filePath, "utf8"));
+      raw.quotaTargets = { ramp: [1, 1] };
+      await fs.writeFile(filePath, JSON.stringify(raw, null, 2), "utf8");
+
+      const globalTargets: Partial<QuotaTargets> = { ramp: [5, 6] };
+      const report = await deckReport("Selesnya Value", resolver, decksDir, globalTargets);
+      expect(report.quotaCheck.ramp.want).toBe("1-1");
+      expect(report.quotaCheck.ramp.ok).toBe(true);
+    });
+
+    it("round-trips quotaTargets on the deck file through create/write/read", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      const filePath = path.join(decksDir, "selesnya-value.json");
+      const raw = JSON.parse(await fs.readFile(filePath, "utf8"));
+      raw.quotaTargets = { wipes: [3, 5] };
+      await fs.writeFile(filePath, JSON.stringify(raw, null, 2), "utf8");
+
+      const deck = await getDeck("Selesnya Value", decksDir);
+      expect(deck?.quotaTargets).toEqual({ wipes: [3, 5] });
+    });
+
+    it("deckSummary passes targets through and matches deckReport's quotaCheck", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards(
+        "Selesnya Value",
+        [{ name: "Sol Ring", tags: ["ramp"] }],
+        resolver,
+        decksDir
+      );
+
+      const globalTargets: Partial<QuotaTargets> = { ramp: [1, 1] };
+      const report = await deckReport("Selesnya Value", resolver, decksDir, globalTargets);
+      const summary = await deckSummary("Selesnya Value", resolver, decksDir, globalTargets);
+      expect(summary.quotaCheck).toEqual(report.quotaCheck);
+    });
+
+    describe("resolveQuotaTargets", () => {
+      it("falls back to DEFAULT_QUOTA_TARGETS when nothing is given", () => {
+        expect(resolveQuotaTargets()).toEqual(DEFAULT_QUOTA_TARGETS);
+      });
+
+      it("applies a valid global override field-wise, leaving other fields default", () => {
+        const result = resolveQuotaTargets({ lands: [30, 32] });
+        expect(result.lands).toEqual([30, 32]);
+        expect(result.ramp).toEqual(DEFAULT_QUOTA_TARGETS.ramp);
+      });
+
+      it("per-deck override wins over global for the same field", () => {
+        const result = resolveQuotaTargets({ ramp: [5, 6] }, { ramp: [1, 2] });
+        expect(result.ramp).toEqual([1, 2]);
+      });
+
+      it("falls back to global when per-deck field is invalid (wrong length)", () => {
+        const result = resolveQuotaTargets({ ramp: [5, 6] }, { ramp: [1] as any });
+        expect(result.ramp).toEqual([5, 6]);
+      });
+
+      it("falls back to default when both global and per-deck fields are invalid (non-numeric)", () => {
+        const result = resolveQuotaTargets(
+          { draw: ["a", "b"] as any },
+          { draw: ["c", "d"] as any }
+        );
+        expect(result.draw).toEqual(DEFAULT_QUOTA_TARGETS.draw);
+      });
+
+      it("falls back to default when a tuple has min > max", () => {
+        const result = resolveQuotaTargets({ wipes: [5, 2] });
+        expect(result.wipes).toEqual(DEFAULT_QUOTA_TARGETS.wipes);
+      });
+
+      it("global valid, per-deck min>max invalid: falls back to global", () => {
+        const result = resolveQuotaTargets({ interaction: [7, 9] }, { interaction: [10, 1] });
+        expect(result.interaction).toEqual([7, 9]);
+      });
+    });
   });
 
   it("setCardTags replaces a card's tags, and an empty array clears them", async () => {

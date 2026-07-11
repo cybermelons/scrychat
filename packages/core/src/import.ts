@@ -11,7 +11,7 @@
 // full deck_import behavior (new-deck vs existing-deck modes, commander
 // inference, accounting of added/rejected/unparsed).
 
-import type { CardEntry, CardResolver, Deck, DeckSummary } from "./decks.js";
+import type { CardEntry, CardResolver, Deck, DeckSummary, QuotaTargets } from "./decks.js";
 import { addCards, createDeck, deckSummary, getDeck } from "./decks.js";
 
 export type DeckImportEntry = { name: string; count: number; commander?: boolean };
@@ -305,6 +305,7 @@ function toCardEntry(e: DeckImportEntry): CardEntry {
 export type ImportDecklistOptions = {
   deckName?: string;
   mode?: "new" | "existing";
+  targets?: Partial<QuotaTargets>;
 };
 
 /**
@@ -327,6 +328,7 @@ export async function importDecklist(
 ): Promise<unknown> {
   const deckNameArg = opts.deckName;
   const modeArg = opts.mode;
+  const targets = opts.targets;
 
   const parsed = parseDecklist(text);
   const parsedOut = { entries: parsed.entries, unparsed: parsed.unparsed };
@@ -343,7 +345,7 @@ export async function importDecklist(
       return { error: `Deck not found: ${deckNameArg}`, parsed: parsedOut };
     }
     const result = await addCards(deckNameArg, parsed.entries.map(toCardEntry), resolver, decksDir);
-    const summary = await deckSummary(deckNameArg, resolver, decksDir);
+    const summary = await deckSummary(deckNameArg, resolver, decksDir, targets);
     return {
       mode,
       added: result.added,
@@ -413,7 +415,7 @@ export async function importDecklist(
   }
 
   const result = await addCards(deckName, nonCommanderEntries!.map(toCardEntry), resolver, decksDir);
-  const summary: DeckSummary = await deckSummary(deckName, resolver, decksDir);
+  const summary: DeckSummary = await deckSummary(deckName, resolver, decksDir, targets);
 
   return {
     mode,

@@ -7,12 +7,29 @@ export type CardEntry = {
   count?: number;
 };
 
+export type QuotaTargets = {
+  lands: [number, number];
+  ramp: [number, number];
+  draw: [number, number];
+  interaction: [number, number];
+  wipes: [number, number];
+};
+
+export const DEFAULT_QUOTA_TARGETS: QuotaTargets = {
+  lands: [36, 38],
+  ramp: [10, 12],
+  draw: [10, 12],
+  interaction: [8, 10],
+  wipes: [2, 4],
+};
+
 export type Deck = {
   name: string;
   commander: string;
   commanderIdentity: string[];
   cards: CardEntry[];
   updatedAt: string;
+  quotaTargets?: Partial<QuotaTargets>;
 };
 
 export type ResolvedCard = {
@@ -574,12 +591,14 @@ export async function removeTag(
 const QUOTA_TAG_NAMES = new Set(["land", "ramp", "draw", "interaction", "wipe"]);
 const UNTAGGED = "untagged";
 
+export const RECOGNIZED_QUOTA_TAGS: string[] = [...new Set([...QUOTA_TAG_NAMES, ...INTERACTION_ROLES])];
+
 function isRecognizedQuotaTag(tag: string): boolean {
   const lower = tag.toLowerCase();
   return QUOTA_TAG_NAMES.has(lower) || INTERACTION_ROLES.has(lower);
 }
 
-function quota(have: number, min: number, max: number): QuotaCheck {
+function quota(have: number, [min, max]: [number, number]): QuotaCheck {
   return {
     have,
     want: `${min}-${max}`,
@@ -587,15 +606,57 @@ function quota(have: number, min: number, max: number): QuotaCheck {
   };
 }
 
+const QUOTA_TARGET_FIELDS = ["lands", "ramp", "draw", "interaction", "wipes"] as const;
+
+function isValidTuple(value: unknown): value is [number, number] {
+  if (!Array.isArray(value) || value.length !== 2) return false;
+  const [min, max] = value;
+  return (
+    typeof min === "number" &&
+    typeof max === "number" &&
+    Number.isFinite(min) &&
+    Number.isFinite(max) &&
+    min <= max
+  );
+}
+
+/**
+ * Merges quota target overrides field-wise: for each field, use `perDeck`'s
+ * value if valid, else `global`'s value if valid, else the built-in default.
+ * A field only "applies" if it's a 2-tuple of finite numbers with min <= max;
+ * an invalid field silently falls back to the next layer down (never throws).
+ */
+export function resolveQuotaTargets(
+  global?: Partial<QuotaTargets>,
+  perDeck?: Partial<QuotaTargets>
+): QuotaTargets {
+  const result = {} as QuotaTargets;
+  for (const field of QUOTA_TARGET_FIELDS) {
+    const perDeckValue = perDeck?.[field];
+    const globalValue = global?.[field];
+    if (isValidTuple(perDeckValue)) {
+      result[field] = perDeckValue;
+    } else if (isValidTuple(globalValue)) {
+      result[field] = globalValue;
+    } else {
+      result[field] = DEFAULT_QUOTA_TARGETS[field];
+    }
+  }
+  return result;
+}
+
 export async function deckReport(
   name: string,
   resolver: CardResolver,
-  decksDir: string = DEFAULT_DECKS_DIR()
+  decksDir: string = DEFAULT_DECKS_DIR(),
+  targets?: Partial<QuotaTargets>
 ): Promise<DeckReport> {
   const deck = await getDeck(name, decksDir);
   if (!deck) {
     throw new Error(`Deck not found: ${name}`);
   }
+
+  const effectiveTargets = resolveQuotaTargets(targets, deck.quotaTargets);
 
   const byTag: Record<string, number> = {};
   const curve: Record<string, number> = {
@@ -672,11 +733,11 @@ export async function deckReport(
     untaggedForQuota,
     curve,
     quotaCheck: {
-      lands: quota(landsHave, 36, 38),
-      ramp: quota(rampHave, 10, 12),
-      draw: quota(drawHave, 10, 12),
-      interaction: quota(interactionHave, 8, 10),
-      wipes: quota(wipesHave, 2, 4),
+      lands: quota(landsHave, effectiveTargets.lands),
+      ramp: quota(rampHave, effectiveTargets.ramp),
+      draw: quota(drawHave, effectiveTargets.draw),
+      interaction: quota(interactionHave, effectiveTargets.interaction),
+      wipes: quota(wipesHave, effectiveTargets.wipes),
     },
     identityViolations,
     arenaCheck: {
@@ -699,9 +760,10 @@ export type DeckSummary = {
 export async function deckSummary(
   name: string,
   resolver: CardResolver,
-  decksDir: string = DEFAULT_DECKS_DIR()
+  decksDir: string = DEFAULT_DECKS_DIR(),
+  targets?: Partial<QuotaTargets>
 ): Promise<DeckSummary> {
-  const report = await deckReport(name, resolver, decksDir);
+  const report = await deckReport(name, resolver, decksDir, targets);
   return {
     total: report.total,
     quotaCheck: report.quotaCheck,

@@ -94,6 +94,22 @@ export type DeckImportResult = {
 
 export type ExportFormat = "mtga" | "plain" | "moxfield";
 
+export type QuotaTargetKey = "lands" | "ramp" | "draw" | "interaction" | "wipes";
+
+export type QuotaTargets = Partial<Record<QuotaTargetKey, [number, number]>>;
+
+export type EffectiveQuotaTargets = Record<QuotaTargetKey, [number, number]>;
+
+export type AppConfig = {
+  linkifyPass: boolean;
+  defaultExportFormat: ExportFormat;
+  quotaTargets?: QuotaTargets;
+  recognizedQuotaTags: string[];
+  effectiveQuotaTargets: EffectiveQuotaTargets;
+};
+
+export type ConfigPatchResult = AppConfig | { errors: string[] };
+
 export const LEGACY_ROLE_TAGS = [
   "land",
   "ramp",

@@ -173,6 +173,9 @@ instead of asking.
 - Remainder: theme payoffs / win conditions
 - Singleton: exactly one copy of each nonland card (basic lands exempt)
 - Color identity includes mana symbols in rules text, not just the mana cost — check both
+- These numbers are just defaults — targets are configurable (global config + per-deck override,
+  per-deck wins); `deck_get`'s `quotaCheck[...].want` always reflects the ACTIVE targets, so trust
+  `want`, don't assume the defaults above (e.g. landfall/stax decks may run different numbers)
 
 ## Presentation
 

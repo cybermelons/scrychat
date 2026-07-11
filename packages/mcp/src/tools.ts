@@ -7,6 +7,7 @@
  * killing the tool call.
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -37,10 +38,33 @@ import {
   exportDeck,
 } from "@scrychat/core";
 import { importDecklist } from "@scrychat/core";
-import type { CardResolver, CardEntry } from "@scrychat/core";
+import type { CardResolver, CardEntry, QuotaTargets } from "@scrychat/core";
 import type { Card } from "@scrychat/core";
 
 const decksDir = path.resolve(process.cwd(), "decks");
+
+/**
+ * Loads `quotaTargets` from scrychat.config.json (repo root, cwd-relative) once
+ * at module init. Tolerates an absent or invalid config file (falls back to
+ * undefined, letting decks.ts's built-in defaults apply). Per-deck overrides
+ * (Deck.quotaTargets) still win over this global config — see decks.ts's
+ * resolveQuotaTargets.
+ */
+function loadGlobalQuotaTargets(): Partial<QuotaTargets> | undefined {
+  try {
+    const configPath = path.resolve(process.cwd(), "scrychat.config.json");
+    const raw = fs.readFileSync(configPath, "utf8");
+    const config = JSON.parse(raw);
+    if (config && typeof config === "object" && config.quotaTargets && typeof config.quotaTargets === "object") {
+      return config.quotaTargets as Partial<QuotaTargets>;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const globalQuotaTargets = loadGlobalQuotaTargets();
 
 /** Adapts core's getCard() into the shape decks.ts's CardResolver expects. */
 const resolveCard: CardResolver = async (name: string) => {
@@ -332,7 +356,7 @@ export function registerTools(server: McpServer): void {
           }
         }
 
-        const report = await deckReport(name, resolveCard, decksDir);
+        const report = await deckReport(name, resolveCard, decksDir, globalQuotaTargets);
 
         return {
           name: deck.name,
@@ -383,7 +407,7 @@ export function registerTools(server: McpServer): void {
     async ({ name, cards }) => {
       return safe(async () => {
         const result = await addCards(name, cards as CardEntry[], resolveCard, decksDir);
-        const summary = await deckSummary(name, resolveCard, decksDir);
+        const summary = await deckSummary(name, resolveCard, decksDir, globalQuotaTargets);
         return { ...result, summary };
       });
     },
@@ -402,7 +426,7 @@ export function registerTools(server: McpServer): void {
     async ({ name, cards }) => {
       return safe(async () => {
         const deck = await removeCards(name, cards, decksDir);
-        const summary = await deckSummary(name, resolveCard, decksDir);
+        const summary = await deckSummary(name, resolveCard, decksDir, globalQuotaTargets);
         return {
           name: deck.name,
           commander: deck.commander,
@@ -430,7 +454,7 @@ export function registerTools(server: McpServer): void {
       },
     },
     async ({ text, deck_name, mode }) => {
-      return safe(async () => importDecklist(text, { deckName: deck_name, mode }, resolveCard, decksDir));
+      return safe(async () => importDecklist(text, { deckName: deck_name, mode, targets: globalQuotaTargets }, resolveCard, decksDir));
     },
   );
 
@@ -452,7 +476,7 @@ export function registerTools(server: McpServer): void {
     async ({ deck_name, cards }) => {
       return safe(async () => {
         const result = await setCardTagsResult(deck_name, cards, decksDir);
-        const summary = await deckSummary(deck_name, resolveCard, decksDir);
+        const summary = await deckSummary(deck_name, resolveCard, decksDir, globalQuotaTargets);
         return { updated: result.updated, rejected: result.rejected, summary };
       });
     },
@@ -472,7 +496,7 @@ export function registerTools(server: McpServer): void {
     async ({ deck_name, from, to }) => {
       return safe(async () => {
         const deck = await renameTag(deck_name, from, to, decksDir);
-        const summary = await deckSummary(deck_name, resolveCard, decksDir);
+        const summary = await deckSummary(deck_name, resolveCard, decksDir, globalQuotaTargets);
         return {
           name: deck.name,
           commander: deck.commander,
@@ -499,7 +523,7 @@ export function registerTools(server: McpServer): void {
     async ({ deck_name, card, count }) => {
       return safe(async () => {
         const result = await setCardCount(deck_name, card, count, resolveCard, decksDir);
-        const summary = await deckSummary(deck_name, resolveCard, decksDir);
+        const summary = await deckSummary(deck_name, resolveCard, decksDir, globalQuotaTargets);
         return { updated: result.updated, rejected: result.rejected, summary };
       });
     },
@@ -543,7 +567,7 @@ export function registerTools(server: McpServer): void {
     async ({ deck_name, commander }) => {
       return safe(async () => {
         const r = await setCommander(deck_name, commander, resolveCard, decksDir);
-        const summary = await deckSummary(deck_name, resolveCard, decksDir);
+        const summary = await deckSummary(deck_name, resolveCard, decksDir, globalQuotaTargets);
         return {
           name: r.deck.name,
           commander: r.deck.commander,

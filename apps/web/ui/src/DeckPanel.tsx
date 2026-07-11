@@ -129,12 +129,14 @@ export function DeckPanel({
   onDeckNames,
   open,
   onClose,
+  defaultExportFormat,
 }: {
   selected: string;
   setSelected: (name: string) => void;
   onDeckNames?: (names: Set<string>) => void;
   open?: boolean;
   onClose?: () => void;
+  defaultExportFormat?: ExportFormat;
 }) {
   const [decks, setDecks] = useState<DeckSummary[]>([]);
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -214,8 +216,17 @@ export function DeckPanel({
   const [confirmingDeleteTag, setConfirmingDeleteTag] = useState<string | null>(null);
   const [tagDeleteBusy, setTagDeleteBusy] = useState(false);
 
-  // export format picker
+  // export format picker: initialized from config.defaultExportFormat once
+  // App.tsx's GET /api/config resolves (falls back to "mtga" until then, or
+  // if config never arrives). Only adopts the config value before the user
+  // has touched the picker, so it doesn't clobber a manual in-session choice.
   const [exportFormat, setExportFormat] = useState<ExportFormat>("mtga");
+  const exportFormatTouchedRef = useRef(false);
+  useEffect(() => {
+    if (defaultExportFormat && !exportFormatTouchedRef.current) {
+      setExportFormat(defaultExportFormat);
+    }
+  }, [defaultExportFormat]);
 
   // undo chip for card removal (× button). Captures `deck` (the selection AT
   // REMOVAL TIME) alongside name/tags/count so a deck switch while the chip
@@ -1161,7 +1172,10 @@ export function DeckPanel({
               <select
                 className="role-select export-format-select"
                 value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+                onChange={(e) => {
+                  exportFormatTouchedRef.current = true;
+                  setExportFormat(e.target.value as ExportFormat);
+                }}
                 aria-label="Export format"
               >
                 <option value="mtga">MTGA</option>
