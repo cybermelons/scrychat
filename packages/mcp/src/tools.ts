@@ -16,7 +16,10 @@ import {
   searchTags,
   findCombos,
   findAlternatives,
+  collectionStats,
+  getOwnedIndex,
 } from "@scrychat/core";
+import type { OwnedIndex } from "@scrychat/core";
 import {
   listDecks,
   createDeck,
@@ -70,7 +73,16 @@ function truncate(text: string | null, max: number): string {
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
-function shortCard(card: Card) {
+/** Checks card ownership by oracle_id, falling back to name (incl. front-face for DFCs). */
+function ownedFlag(card: Card, idx: OwnedIndex): boolean {
+  if (card.oracleId && idx.oracleIds.has(card.oracleId)) return true;
+  const lower = card.name.toLowerCase();
+  if (idx.names.has(lower)) return true;
+  const frontFace = lower.split(" // ")[0];
+  return idx.names.has(frontFace);
+}
+
+function shortCard(card: Card, idx?: OwnedIndex | null) {
   return {
     n: card.name,
     mc: card.manaCost,
@@ -81,6 +93,7 @@ function shortCard(card: Card) {
     r: card.edhrecRank,
     o: truncate(card.oracleText, 200),
     arena: card.arena,
+    ...(idx ? { owned: ownedFlag(card, idx) } : {}),
   };
 }
 
@@ -220,9 +233,10 @@ export function registerTools(server: McpServer): void {
       return safe(async () => {
         const q = query.includes("legal:") ? query : `${query} legal:commander`;
         const result = await searchCards(q, { limit, order });
+        const idx = getOwnedIndex();
         return {
           total: result.total,
-          cards: result.cards.map(shortCard),
+          cards: result.cards.map((c) => shortCard(c, idx)),
         };
       });
     },
@@ -243,6 +257,7 @@ export function registerTools(server: McpServer): void {
       return safe(async () => {
         const card = await getCard(name);
         if (!card) return { error: `Card not found: ${name}` };
+        const idx = getOwnedIndex();
         return {
           name: card.name,
           manaCost: card.manaCost,
@@ -260,6 +275,7 @@ export function registerTools(server: McpServer): void {
           historicLegal: card.historicLegal,
           timelessLegal: card.timelessLegal,
           producedMana: card.producedMana,
+          ...(idx ? { owned: ownedFlag(card, idx) } : {}),
         };
       });
     },
@@ -297,10 +313,18 @@ export function registerTools(server: McpServer): void {
           .describe('Restrict results to this color identity, e.g. "gw"'),
         max_price: z.number().optional().describe("Max USD price per alternative"),
         limit_per_role: z.number().int().positive().optional().describe("Max members returned per role"),
+        owned_only: z
+          .boolean()
+          .optional()
+          .describe("If true, only return alternatives already in the imported collection (requires a collection import; errors if none exists)"),
       },
     },
-    async ({ card, color_identity_within, max_price, limit_per_role }) => {
+    async ({ card, color_identity_within, max_price, limit_per_role, owned_only }) => {
       return safe(async () => {
+        const idx = getOwnedIndex();
+        if (owned_only && !idx) {
+          return { error: "no collection imported" };
+        }
         const result = await findAlternatives(card, {
           colorIdentityWithin: color_identity_within,
           maxPrice: max_price,
@@ -308,11 +332,23 @@ export function registerTools(server: McpServer): void {
         });
         return {
           card: result.card,
-          roles: result.roles.map((role) => ({
-            slug: role.slug,
-            label: role.label,
-            members: role.members.map((c) => ({ n: c.name, usd: c.usd, ci: c.colorIdentity.join(""), arena: c.arena })),
-          })),
+          roles: result.roles.map((role) => {
+            let members = role.members.map((c) => ({
+              n: c.name,
+              usd: c.usd,
+              ci: c.colorIdentity.join(""),
+              arena: c.arena,
+              ...(idx ? { owned: ownedFlag(c, idx) } : {}),
+            }));
+            if (owned_only && idx) {
+              members = members.filter((m) => m.owned);
+            }
+            return {
+              slug: role.slug,
+              label: role.label,
+              members,
+            };
+          }),
         };
       });
     },
@@ -603,6 +639,26 @@ export function registerTools(server: McpServer): void {
       return safe(async () => {
         const text = await exportDeck(deck_name, format ?? "mtga", decksDir);
         return { text };
+      });
+    },
+  );
+
+  server.registerTool(
+    "collection_stats",
+    {
+      title: "Collection stats",
+      description:
+        "Returns summary stats for the imported Arena collection (unique owned cards, total copies, unmatched " +
+        "arena ids). Use to check whether a collection is imported before relying on 'owned' fields elsewhere.",
+      inputSchema: {},
+    },
+    async () => {
+      return safe(async () => {
+        const stats = collectionStats();
+        if (!stats.exists) {
+          return { exists: false, hint: "import via web UI: link Arena log folder or drag-drop Player.log" };
+        }
+        return stats;
       });
     },
   );

@@ -66,7 +66,7 @@ async function main(): Promise<void> {
       setMeta(db, "default_cards_updated_at", dl.updatedAt);
       const secs = ((Date.now() - t0) / 1000).toFixed(1);
       console.log(
-        `[ingest] prices done in ${secs}s: read=${result.read} oraclesPriced=${result.oraclesPriced} updated=${result.updated}`,
+        `[ingest] prices done in ${secs}s: read=${result.read} oraclesPriced=${result.oraclesPriced} updated=${result.updated} arenaCount=${result.arenaCount} arenaIdCount=${result.arenaIdCount}`,
       );
     }
 

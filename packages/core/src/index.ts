@@ -7,3 +7,5 @@ export * from "./alternatives.js";
 export * from "./decks.js";
 export * from "./import.js";
 export * from "./local.js";
+export * from "./arena-log.js";
+export * from "./collection.js";

@@ -210,6 +210,7 @@ interface CardRow {
   scryfall_uri: string | null;
   legal_commander: number | null;
   arena: number | null;
+  arena_id: number | null;
   brawl: string | null;
   standardbrawl: string | null;
   historic: string | null;
@@ -220,6 +221,8 @@ interface CardRow {
 export function rowToCard(row: CardRow): Card {
   return {
     name: row.name,
+    oracleId: row.oracle_id,
+    arenaId: row.arena_id ?? null,
     manaCost: row.mana_cost,
     cmc: row.cmc ?? 0,
     typeLine: row.type_line ?? "",
@@ -242,7 +245,7 @@ export function rowToCard(row: CardRow): Card {
 const CARD_COLUMNS = `
   oracle_id, name, mana_cost, cmc, type_line, oracle_text, color_identity,
   ci_mask, edhrec_rank, price_usd, image, scryfall_uri, legal_commander,
-  arena, brawl, standardbrawl, historic, timeless, produced_mana
+  arena, arena_id, brawl, standardbrawl, historic, timeless, produced_mana
 `;
 
 /**
