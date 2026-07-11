@@ -95,8 +95,12 @@ export function ChatPanel({
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [deckChats, setDeckChats] = useState<ChatSummary[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [chatsRefreshFailed, setChatsRefreshFailed] = useState(false);
+  const [deckChatsRefreshFailed, setDeckChatsRefreshFailed] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
   const chatIdRef = useRef<string | null>(null);
+  const lastUserMessageRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
@@ -152,12 +156,14 @@ export function ChatPanel({
       .then((r) => r.json())
       .then((list: ChatSummary[]) => {
         setChats(list);
+        setChatsRefreshFailed(false);
         return list;
       })
-      .catch(() => setChats([]));
+      .catch(() => setChatsRefreshFailed(true));
   }, []);
 
   const loadChat = useCallback((id: string) => {
+    setChatError(null);
     setLoadingChat(true);
     return fetch(`/api/chats/${encodeURIComponent(id)}`)
       .then(async (r) => {
@@ -178,7 +184,7 @@ export function ChatPanel({
         );
         localStorage.setItem(LAST_CHAT_KEY, id);
       })
-      .catch(() => void 0)
+      .catch((e: Error) => setChatError(e.message))
       .finally(() => setLoadingChat(false));
   }, []);
 
@@ -195,12 +201,17 @@ export function ChatPanel({
     const id = chatIdRef.current;
     if (!id) return;
     if (!window.confirm("Delete this chat? This cannot be undone.")) return;
+    setChatError(null);
     fetch(`/api/chats/${encodeURIComponent(id)}`, { method: "DELETE" })
-      .then(() => {
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${r.status}`);
+        }
         startNewChat();
         refreshChats();
       })
-      .catch(() => void 0);
+      .catch((e: Error) => setChatError(e.message));
   }, [startNewChat, refreshChats]);
 
   const renameChat = useCallback(() => {
@@ -211,15 +222,20 @@ export function ChatPanel({
     if (next == null) return;
     const title = next.trim();
     if (!title) return;
+    setChatError(null);
     fetch(`/api/chats/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
     })
-      .then((r) => {
-        if (r.ok) void refreshChats();
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${r.status}`);
+        }
+        void refreshChats();
       })
-      .catch(() => void 0);
+      .catch((e: Error) => setChatError(e.message));
   }, [chats, refreshChats]);
 
   // On mount: load chat list, restore last-open chat.
@@ -239,8 +255,11 @@ export function ChatPanel({
     }
     fetch(`/api/chats?deck=${encodeURIComponent(selected)}`)
       .then((r) => r.json())
-      .then((list: ChatSummary[]) => setDeckChats(list))
-      .catch(() => setDeckChats([]));
+      .then((list: ChatSummary[]) => {
+        setDeckChats(list);
+        setDeckChatsRefreshFailed(false);
+      })
+      .catch(() => setDeckChatsRefreshFailed(true));
   }, [selected]);
 
   const updateLastAssistant = useCallback(
@@ -259,10 +278,11 @@ export function ChatPanel({
     []
   );
 
-  const send = useCallback(async () => {
-    const message = input.trim();
+  const send = useCallback(async (override?: string) => {
+    const message = (override ?? input).trim();
     if (!message || streaming) return;
-    setInput("");
+    lastUserMessageRef.current = message;
+    if (override === undefined) setInput("");
     setError(null);
     setStreaming(true);
     setMessages((m) => [
@@ -381,6 +401,13 @@ export function ChatPanel({
       void refreshChats();
     }
   }, [input, streaming, updateLastAssistant, selected, refreshChats]);
+
+  const retry = useCallback(() => {
+    const last = lastUserMessageRef.current;
+    if (!last || streaming) return;
+    setError(null);
+    void send(last);
+  }, [send, streaming]);
 
   const stop = useCallback(() => {
     const id = chatIdRef.current;
@@ -702,6 +729,22 @@ export function ChatPanel({
           ✓ in-deck
         </button>
       </div>
+      {chatError && (
+        <div className="chip chip-error chip-dismissible chat-header-error">
+          {chatError}
+          <button
+            type="button"
+            className="chip-dismiss"
+            onClick={() => setChatError(null)}
+            aria-label="Dismiss error"
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {(chatsRefreshFailed || deckChatsRefreshFailed) && (
+        <div className="chip chip-muted chat-header-error">couldn't refresh chats</div>
+      )}
       <div
         className="chat-scroll"
         ref={scrollRef}
@@ -736,7 +779,22 @@ export function ChatPanel({
           </div>
         ))}
         {streaming && <div className="chip chip-streaming">thinking…</div>}
-        {error && <div className="chip chip-error">error: {error}</div>}
+        {error && (
+          <div className="chip chip-error chip-dismissible">
+            error: {error}
+            <button type="button" className="chip-retry" onClick={retry} disabled={streaming}>
+              Retry
+            </button>
+            <button
+              type="button"
+              className="chip-dismiss"
+              onClick={() => setError(null)}
+              aria-label="Dismiss error"
+            >
+              ×
+            </button>
+          </div>
+        )}
         {toolPopover && (
           <pre className="tool-result-popover" style={{ left: toolPopover.x + 12, top: toolPopover.y + 12 }}>
             {toolPopover.text}

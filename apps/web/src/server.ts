@@ -590,7 +590,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       }
     }
   } catch (err) {
-    sseWrite(res, { type: "done", error: err instanceof Error ? err.message : String(err) });
+    sseWrite(res, { type: "done", sessionId: clientSessionId, error: err instanceof Error ? err.message : String(err) });
   } finally {
     const entry = activeTurns.get(chat.id);
     if (entry) {
@@ -760,7 +760,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     chat.updatedAt = new Date().toISOString();
     await writeChatFile(chat);
     if (turnInterrupted && !res.writableEnded) {
-      sseWrite(res, { type: "done", interrupted: true });
+      sseWrite(res, { type: "done", sessionId: clientSessionId, interrupted: true });
     }
     res.end();
   }

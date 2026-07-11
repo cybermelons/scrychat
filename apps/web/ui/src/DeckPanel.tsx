@@ -94,6 +94,8 @@ export function DeckPanel({
   >(null);
   const [loading, setLoading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
 
@@ -132,6 +134,7 @@ export function DeckPanel({
         .then((r) => r.json())
         .then((list: DeckSummary[]) => {
           setDecks(list);
+          setRefreshFailed(false);
           if (selectName) {
             setSelected(selectName);
           } else if (list.length > 0) {
@@ -142,7 +145,7 @@ export function DeckPanel({
           }
           return list;
         })
-        .catch(() => setDecks([]));
+        .catch(() => setRefreshFailed(true));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [setSelected]
@@ -223,6 +226,7 @@ export function DeckPanel({
   const removeCard = useCallback(
     (name: string) => {
       if (!selected) return;
+      setActionError(null);
       setRemoveBusy(name);
       fetch(`/api/decks/${encodeURIComponent(selected)}/cards`, {
         method: "DELETE",
@@ -236,7 +240,7 @@ export function DeckPanel({
           }
           loadDeck(selected);
         })
-        .catch(() => void 0)
+        .catch((e: Error) => setActionError(e.message))
         .finally(() => setRemoveBusy(null));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -258,6 +262,7 @@ export function DeckPanel({
   const saveCardTags = useCallback(
     (cardName: string, tags: string[]) => {
       if (!selected) return;
+      setActionError(null);
       setEditorBusy(true);
       fetch(`/api/decks/${encodeURIComponent(selected)}/cards`, {
         method: "PATCH",
@@ -272,7 +277,7 @@ export function DeckPanel({
           closeTagEditor();
           loadDeck(selected);
         })
-        .catch(() => void 0)
+        .catch((e: Error) => setActionError(e.message))
         .finally(() => setEditorBusy(false));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -285,6 +290,7 @@ export function DeckPanel({
         setRenamingGroup(null);
         return;
       }
+      setActionError(null);
       setRenameBusy(true);
       fetch(`/api/decks/${encodeURIComponent(selected)}/tags`, {
         method: "PATCH",
@@ -299,7 +305,7 @@ export function DeckPanel({
           setRenamingGroup(null);
           loadDeck(selected);
         })
-        .catch(() => void 0)
+        .catch((e: Error) => setActionError(e.message))
         .finally(() => setRenameBusy(false));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -309,6 +315,7 @@ export function DeckPanel({
   const deleteCurrentDeck = useCallback(() => {
     if (!selected) return;
     if (!window.confirm(`Delete deck "${selected}"? This cannot be undone.`)) return;
+    setActionError(null);
     setDeleteBusy(true);
     fetch(`/api/decks/${encodeURIComponent(selected)}`, { method: "DELETE" })
       .then(async (r) => {
@@ -320,7 +327,7 @@ export function DeckPanel({
         setReport(null);
         return refreshDecks();
       })
-      .catch(() => void 0)
+      .catch((e: Error) => setActionError(e.message))
       .finally(() => setDeleteBusy(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, refreshDecks]);
@@ -539,6 +546,7 @@ export function DeckPanel({
           )}
         </div>
         {decks.length > 0 && showNewDeck && newDeckForm}
+        {refreshFailed && <div className="chip chip-muted">couldn't refresh decks</div>}
         <CollectionSync onImported={onCollectionImported} />
       </div>
 
@@ -637,6 +645,19 @@ export function DeckPanel({
 
           <section className="deck-section">
             <h2>Cards</h2>
+            {actionError && (
+              <div className="chip chip-error chip-dismissible">
+                {actionError}
+                <button
+                  type="button"
+                  className="chip-dismiss"
+                  onClick={() => setActionError(null)}
+                  aria-label="Dismiss error"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <form className="add-card-form" onSubmit={addCard}>
               <input
                 className="text-input"

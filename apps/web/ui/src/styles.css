@@ -909,6 +909,57 @@ body {
   white-space: normal;
 }
 
+.chip-muted {
+  color: var(--text-dim);
+  border-color: var(--border);
+  white-space: normal;
+  font-style: italic;
+}
+
+.chip-dismissible {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip-dismiss {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.8;
+}
+
+.chip-dismiss:hover {
+  opacity: 1;
+}
+
+.chip-retry {
+  background: none;
+  border: 1px solid var(--bad);
+  color: var(--bad);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.chip-retry:hover {
+  background: rgba(224, 108, 117, 0.12);
+}
+
+.chip-retry:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chat-header-error {
+  margin: 0 12px 6px;
+}
+
 .chip-tool {
   color: var(--accent);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
