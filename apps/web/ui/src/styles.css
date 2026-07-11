@@ -270,6 +270,31 @@ body {
   text-align: left;
 }
 
+.empty-state-inline {
+  padding: 16px 4px;
+}
+
+/* ---------- inline confirm (replaces window.confirm) ---------- */
+.inline-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-confirm-text {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* ---------- undo chip (card removal) ---------- */
+.chip-hint-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
 .delete-deck-btn {
   margin-top: 8px;
 }
@@ -1045,6 +1070,19 @@ body {
 .chip-context {
   align-self: center;
   flex-shrink: 0;
+}
+
+.chat-card-undo {
+  position: fixed;
+  z-index: 110;
+  right: 22px;
+  bottom: 90px;
+  background: var(--bg-raised);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.chat-rename-input {
+  width: 160px;
 }
 
 @keyframes pulse {

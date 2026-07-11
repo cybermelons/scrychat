@@ -6,6 +6,7 @@ import { renderManaSymbols } from "./markdown";
 import { CollectionSync } from "./CollectionSync";
 
 const CURVE_ORDER = ["0", "1", "2", "3", "4", "5", "6", "7+"];
+const LAST_DECK_KEY = "scrychat.lastDeck";
 
 /**
  * Attempts to copy text to the clipboard, layering fallbacks for
@@ -162,11 +163,20 @@ export function DeckPanel({
   const [editorTags, setEditorTags] = useState<string[]>([]);
   const [editorInput, setEditorInput] = useState("");
   const [editorBusy, setEditorBusy] = useState(false);
+  const editTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // group rename
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
+  const groupRenameTriggerRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  // inline delete-deck confirm
+  const [confirmingDeleteDeck, setConfirmingDeleteDeck] = useState(false);
+
+  // undo chip for card removal (× button)
+  const [undo, setUndo] = useState<{ name: string; tags: string[]; count: number } | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshDecks = useCallback(
     (selectName?: string) => {
@@ -179,7 +189,13 @@ export function DeckPanel({
             setSelected(selectName);
           } else if (list.length > 0) {
             const s = selectedRef.current;
-            setSelected(list.some((d) => d.name === s) ? s : list[0].name);
+            if (list.some((d) => d.name === s)) {
+              setSelected(s);
+            } else {
+              const stored = localStorage.getItem(LAST_DECK_KEY);
+              const fallback = (stored && list.some((d) => d.name === stored)) ? stored : list[0].name;
+              setSelected(fallback);
+            }
           } else {
             setSelected("");
           }
@@ -195,6 +211,11 @@ export function DeckPanel({
     refreshDecks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Persist selected deck for restore on next load.
+  useEffect(() => {
+    if (selected) localStorage.setItem(LAST_DECK_KEY, selected);
+  }, [selected]);
 
   const createDeck = useCallback(
     (e: React.FormEvent) => {
@@ -263,8 +284,20 @@ export function DeckPanel({
     [selected, addCardName, addCardTags, addCardCount]
   );
 
+  const armUndo = useCallback((name: string, tags: string[], count: number) => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndo({ name, tags, count });
+    undoTimerRef.current = setTimeout(() => setUndo(null), 4000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
   const removeCard = useCallback(
-    (name: string) => {
+    (name: string, tags: string[], count: number) => {
       if (!selected) return;
       setActionError(null);
       setRemoveBusy(name);
@@ -278,16 +311,38 @@ export function DeckPanel({
             const body = await r.json().catch(() => ({}));
             throw new Error(body.error ?? `HTTP ${r.status}`);
           }
+          armUndo(name, tags, count);
           loadDeck(selected);
         })
         .catch((e: Error) => setActionError(e.message))
         .finally(() => setRemoveBusy(null));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected]
+    [selected, armUndo]
   );
 
-  const openTagEditor = useCallback((key: string, tags: string[]) => {
+  const undoRemove = useCallback(() => {
+    if (!undo || !selected) return;
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    const { name, tags, count } = undo;
+    setUndo(null);
+    fetch(`/api/decks/${encodeURIComponent(selected)}/cards`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cards: [{ name, tags, count }] }),
+    })
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${r.status}`);
+        }
+        loadDeck(selected);
+      })
+      .catch((e: Error) => setActionError(e.message));
+  }, [undo, selected]);
+
+  const openTagEditor = useCallback((key: string, tags: string[], trigger: HTMLButtonElement | null) => {
+    editTriggerRef.current = trigger;
     setEditingCard(key);
     setEditorTags([...tags]);
     setEditorInput("");
@@ -297,6 +352,8 @@ export function DeckPanel({
     setEditingCard(null);
     setEditorTags([]);
     setEditorInput("");
+    editTriggerRef.current?.focus();
+    editTriggerRef.current = null;
   }, []);
 
   const saveCardTags = useCallback(
@@ -324,10 +381,15 @@ export function DeckPanel({
     [selected, closeTagEditor]
   );
 
+  const cancelGroupRename = useCallback((tag: string) => {
+    setRenamingGroup(null);
+    groupRenameTriggerRefs.current.get(tag)?.focus();
+  }, []);
+
   const renameGroup = useCallback(
     (from: string, to: string) => {
       if (!selected || !to.trim() || to.trim() === from) {
-        setRenamingGroup(null);
+        cancelGroupRename(from);
         return;
       }
       setActionError(null);
@@ -342,20 +404,20 @@ export function DeckPanel({
             const body = await r.json().catch(() => ({}));
             throw new Error(body.error ?? `HTTP ${r.status}`);
           }
-          setRenamingGroup(null);
+          cancelGroupRename(from);
           loadDeck(selected);
         })
         .catch((e: Error) => setActionError(e.message))
         .finally(() => setRenameBusy(false));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected]
+    [selected, cancelGroupRename]
   );
 
   const deleteCurrentDeck = useCallback(() => {
     if (!selected) return;
-    if (!window.confirm(`Delete deck "${selected}"? This cannot be undone.`)) return;
     setActionError(null);
+    setConfirmingDeleteDeck(false);
     setDeleteBusy(true);
     fetch(`/api/decks/${encodeURIComponent(selected)}`, { method: "DELETE" })
       .then(async (r) => {
@@ -445,6 +507,28 @@ export function DeckPanel({
   const onCollectionImported = useCallback(() => {
     if (selectedRef.current) loadDeck(selectedRef.current);
   }, [loadDeck]);
+
+  // Global Escape: close whichever dismissible popover/editor is open.
+  // Tag editor and manual-copy popover close via this even when focus is on
+  // a chip/button inside them (not just the text input).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (manualCopyText !== null) {
+        setManualCopyText(null);
+        return;
+      }
+      if (editingCard !== null) {
+        closeTagEditor();
+        return;
+      }
+      if (confirmingDeleteDeck) {
+        setConfirmingDeleteDeck(false);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [manualCopyText, editingCard, confirmingDeleteDeck, closeTagEditor]);
 
   // Live refresh: refetch the open deck when its file changes on disk.
   useEffect(() => {
@@ -642,14 +726,39 @@ export function DeckPanel({
             >
               {copyState === "copied" ? "Copied ✓" : copyState === "error" ? "Copy failed" : "Export"}
             </button>
-            <button
-              type="button"
-              className="btn btn-danger btn-small delete-deck-btn"
-              onClick={deleteCurrentDeck}
-              disabled={deleteBusy}
-            >
-              {deleteBusy ? "Deleting…" : "Delete deck"}
-            </button>
+            {confirmingDeleteDeck ? (
+              <span className="inline-confirm" onKeyDown={(e) => {
+                if (e.key === "Escape") setConfirmingDeleteDeck(false);
+              }}>
+                <span className="inline-confirm-text">Delete deck?</span>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-small"
+                  onClick={deleteCurrentDeck}
+                  disabled={deleteBusy}
+                  autoFocus
+                >
+                  {deleteBusy ? "Deleting…" : "Yes"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-small"
+                  onClick={() => setConfirmingDeleteDeck(false)}
+                  disabled={deleteBusy}
+                >
+                  No
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-danger btn-small delete-deck-btn"
+                onClick={() => setConfirmingDeleteDeck(true)}
+                disabled={deleteBusy}
+              >
+                Delete deck
+              </button>
+            )}
             {manualCopyText !== null && (
               <div className="manual-copy-popover" role="dialog" aria-label="Copy deck export">
                 <div className="manual-copy-hint">Press Ctrl/Cmd+C to copy</div>
@@ -721,6 +830,14 @@ export function DeckPanel({
                 </button>
               </div>
             )}
+            {undo && (
+              <div className="chip chip-hint-inline">
+                Removed {undo.name}
+                <button type="button" className="chip-retry" onClick={undoRemove}>
+                  Undo
+                </button>
+              </div>
+            )}
             <form className="add-card-form" onSubmit={addCard}>
               <input
                 className="text-input"
@@ -782,7 +899,7 @@ export function DeckPanel({
                               autoFocus
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") renameGroup(tag, renameValue);
-                                if (e.key === "Escape") setRenamingGroup(null);
+                                if (e.key === "Escape") cancelGroupRename(tag);
                               }}
                               aria-label={`Rename tag ${tag}`}
                             />
@@ -797,7 +914,7 @@ export function DeckPanel({
                             <button
                               type="button"
                               className="btn btn-ghost btn-small"
-                              onClick={() => setRenamingGroup(null)}
+                              onClick={() => cancelGroupRename(tag)}
                               disabled={renameBusy}
                             >
                               Cancel
@@ -810,6 +927,10 @@ export function DeckPanel({
                               <button
                                 type="button"
                                 className="group-rename-btn"
+                                ref={(el) => {
+                                  if (el) groupRenameTriggerRefs.current.set(tag, el);
+                                  else groupRenameTriggerRefs.current.delete(tag);
+                                }}
                                 onClick={() => {
                                   setRenamingGroup(tag);
                                   setRenameValue(tag);
@@ -867,8 +988,10 @@ export function DeckPanel({
                             <button
                               type="button"
                               className="edit-tags-btn"
-                              onClick={() =>
-                                editingCard === editKey ? closeTagEditor() : openTagEditor(editKey, c.tags)
+                              onClick={(e) =>
+                                editingCard === editKey
+                                  ? closeTagEditor()
+                                  : openTagEditor(editKey, c.tags, e.currentTarget)
                               }
                               aria-label={`Edit tags for ${c.name}`}
                               title="Edit tags"
@@ -880,7 +1003,7 @@ export function DeckPanel({
                             <button
                               type="button"
                               className="remove-card-btn"
-                              onClick={() => removeCard(c.name)}
+                              onClick={() => removeCard(c.name, c.tags, c.count)}
                               disabled={removeBusy === c.name}
                               aria-label={`Remove ${c.name}`}
                               title={`Remove ${c.name}`}
@@ -892,7 +1015,15 @@ export function DeckPanel({
                         {editingCard === editKey && (
                           <tr className="tag-editor-row">
                             <td colSpan={5}>
-                              <div className="tag-editor">
+                              <div
+                                className="tag-editor"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Escape") {
+                                    e.stopPropagation();
+                                    closeTagEditor();
+                                  }
+                                }}
+                              >
                                 <div className="tag-editor-current">
                                   {editorTags.map((t) => (
                                     <span
@@ -911,6 +1042,7 @@ export function DeckPanel({
                                     placeholder="Add tag, press Enter"
                                     value={editorInput}
                                     onChange={(e) => setEditorInput(e.target.value)}
+                                    autoFocus
                                     onKeyDown={(e) => {
                                       if (e.key === "Enter") {
                                         e.preventDefault();
@@ -919,6 +1051,9 @@ export function DeckPanel({
                                           setEditorTags((prev) => [...prev, v]);
                                         }
                                         setEditorInput("");
+                                      } else if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        closeTagEditor();
                                       }
                                     }}
                                     disabled={editorBusy}
@@ -963,6 +1098,12 @@ export function DeckPanel({
                   </tbody>
                 ))}
               </table>
+            )}
+            {tagGroups.length === 0 && (
+              <div className="empty-state empty-state-inline">
+                <div className="empty-state-icon" aria-hidden="true">🃏</div>
+                <p>No cards yet — add one above or ask the chat.</p>
+              </div>
             )}
           </section>
         </div>

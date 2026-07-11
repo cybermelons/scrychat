@@ -152,6 +152,20 @@ export function ChatPanel({
     hintTimerRef.current = setTimeout(() => setHint(null), 3000);
   }, []);
 
+  // Undo chip for card removal via click-to-toggle (toggleDeckCard DELETE
+  // branch). Timer resets on each new removal; a single chip covers the
+  // latest one.
+  const [cardUndo, setCardUndo] = useState<{ deck: string; name: string; tags: string[]; count: number } | null>(null);
+  const cardUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Inline rename (replaces window.prompt) and inline delete-confirm
+  // (replaces window.confirm) for the current chat.
+  const [renamingChat, setRenamingChat] = useState(false);
+  const [renameChatValue, setRenameChatValue] = useState("");
+  const [renameChatBusy, setRenameChatBusy] = useState(false);
+  const [confirmingDeleteChat, setConfirmingDeleteChat] = useState(false);
+  const renameTriggerRef = useRef<HTMLButtonElement | null>(null);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
@@ -214,8 +228,8 @@ export function ChatPanel({
   const deleteChat = useCallback(() => {
     const id = chatIdRef.current;
     if (!id) return;
-    if (!window.confirm("Delete this chat? This cannot be undone.")) return;
     setChatError(null);
+    setConfirmingDeleteChat(false);
     fetch(`/api/chats/${encodeURIComponent(id)}`, { method: "DELETE" })
       .then(async (r) => {
         if (!r.ok) {
@@ -228,15 +242,29 @@ export function ChatPanel({
       .catch((e: Error) => setChatError(e.message));
   }, [startNewChat, refreshChats]);
 
-  const renameChat = useCallback(() => {
+  const openRenameChat = useCallback(() => {
     const id = chatIdRef.current;
     if (!id) return;
     const current = chats.find((c) => c.id === id)?.title ?? "";
-    const next = window.prompt("Rename chat", current);
-    if (next == null) return;
-    const title = next.trim();
-    if (!title) return;
+    setRenameChatValue(current);
+    setRenamingChat(true);
+  }, [chats]);
+
+  const cancelRenameChat = useCallback(() => {
+    setRenamingChat(false);
+    renameTriggerRef.current?.focus();
+  }, []);
+
+  const saveRenameChat = useCallback(() => {
+    const id = chatIdRef.current;
+    if (!id) return;
+    const title = renameChatValue.trim();
+    if (!title) {
+      cancelRenameChat();
+      return;
+    }
     setChatError(null);
+    setRenameChatBusy(true);
     fetch(`/api/chats/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -247,10 +275,13 @@ export function ChatPanel({
           const body = await r.json().catch(() => ({}));
           throw new Error(body.error ?? `HTTP ${r.status}`);
         }
+        setRenamingChat(false);
+        renameTriggerRef.current?.focus();
         void refreshChats();
       })
-      .catch((e: Error) => setChatError(e.message));
-  }, [chats, refreshChats]);
+      .catch((e: Error) => setChatError(e.message))
+      .finally(() => setRenameChatBusy(false));
+  }, [renameChatValue, refreshChats, cancelRenameChat]);
 
   // On mount: load chat list, restore last-open chat.
   useEffect(() => {
@@ -508,6 +539,26 @@ export function ChatPanel({
 
   useEffect(() => () => cancelGroupClose(), [cancelGroupClose]);
 
+  // Global Escape: dismiss whichever popover/confirm is currently open so
+  // keyboard users can always back out. Group-rename input in DeckPanel and
+  // this panel's own rename input handle Escape themselves (stopPropagation
+  // not required since each closes its own state here too, idempotently).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (toolPopover) setToolPopover(null);
+      if (cardPopover) setCardPopover(null);
+      if (groupPopover) {
+        cancelGroupClose();
+        setGroupPopover(null);
+      }
+      if (confirmingDeleteChat) setConfirmingDeleteChat(false);
+      if (renamingChat) cancelRenameChat();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [toolPopover, cardPopover, groupPopover, confirmingDeleteChat, renamingChat, cancelGroupClose, cancelRenameChat]);
+
   const onScrollMouseOver = useCallback(
     (e: React.MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -593,10 +644,37 @@ export function ChatPanel({
     }
   }, [scheduleGroupClose]);
 
+  const armCardUndo = useCallback((deck: string, name: string, tags: string[], count: number) => {
+    if (cardUndoTimerRef.current) clearTimeout(cardUndoTimerRef.current);
+    setCardUndo({ deck, name, tags, count });
+    cardUndoTimerRef.current = setTimeout(() => setCardUndo(null), 4000);
+  }, []);
+
+  const undoCardRemove = useCallback(() => {
+    if (!cardUndo) return;
+    if (cardUndoTimerRef.current) clearTimeout(cardUndoTimerRef.current);
+    const { deck, name, tags, count } = cardUndo;
+    setCardUndo(null);
+    void fetch(`/api/decks/${encodeURIComponent(deck)}/cards`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cards: [{ name, tags, count }] }),
+    }).catch(() => void 0);
+    // Deck panel reloads via its own deck-events watch.
+  }, [cardUndo]);
+
+  useEffect(() => {
+    return () => {
+      if (cardUndoTimerRef.current) clearTimeout(cardUndoTimerRef.current);
+    };
+  }, []);
+
   // Click-to-toggle: clicking a card-ref, card-embed, or gallery card toggles
   // its membership in the selected deck. Dismisses hover popovers so a click
   // doesn't leave a stuck preview. No deck selected / server rejection ->
-  // transient hint chip near the click point.
+  // transient hint chip near the click point. Removing a card arms a 4s
+  // "Removed <name> — Undo" chip; tags are captured via a cheap GET of the
+  // deck (the DELETE response doesn't echo them back) before the DELETE.
   const toggleDeckCard = useCallback(
     (name: string, x: number, y: number) => {
       const deck = selectedRef.current;
@@ -605,24 +683,39 @@ export function ChatPanel({
         return;
       }
       const inDeck = deckCardNamesRef.current.has(name.toLowerCase());
-      const req = inDeck
-        ? fetch(`/api/decks/${encodeURIComponent(deck)}/cards`, {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ cards: [name] }),
+      if (inDeck) {
+        void fetch(`/api/decks/${encodeURIComponent(deck)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((body: { deck?: { cards: { name: string; tags?: string[]; count?: number }[] } } | null) => {
+            const existing = body?.deck?.cards.find(
+              (c) => c.name.toLowerCase() === name.toLowerCase()
+            );
+            const tags = existing?.tags ?? [];
+            const count = existing?.count ?? 1;
+            return fetch(`/api/decks/${encodeURIComponent(deck)}/cards`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ cards: [name] }),
+            }).then(async (r) => {
+              const respBody = await r.json().catch(() => ({}));
+              if (!r.ok) throw new Error(respBody.error ?? `HTTP ${r.status}`);
+              armCardUndo(deck, existing?.name ?? name, tags, count);
+            });
           })
-        : fetch(`/api/decks/${encodeURIComponent(deck)}/cards`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ cards: [{ name }] }),
-          });
-      void req
+          .catch((err: Error) => showHint(x, y, err.message));
+        return;
+      }
+      void fetch(`/api/decks/${encodeURIComponent(deck)}/cards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cards: [{ name }] }),
+      })
         .then(async (r) => {
           const body = await r.json().catch(() => ({}));
           if (!r.ok) {
             throw new Error(body.error ?? `HTTP ${r.status}`);
           }
-          if (!inDeck && Array.isArray(body.rejected) && body.rejected.length > 0) {
+          if (Array.isArray(body.rejected) && body.rejected.length > 0) {
             showHint(x, y, body.rejected[0].reason ?? "rejected");
           }
           // Deck panel reloads via its own deck-events watch; badges refresh
@@ -630,7 +723,7 @@ export function ChatPanel({
         })
         .catch((err: Error) => showHint(x, y, err.message));
     },
-    [showHint]
+    [showHint, armCardUndo]
   );
 
   const onScrollClick = useCallback(
@@ -706,7 +799,7 @@ export function ChatPanel({
           onChange={(e) => (e.target.value ? void loadChat(e.target.value) : startNewChat())}
           aria-label="Select chat"
         >
-          <option value="">New Chat</option>
+          <option value="">{chats.length === 0 ? "New Chat (no chats yet)" : "New Chat"}</option>
           {selected && deckChats.length > 0 && (
             <optgroup label={`about ${selected}`}>
               {deckChats.map((c) => (
@@ -727,15 +820,81 @@ export function ChatPanel({
         <button type="button" className="btn btn-ghost btn-small" onClick={startNewChat}>
           + New Chat
         </button>
-        {chatId && (
-          <button type="button" className="btn btn-ghost btn-small" onClick={renameChat}>
+        {chatId && !renamingChat && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-small"
+            ref={renameTriggerRef}
+            onClick={openRenameChat}
+          >
             Rename
           </button>
         )}
-        {chatId && (
-          <button type="button" className="btn btn-danger btn-small" onClick={deleteChat}>
+        {chatId && renamingChat && (
+          <span
+            className="inline-confirm"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") cancelRenameChat();
+            }}
+          >
+            <input
+              className="text-input chat-rename-input"
+              value={renameChatValue}
+              onChange={(e) => setRenameChatValue(e.target.value)}
+              disabled={renameChatBusy}
+              autoFocus
+              aria-label="Rename chat"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveRenameChat();
+                if (e.key === "Escape") cancelRenameChat();
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost btn-small"
+              onClick={saveRenameChat}
+              disabled={renameChatBusy}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-small"
+              onClick={cancelRenameChat}
+              disabled={renameChatBusy}
+            >
+              Cancel
+            </button>
+          </span>
+        )}
+        {chatId && !confirmingDeleteChat && (
+          <button
+            type="button"
+            className="btn btn-danger btn-small"
+            onClick={() => setConfirmingDeleteChat(true)}
+          >
             Delete
           </button>
+        )}
+        {chatId && confirmingDeleteChat && (
+          <span
+            className="inline-confirm"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setConfirmingDeleteChat(false);
+            }}
+          >
+            <span className="inline-confirm-text">Delete?</span>
+            <button type="button" className="btn btn-danger btn-small" onClick={deleteChat} autoFocus>
+              Yes
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-small"
+              onClick={() => setConfirmingDeleteChat(false)}
+            >
+              No
+            </button>
+          </span>
         )}
         <button
           type="button"
@@ -762,6 +921,9 @@ export function ChatPanel({
       )}
       {(chatsRefreshFailed || deckChatsRefreshFailed) && (
         <div className="chip chip-muted chat-header-error">couldn't refresh chats</div>
+      )}
+      {!chatsRefreshFailed && chats.length === 0 && (
+        <div className="chip chip-muted chat-header-error">no chats yet — start one below</div>
       )}
       <div
         className="chat-scroll"
@@ -865,6 +1027,14 @@ export function ChatPanel({
         {hint && (
           <div className="chip chip-hint" style={{ left: hint.x + 8, top: hint.y + 8 }}>
             {hint.text}
+          </div>
+        )}
+        {cardUndo && (
+          <div className="chip chip-hint-inline chat-card-undo">
+            Removed {cardUndo.name}
+            <button type="button" className="chip-retry" onClick={undoCardRemove}>
+              Undo
+            </button>
           </div>
         )}
       </div>
