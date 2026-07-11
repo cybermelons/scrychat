@@ -7,6 +7,45 @@ import { CollectionSync } from "./CollectionSync";
 
 const CURVE_ORDER = ["0", "1", "2", "3", "4", "5", "6", "7+"];
 
+/**
+ * Attempts to copy text to the clipboard, layering fallbacks for
+ * insecure contexts (plain HTTP on a LAN host) where
+ * navigator.clipboard is unavailable.
+ *
+ * 1. navigator.clipboard.writeText (secure contexts only)
+ * 2. document.execCommand("copy") via a hidden textarea
+ *
+ * Returns false if both approaches fail, so callers can offer a
+ * manual-copy fallback instead of a dead-end error.
+ */
+async function copyText(text: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // fall through to legacy fallback
+    }
+  }
+
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function QuotaRow({ label, q }: { label: string; q: QuotaCheck }) {
   return (
     <li className={q.ok ? "quota ok" : "quota bad"}>
@@ -116,6 +155,7 @@ export function DeckPanel({
   const [removeBusy, setRemoveBusy] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [manualCopyText, setManualCopyText] = useState<string | null>(null);
 
   // per-card tag editor
   const [editingCard, setEditingCard] = useState<string | null>(null);
@@ -338,12 +378,13 @@ export function DeckPanel({
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const text = await r.text();
-        if (!navigator.clipboard) throw new Error("clipboard unavailable");
-        await navigator.clipboard.writeText(text);
-      })
-      .then(() => {
-        setCopyState("copied");
-        setTimeout(() => setCopyState("idle"), 1500);
+        const ok = await copyText(text);
+        if (ok) {
+          setCopyState("copied");
+          setTimeout(() => setCopyState("idle"), 1500);
+        } else {
+          setManualCopyText(text);
+        }
       })
       .catch(() => {
         setCopyState("error");
@@ -609,6 +650,28 @@ export function DeckPanel({
             >
               {deleteBusy ? "Deleting…" : "Delete deck"}
             </button>
+            {manualCopyText !== null && (
+              <div className="manual-copy-popover" role="dialog" aria-label="Copy deck export">
+                <div className="manual-copy-hint">Press Ctrl/Cmd+C to copy</div>
+                <textarea
+                  className="manual-copy-textarea"
+                  readOnly
+                  value={manualCopyText}
+                  autoFocus
+                  onFocus={(e) => e.currentTarget.select()}
+                  ref={(el) => {
+                    if (el) el.select();
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-small manual-copy-close-btn"
+                  onClick={() => setManualCopyText(null)}
+                >
+                  Close
+                </button>
+              </div>
+            )}
           </div>
 
           {report ? (
