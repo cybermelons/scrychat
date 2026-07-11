@@ -10,10 +10,13 @@ One MCP server, two frontends:
 - **Claude Code chat** — mount the server in a terminal session.
 - **Local browser app** — chat panel + deck panel, same server underneath.
 
-Arena-only collection tracking via a local snapshot import — link your Arena
-log folder or drop `Player.log` in the web UI (Detailed Logs must be enabled
-in Arena) to see owned/missing on deck cards and `owned` flags in tool
-results; paper collections are out of scope, and the snapshot stays local in
+Arena-only collection tracking via a local snapshot import — in the web UI,
+link your Arena log folder (via Chrome's File System Access API, so
+scrychat can re-read `Player.log` on demand) or drop the file directly as a
+drag-and-drop fallback (Detailed Logs must be enabled in Arena, or the log
+won't contain collection data). This gives owned/missing on deck cards
+(a deck report's `arenaCheck`) and `owned` flags in tool results; paper
+collections are out of scope, and the snapshot stays local in
 `collection.json`. No per-token API billing — everything runs on your Claude
 subscription.
 
@@ -24,7 +27,7 @@ subscription.
 One prompt builds a Teysa Karlov aristocrats deck: the chat streams tool chips
 as it searches sac outlets, returns a reply with hoverable `[[card]]` links
 (card image on hover), and clicking a card toggles it into the deck panel —
-role groups, quota bars, and mana curve updating live.
+tag groups, quota bars, and mana curve updating live.
 
 ## Requirements
 
@@ -68,16 +71,35 @@ pnpm --filter @scrychat/web dev
 ```
 
 Open `http://localhost:8787`. Same MCP server and skill, chat panel plus a
-deck panel showing cards by role, quota bars, mana curve, and card images.
+deck panel showing cards by tag, quota bars, mana curve, and card images.
+
+Chat sessions auto-title from the first message and can be renamed anytime;
+an in-flight reply can be interrupted with the stop button. Cards carry a
+`tags[]` array (not a single role) — the deck panel groups by tag, and the
+tag editor lets you add/remove/rename tags per card, renaming a tag across
+every card that has it.
+
+The deck panel exports to MTGA, Moxfield, or plain-text format (a copy
+button puts the list straight on the clipboard); MTGA export trims
+transform/DFC card names down to the front face only, since Arena's
+decklist importer rejects the full `Front // Back` name that other formats
+round-trip fine. The settings drawer (gear icon) sets the default export
+format and quota targets — globally, or as a per-deck override that wins
+field-by-field over the global value — plus the `linkifyPass` toggle
+described below.
 
 ## How it works
 
 - **packages/core** — Scryfall and Commander Spellbook clients, the local tag
   index, functional-alternatives scoring, and deck file CRUD. Decks are JSON
   files under `decks/`.
-- **packages/mcp** — MCP stdio server exposing 10 tools over core: card
-  search/lookup, tag search, alternatives, combo search, and deck
-  list/create/get/add/remove.
+- **packages/mcp** — MCP stdio server exposing 18 tools over core: card
+  search (`search_cards`, `get_card`), tag search (`search_tags`), functional
+  alternatives (`find_alternatives`), combo search (`find_combos`), deck CRUD
+  (`deck_list`, `deck_create`, `deck_get`, `deck_add`, `deck_remove`,
+  `deck_import`, `deck_rename`, `deck_set_commander`, `deck_export`), tag
+  management (`deck_set_card_tags`, `deck_rename_tag`), card count edits
+  (`deck_set_card_count`), and collection stats (`collection_stats`).
 - **apps/web** — Express + Claude Agent SDK backend, React frontend, SSE
   streaming between chat and deck panel.
 
@@ -89,9 +111,21 @@ pnpm --filter @scrychat/core build-tag-index
 
 ### Evals
 
-`evals/run-tier-a.mjs` runs the golden set (`evals/golden.md`) against the
-live tool surface; results land in `evals/RESULTS.md` and transcripts in
-`evals/transcripts/`.
+Three eval tiers, all in `evals/`:
+- **Tier A** (`run-tier-a.mjs`) — the golden set (`evals/golden.md`) against
+  the live tool surface; results land in `evals/RESULTS.md` and transcripts
+  in `evals/transcripts/`.
+- **Tier B** (`run-tier-b.mjs`) — behavioral formatting-contract checks
+  (card-ref linkify, chips, export shape) asserted mechanically against
+  persisted chat files, not judged.
+- **Tier C** (`run-tier-c.mjs`) — mechanical HTTP-level checks against the
+  built web server: deck CRUD, `/api/health`, and an Arena-collection
+  import end-to-end using a fixture `Player.log`. `--with-chat` adds a few
+  LLM-dependent checks (skipped by default).
+
+`GET /api/health` reports whether the skill file is readable and whether
+the local SQLite mirror exists with cards/Arena data populated — useful for
+diagnosing "why isn't scrychat finding cards" on a fresh or stale checkout.
 
 ## Local mirror (optional but recommended)
 
@@ -122,9 +156,15 @@ breaks, it's just slower. One caveat: a running MCP server or web app decides
 local-vs-live once at first use, so restart it after running the ingest for
 the first time (or after a refresh) to pick up the mirror.
 
-`scrychat.config.json` at repo root: `linkifyPass` (default `false`) runs a
+`scrychat.config.json` at repo root: `linkifyPass` (default `true`) runs a
 second cheap-model pass over each reply to wrap any bare card names the model
-missed in `[[...]]`, before persisting — off by default, no extra cost/latency.
+missed in `[[...]]`, before persisting. This is gated so it's cheap in the
+common case: a deterministic pass against the local card-name index
+auto-wraps unambiguous names for free, and only escalates to a Haiku call
+for the residue — single words that are both a real card name and ordinary
+English (e.g. "Opt", "Fog") — deciding per-occurrence whether the text means
+the card. Prose with only unambiguous names never touches the model at all.
+Toggle it from the settings drawer (gear icon) or `PATCH /api/config`.
 
 ## Attribution & data
 
