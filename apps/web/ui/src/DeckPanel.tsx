@@ -573,6 +573,7 @@ export function DeckPanel({
     producedMana?: string[] | null;
     typeLine?: string | null;
     owned?: boolean;
+    arena?: boolean | null;
   };
   const tagGroups: [string, CardRow[]][] = [];
   const allDeckTags: string[] = [];
@@ -590,6 +591,7 @@ export function DeckPanel({
         producedMana: c.producedMana,
         typeLine: c.typeLine,
         owned: c.owned,
+        arena: c.arena,
       };
       if (tags.length === 0) {
         if (!map.has(UNTAGGED)) map.set(UNTAGGED, []);
@@ -814,6 +816,12 @@ export function DeckPanel({
                 {report.untaggedForQuota > 0 && (
                   <div className="quota-note">{report.untaggedForQuota} cards untagged for quota</div>
                 )}
+                {report.arenaCheck && (
+                  <div className="quota-note">
+                    {report.arenaCheck.onArena} / {report.arenaCheck.total} on Arena
+                    {report.arenaCheck.missing.length > 0 && ` · ${report.arenaCheck.missing.length} missing`}
+                  </div>
+                )}
               </section>
 
               <section className="deck-section">
@@ -964,7 +972,7 @@ export function DeckPanel({
                       const editKey = `${tag}::${c.name}`;
                       return (
                       <Fragment key={c.name}>
-                        <tr className="card-row">
+                        <tr className={c.arena === false ? "card-row card-row-no-arena" : "card-row"}>
                           <td className="card-count-cell">
                             {c.count > 1 ? `${c.count}×` : ""}
                           </td>
@@ -975,6 +983,11 @@ export function DeckPanel({
                             )}
                             {c.owned === true && (
                               <span className="owned-chip owned-yes">✓</span>
+                            )}
+                            {c.arena === false && (
+                              <span className="owned-chip arena-missing" title="Not available on Arena">
+                                not on Arena
+                              </span>
                             )}
                           </td>
                           <td className="card-mana-cell">

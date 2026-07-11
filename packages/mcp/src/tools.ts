@@ -51,6 +51,7 @@ const resolveCard: CardResolver = async (name: string) => {
     cmc: card.cmc,
     typeLine: card.typeLine,
     legalCommander: card.legalCommander,
+    arena: card.arena,
   };
 };
 
@@ -421,7 +422,10 @@ export function registerTools(server: McpServer): void {
       title: "Get deck",
       description:
         "Fetches a deck's full card list (grouped by tag) plus a deck report: quota check against " +
-        "recommended counts (lands/ramp/draw/interaction/wipes), mana curve, and any color identity violations.",
+        "recommended counts (lands/ramp/draw/interaction/wipes), mana curve, any color identity violations, " +
+        "and arenaCheck (MTG Arena availability: onArena/total copies plus missing/unknown name lists). " +
+        "Answer whole-deck Arena questions ('is this deck playable on Arena', 'what's missing from Arena') " +
+        "from arenaCheck directly — do not re-derive it via per-card lookups.",
       inputSchema: {
         name: z.string().describe("Deck name"),
       },
@@ -457,6 +461,7 @@ export function registerTools(server: McpServer): void {
             byTag: report.byTag,
             untaggedForQuota: report.untaggedForQuota,
             identityViolations: report.identityViolations,
+            arenaCheck: report.arenaCheck,
           },
         };
       });

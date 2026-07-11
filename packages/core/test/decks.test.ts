@@ -29,6 +29,7 @@ const FIXTURES: Record<string, ResolvedCard> = {
     cmc: 5,
     typeLine: "Legendary Creature — Dryad Avatar",
     legalCommander: true,
+    arena: true,
   },
   "lightning bolt": {
     name: "Lightning Bolt",
@@ -43,6 +44,7 @@ const FIXTURES: Record<string, ResolvedCard> = {
     cmc: 1,
     typeLine: "Artifact",
     legalCommander: true,
+    arena: true,
   },
   forest: {
     name: "Forest",
@@ -50,6 +52,7 @@ const FIXTURES: Record<string, ResolvedCard> = {
     cmc: 0,
     typeLine: "Basic Land — Forest",
     legalCommander: true,
+    arena: true,
   },
   "elvish visionary": {
     name: "Elvish Visionary",
@@ -57,6 +60,7 @@ const FIXTURES: Record<string, ResolvedCard> = {
     cmc: 2,
     typeLine: "Creature — Elf Shaman",
     legalCommander: true,
+    arena: false,
   },
   "swords to plowshares": {
     name: "Swords to Plowshares",
@@ -503,6 +507,72 @@ describe("decks", () => {
       expect(summary.untaggedForQuota).toBe(report.untaggedForQuota);
       expect(summary.untaggedForQuota).toBe(1);
       expect(summary.remaining).toBe(100 - summary.total);
+    });
+  });
+
+  describe("arenaCheck", () => {
+    it("deckReport computes onArena (copy-counted), missing, and unknown from resolver.arena", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards(
+        "Selesnya Value",
+        [
+          { name: "Forest", role: "land", count: 36 }, // arena: true, copies count fully
+          { name: "Sol Ring", role: "ramp" }, // arena: true
+          { name: "Elvish Visionary", tags: ["combo piece"] }, // arena: false -> missing
+          { name: "Grizzly Bears", tags: ["beater"] }, // arena: undefined -> unknown
+        ],
+        resolver,
+        decksDir
+      );
+
+      const report = await deckReport("Selesnya Value", resolver, decksDir);
+
+      // Trostani (commander) is not part of deck.cards, so onArena only reflects
+      // Forest (36) + Sol Ring (1) = 37.
+      expect(report.arenaCheck.onArena).toBe(37);
+      expect(report.arenaCheck.total).toBe(report.total);
+      expect(report.arenaCheck.missing).toEqual(["Elvish Visionary"]);
+      expect(report.arenaCheck.unknown).toEqual(["Grizzly Bears"]);
+    });
+
+    it("treats an unresolved card name as unknown", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards(
+        "Selesnya Value",
+        [{ name: "Sol Ring", tags: ["ramp"] }],
+        resolver,
+        decksDir
+      );
+
+      // Manually inject a card the resolver can't find (simulating a stale/unknown name).
+      const filePath = path.join(decksDir, "selesnya-value.json");
+      const raw = JSON.parse(await fs.readFile(filePath, "utf8"));
+      raw.cards.push({ name: "Not A Real Card", count: 1 });
+      await fs.writeFile(filePath, JSON.stringify(raw, null, 2), "utf8");
+
+      const report = await deckReport("Selesnya Value", resolver, decksDir);
+      expect(report.arenaCheck.onArena).toBe(1); // Sol Ring only
+      expect(report.arenaCheck.unknown).toEqual(["Not A Real Card"]);
+      expect(report.arenaCheck.missing).toEqual([]);
+    });
+
+    it("deckSummary passes arenaCheck through from deckReport", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards(
+        "Selesnya Value",
+        [
+          { name: "Sol Ring", role: "ramp" },
+          { name: "Elvish Visionary", tags: ["combo piece"] },
+          { name: "Grizzly Bears", tags: ["beater"] },
+        ],
+        resolver,
+        decksDir
+      );
+
+      const report = await deckReport("Selesnya Value", resolver, decksDir);
+      const summary = await deckSummary("Selesnya Value", resolver, decksDir);
+
+      expect(summary.arenaCheck).toEqual(report.arenaCheck);
     });
   });
 

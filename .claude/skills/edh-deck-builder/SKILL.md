@@ -29,6 +29,11 @@ not oracle-text tags, so decompose them into their component mechanics instead).
   or verify with a `game:arena` search).
 - Building/validating for Arena or Brawl: validate EVERY suggestion against the flag; never present a
   card as Arena-legal without a true flag.
+- WHOLE-DECK Arena-playability questions ("can I build this on Arena?", "is my deck Arena-legal?"):
+  call `deck_get` and read `report.arenaCheck` (`onArena`/`total` counts, plus `missing` names) —
+  NEVER loop per-card `get_card` calls for this, `deck_get` already resolves it in one shot.
+  `deck_add`/other mutation summaries also carry `summary.arenaCheck`, so re-check it after edits
+  instead of re-querying each card you just added.
 
 ## Arena collection (owned cards)
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Tier A mechanical eval harness for scrychat (see evals/golden.md, A1-A9, plus A10 for arena).
+ * Tier A mechanical eval harness for scrychat (see evals/golden.md, A1-A9, plus A10 for arena
+ * card flag and A11 for deck-level arenaCheck).
  *
  * Plain Node, no deps. Reuses the JSON-RPC-over-stdio spawn pattern from
  * packages/mcp/test/rpc-smoke.mjs: spawn `node packages/mcp/dist/index.js`
@@ -395,8 +396,38 @@ async function main() {
       } catch (err) {
         record("A9", false, `threw: ${err.message}`);
       }
+
+      // --- A11: deck-level Arena check (report.arenaCheck) ---
+      // Village Bell-Ringer is verified arena:false by A10 above, so adding
+      // it to the A9 deck gives a known-missing card to assert against.
+      try {
+        const addRes = await callTool(
+          "deck_add",
+          { name: deckName, cards: [{ name: "Village Bell-Ringer", tags: ["interaction"] }] },
+          "A11 deck_add Village Bell-Ringer",
+        );
+        if (addRes.error) throw new Error(`deck_add error: ${addRes.error}`);
+        const getRes = await callTool("deck_get", { name: deckName }, "A11 deck_get");
+        if (getRes.error) throw new Error(`deck_get error: ${getRes.error}`);
+
+        const arenaCheck = getRes.report?.arenaCheck;
+        const hasArenaCheck = arenaCheck && typeof arenaCheck === "object";
+        const missingHasBellRinger =
+          hasArenaCheck && Array.isArray(arenaCheck.missing) && arenaCheck.missing.includes("Village Bell-Ringer");
+        const onArenaPositive = hasArenaCheck && arenaCheck.onArena > 0;
+        const totalMatches = hasArenaCheck && arenaCheck.total === getRes.report?.total;
+        const ok = Boolean(hasArenaCheck && missingHasBellRinger && onArenaPositive && totalMatches);
+        record(
+          "A11",
+          ok,
+          `arenaCheck=${JSON.stringify(arenaCheck)} report.total=${getRes.report?.total}`,
+        );
+      } catch (err) {
+        record("A11", false, `threw: ${err.message}`);
+      }
     } else {
       record("A9", false, "skipped: deck_create failed");
+      record("A11", false, "skipped: deck_create failed");
     }
   } finally {
     child.stdin.end();
@@ -409,8 +440,8 @@ async function main() {
   }
 
   const passed = results.filter((r) => r.ok).length;
-  console.log(`\nTIER A: ${passed}/10 PASSED`);
-  if (passed < results.length || results.length < 10) {
+  console.log(`\nTIER A: ${passed}/11 PASSED`);
+  if (passed < results.length || results.length < 11) {
     process.exit(1);
   }
 }

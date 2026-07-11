@@ -7,6 +7,7 @@ export type CardEntry = {
   producedMana?: string[] | null;
   typeLine?: string | null;
   owned?: boolean;
+  arena?: boolean | null;
 };
 
 export type Deck = {
@@ -30,6 +31,13 @@ export type QuotaCheck = {
   ok: boolean;
 };
 
+export type ArenaCheck = {
+  onArena: number;
+  total: number;
+  missing: string[];
+  unknown: string[];
+};
+
 export type DeckReport = {
   total: number;
   byTag: Record<string, number>;
@@ -43,6 +51,7 @@ export type DeckReport = {
     wipes: QuotaCheck;
   };
   identityViolations: string[];
+  arenaCheck?: ArenaCheck;
 };
 
 export type DeckResponse = {

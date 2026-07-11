@@ -947,6 +947,7 @@ const resolver: CardResolver = async (name: string) => {
         image: card.image,
         manaCost: card.manaCost,
         producedMana: card.producedMana,
+        arena: card.arena,
       }
     : null;
   resolverCache.set(key, resolved);
@@ -1038,6 +1039,7 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
           manaCost: resolved?.manaCost ?? null,
           producedMana: resolved?.producedMana ?? null,
           typeLine: resolved?.typeLine ?? null,
+          arena: resolved?.arena ?? null,
           ...(owned ? { owned: isOwnedName(c.name) } : {}),
         };
       })

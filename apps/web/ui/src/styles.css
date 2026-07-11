@@ -624,6 +624,15 @@ body {
   border-color: var(--bad);
 }
 
+.owned-chip.arena-missing {
+  color: var(--text-dim);
+  border-color: var(--text-dim);
+}
+
+.card-row-no-arena {
+  opacity: 0.7;
+}
+
 /* ---------- Arena collection sync ---------- */
 .collection-sync {
   display: flex;

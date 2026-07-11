@@ -24,6 +24,7 @@ export type ResolvedCard = {
   image?: string | null;
   manaCost?: string | null;
   producedMana?: string[] | null;
+  arena?: boolean | null;
 };
 
 export type CardResolver = (name: string) => Promise<ResolvedCard | null>;
@@ -56,6 +57,12 @@ export type DeckReport = {
     wipes: QuotaCheck;
   };
   identityViolations: string[];
+  arenaCheck: {
+    onArena: number;
+    total: number;
+    missing: string[];
+    unknown: string[];
+  };
 };
 
 const EDH_TARGET_TOTAL = 99;
@@ -533,6 +540,9 @@ export async function deckReport(
   let total = 0;
   let untaggedForQuota = 0;
   let interactionHave = 0;
+  let onArena = 0;
+  const arenaMissing: string[] = [];
+  const arenaUnknown: string[] = [];
 
   for (const card of deck.cards) {
     const count = card.count ?? 1;
@@ -564,6 +574,16 @@ export async function deckReport(
         const bucket = cmc >= 7 ? "7+" : String(Math.max(0, cmc));
         curve[bucket] = (curve[bucket] ?? 0) + count;
       }
+
+      if (resolved.arena === true) {
+        onArena += count;
+      } else if (resolved.arena === false) {
+        arenaMissing.push(card.name);
+      } else {
+        arenaUnknown.push(card.name);
+      }
+    } else {
+      arenaUnknown.push(card.name);
     }
   }
 
@@ -587,6 +607,12 @@ export async function deckReport(
       wipes: quota(wipesHave, 2, 4),
     },
     identityViolations,
+    arenaCheck: {
+      onArena,
+      total,
+      missing: arenaMissing,
+      unknown: arenaUnknown,
+    },
   };
 }
 
@@ -595,6 +621,7 @@ export type DeckSummary = {
   quotaCheck: DeckReport["quotaCheck"];
   untaggedForQuota: number;
   remaining: number;
+  arenaCheck: DeckReport["arenaCheck"];
 };
 
 export async function deckSummary(
@@ -608,5 +635,6 @@ export async function deckSummary(
     quotaCheck: report.quotaCheck,
     untaggedForQuota: report.untaggedForQuota,
     remaining: 100 - report.total,
+    arenaCheck: report.arenaCheck,
   };
 }
