@@ -182,6 +182,28 @@ body {
   flex: 1;
 }
 
+.deck-rename-row {
+  flex: 1;
+}
+
+.deck-rename-row .text-input {
+  width: 100%;
+}
+
+.rename-deck-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.rename-deck-btn:hover {
+  color: var(--accent);
+}
+
 .btn {
   border: 1px solid var(--border);
   background: var(--bg-raised);
@@ -268,6 +290,35 @@ body {
 
 .empty-state .new-deck-form {
   text-align: left;
+}
+
+.paste-import-toggle {
+  align-self: flex-start;
+  padding-left: 0;
+  text-decoration: underline;
+}
+
+.paste-import {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.paste-import-textarea {
+  resize: vertical;
+  font-family: inherit;
+  min-height: 90px;
+}
+
+.import-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.import-result code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
 }
 
 .empty-state-inline {
@@ -410,6 +461,57 @@ body {
 .commander-meta {
   font-size: 0.82rem;
   color: var(--text-dim);
+}
+
+.change-commander-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.72rem;
+  padding: 0 0 0 6px;
+  visibility: hidden;
+  text-decoration: underline;
+}
+
+.commander-name:hover .change-commander-btn {
+  visibility: visible;
+}
+
+.commander-change-row {
+  width: 100%;
+}
+
+.commander-change-row .text-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.now-illegal-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  white-space: normal;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.now-illegal-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-weight: 400;
+}
+
+.export-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.export-format-select {
+  flex: 0 0 auto;
+  width: auto;
 }
 
 .refreshing {
@@ -557,6 +659,29 @@ body {
 
 .role-header-cell:hover .group-rename-btn {
   visibility: visible;
+}
+
+.group-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0 4px;
+  visibility: hidden;
+}
+
+.role-header-cell:hover .group-delete-btn {
+  visibility: visible;
+}
+
+.group-delete-btn:hover {
+  color: var(--bad);
+}
+
+.group-delete-row {
+  flex-wrap: wrap;
 }
 
 .group-rename-row {
@@ -749,6 +874,39 @@ body {
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
   padding-left: 6px;
+}
+
+.count-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.count-stepper-btn {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  width: 16px;
+  height: 16px;
+  line-height: 1;
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.count-stepper-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.count-stepper-val {
+  min-width: 14px;
+  text-align: center;
+  font-size: 0.8rem;
 }
 
 .card-mana-cell {

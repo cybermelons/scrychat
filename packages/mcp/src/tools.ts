@@ -32,12 +32,13 @@ import {
   renameDeck,
   setCommander,
   setCardTagsResult,
+  renameTag,
+  setCardCount,
   exportDeck,
 } from "@scrychat/core";
-import { parseDecklist } from "@scrychat/core";
+import { importDecklist } from "@scrychat/core";
 import type { CardResolver, CardEntry } from "@scrychat/core";
 import type { Card } from "@scrychat/core";
-import type { DeckImportEntry } from "@scrychat/core";
 
 const decksDir = path.resolve(process.cwd(), "decks");
 
@@ -95,122 +96,6 @@ function shortCard(card: Card, idx?: OwnedIndex | null) {
     o: truncate(card.oracleText, 200),
     arena: card.arena,
     ...(idx ? { owned: ownedFlag(card, idx) } : {}),
-  };
-}
-
-function toCardEntry(e: DeckImportEntry): CardEntry {
-  return { name: e.name, count: e.count };
-}
-
-/**
- * Implements the deck_import tool's behavior. See registerTools() for the
- * inputSchema; this is factored out as a plain async function so it can be
- * called from inside `safe(...)` in the handler.
- */
-async function deckImport(
-  text: string,
-  deckNameArg: string | undefined,
-  modeArg: "new" | "existing" | undefined,
-): Promise<unknown> {
-  const parsed = parseDecklist(text);
-  const parsedOut = { entries: parsed.entries, unparsed: parsed.unparsed };
-  const commanderEntries = parsed.entries.filter((e) => e.commander);
-
-  const mode: "new" | "existing" = modeArg ?? (commanderEntries.length > 0 ? "new" : "existing");
-
-  if (mode === "existing") {
-    if (!deckNameArg) {
-      return { error: "deck_name required for existing-deck import", parsed: parsedOut };
-    }
-    const deck = await getDeck(deckNameArg, decksDir);
-    if (!deck) {
-      return { error: `Deck not found: ${deckNameArg}`, parsed: parsedOut };
-    }
-    const result = await addCards(deckNameArg, parsed.entries.map(toCardEntry), resolveCard, decksDir);
-    const summary = await deckSummary(deckNameArg, resolveCard, decksDir);
-    return {
-      mode,
-      added: result.added,
-      rejected: result.rejected,
-      unparsed: parsed.unparsed,
-      summary,
-    };
-  }
-
-  // mode === "new"
-  let commanderName: string | undefined;
-  let commanderNote: string | undefined;
-  let nonCommanderEntries: DeckImportEntry[];
-
-  if (commanderEntries.length === 1) {
-    commanderName = commanderEntries[0].name;
-    nonCommanderEntries = parsed.entries.filter((e) => e !== commanderEntries[0]);
-  } else if (commanderEntries.length > 1) {
-    // Partner/background pair or ambiguous multi-marker list. Phase 1: keep it
-    // simple, use the first as commander, demote the rest to normal cards.
-    commanderName = commanderEntries[0].name;
-    commanderNote =
-      `Multiple *CMDR* markers found; used "${commanderName}" as commander and treated ` +
-      `the rest (${commanderEntries.slice(1).map((e) => e.name).join(", ")}) as normal cards ` +
-      `(partner/background pairing is not auto-resolved in phase 1).`;
-    nonCommanderEntries = parsed.entries.filter((e) => e !== commanderEntries[0]);
-  } else {
-    // Zero commander-marked entries but mode forced to "new": try to infer a
-    // single legal-commander candidate by resolving every entry. Only done in
-    // this rare forced path — the common (marked) path above never resolves.
-    const candidateEntries: DeckImportEntry[] = [];
-    for (const entry of parsed.entries) {
-      const resolved = await resolveCard(entry.name);
-      if (resolved && resolved.typeLine.includes("Legendary") && resolved.typeLine.includes("Creature")) {
-        candidateEntries.push(entry);
-      }
-    }
-    // Dedupe candidate NAMES for the needsCommander list (a duplicate legendary
-    // line shouldn't make it look like 2 distinct candidates).
-    const candidates = [...new Set(candidateEntries.map((e) => e.name))];
-    if (candidates.length === 1) {
-      commanderName = candidates[0];
-      const commanderEntry = candidateEntries[0]; // first matching entry object
-      nonCommanderEntries = parsed.entries.filter((e) => e !== commanderEntry);
-    } else if (candidates.length > 1) {
-      return { needsCommander: true, candidates, parsed: parsedOut };
-    } else {
-      return {
-        error: "No commander found in list; specify deck_name + a commander.",
-        parsed: parsedOut,
-      };
-    }
-  }
-
-  const deckName = deckNameArg ?? commanderName!;
-  if (!deckNameArg) {
-    const defaultNote = `deck_name not given; defaulted to commander name "${deckName}".`;
-    commanderNote = commanderNote ? `${commanderNote} ${defaultNote}` : defaultNote;
-  }
-
-  let deck;
-  try {
-    deck = await createDeck(deckName, commanderName!, resolveCard, decksDir);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { error: message, parsed: parsedOut };
-  }
-
-  const result = await addCards(deckName, nonCommanderEntries!.map(toCardEntry), resolveCard, decksDir);
-  const summary = await deckSummary(deckName, resolveCard, decksDir);
-
-  return {
-    mode,
-    created: {
-      name: deck.name,
-      commander: deck.commander,
-      commanderIdentity: deck.commanderIdentity.join(""),
-    },
-    ...(commanderNote ? { commanderNote } : {}),
-    added: result.added,
-    rejected: result.rejected,
-    unparsed: parsed.unparsed,
-    summary,
   };
 }
 
@@ -545,7 +430,7 @@ export function registerTools(server: McpServer): void {
       },
     },
     async ({ text, deck_name, mode }) => {
-      return safe(async () => deckImport(text, deck_name, mode));
+      return safe(async () => importDecklist(text, { deckName: deck_name, mode }, resolveCard, decksDir));
     },
   );
 
@@ -567,6 +452,53 @@ export function registerTools(server: McpServer): void {
     async ({ deck_name, cards }) => {
       return safe(async () => {
         const result = await setCardTagsResult(deck_name, cards, decksDir);
+        const summary = await deckSummary(deck_name, resolveCard, decksDir);
+        return { updated: result.updated, rejected: result.rejected, summary };
+      });
+    },
+  );
+
+  server.registerTool(
+    "deck_rename_tag",
+    {
+      title: "Rename tag",
+      description: "Bulk-renames a tag across all cards in a deck (exact string match). Deduplicates if the target tag is already present on a card.",
+      inputSchema: {
+        deck_name: z.string(),
+        from: z.string().describe("existing tag to rename"),
+        to: z.string().describe("new tag name"),
+      },
+    },
+    async ({ deck_name, from, to }) => {
+      return safe(async () => {
+        const deck = await renameTag(deck_name, from, to, decksDir);
+        const summary = await deckSummary(deck_name, resolveCard, decksDir);
+        return {
+          name: deck.name,
+          commander: deck.commander,
+          total: deck.cards.reduce((sum, c) => sum + (c.count ?? 1), 0),
+          summary,
+        };
+      });
+    },
+  );
+
+  server.registerTool(
+    "deck_set_card_count",
+    {
+      title: "Set card count",
+      description:
+        "Sets the copy count in place for a card already in the deck (e.g. adjust a Basic Land's count without " +
+        "remove+re-add). Counts greater than 1 are only allowed for Basic Land cards.",
+      inputSchema: {
+        deck_name: z.string(),
+        card: z.string().describe("Card name (must already be in deck)"),
+        count: z.number().int().positive().describe("New count, >=1 (only >1 for Basic Land)"),
+      },
+    },
+    async ({ deck_name, card, count }) => {
+      return safe(async () => {
+        const result = await setCardCount(deck_name, card, count, resolveCard, decksDir);
         const summary = await deckSummary(deck_name, resolveCard, decksDir);
         return { updated: result.updated, rejected: result.rejected, summary };
       });

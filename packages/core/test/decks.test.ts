@@ -13,6 +13,8 @@ import {
   deckSummary,
   setCardTags,
   renameTag,
+  removeTag,
+  setCardCount,
   renameDeck,
   setCommander,
   setCardTagsResult,
@@ -369,6 +371,83 @@ describe("decks", () => {
     const deck = await renameTag("Selesnya Value", "ramp", "draw", decksDir);
     expect(deck.cards.find((c) => c.name === "Sol Ring")?.tags).toEqual(["draw"]);
     expect(deck.cards.find((c) => c.name === "Elvish Visionary")?.tags).toEqual(["draw"]);
+  });
+
+  describe("removeTag", () => {
+    it("removes an exact-match tag from every card carrying it, leaving other tags intact", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards(
+        "Selesnya Value",
+        [
+          { name: "Sol Ring", tags: ["ramp"] },
+          { name: "Elvish Visionary", tags: ["ramp", "draw"] },
+        ],
+        resolver,
+        decksDir
+      );
+
+      const result = await removeTag("Selesnya Value", "ramp", decksDir);
+      expect(result.affected).toBe(2);
+      expect(result.deck.cards.find((c) => c.name === "Sol Ring")?.tags).toEqual([]);
+      expect(result.deck.cards.find((c) => c.name === "Elvish Visionary")?.tags).toEqual(["draw"]);
+    });
+
+    it("affected is 0 when the tag is absent from every card", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards("Selesnya Value", [{ name: "Sol Ring", tags: ["ramp"] }], resolver, decksDir);
+
+      const result = await removeTag("Selesnya Value", "nonexistent-tag", decksDir);
+      expect(result.affected).toBe(0);
+      expect(result.deck.cards.find((c) => c.name === "Sol Ring")?.tags).toEqual(["ramp"]);
+    });
+  });
+
+  describe("setCardCount", () => {
+    it("sets count on a basic land to a value > 1", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards("Selesnya Value", [{ name: "Forest", count: 1 }], resolver, decksDir);
+
+      const result = await setCardCount("Selesnya Value", "Forest", 5, resolver, decksDir);
+      expect(result.rejected).toBeNull();
+      expect(result.updated).toEqual({ name: "Forest", count: 5 });
+      expect(result.deck.cards.find((c) => c.name === "Forest")?.count).toBe(5);
+    });
+
+    it("rejects count > 1 for a non-basic-land card", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards("Selesnya Value", [{ name: "Sol Ring" }], resolver, decksDir);
+
+      const result = await setCardCount("Selesnya Value", "Sol Ring", 2, resolver, decksDir);
+      expect(result.updated).toBeNull();
+      expect(result.rejected).toEqual({ name: "Sol Ring", reason: "Count > 1 only allowed for Basic Land" });
+      expect(result.deck.cards.find((c) => c.name === "Sol Ring")?.count).toBe(1);
+    });
+
+    it("allows setting count = 1 on a non-basic-land card", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards("Selesnya Value", [{ name: "Sol Ring" }], resolver, decksDir);
+
+      const result = await setCardCount("Selesnya Value", "Sol Ring", 1, resolver, decksDir);
+      expect(result.rejected).toBeNull();
+      expect(result.updated).toEqual({ name: "Sol Ring", count: 1 });
+    });
+
+    it("rejects a card not in the deck", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+
+      const result = await setCardCount("Selesnya Value", "Sol Ring", 1, resolver, decksDir);
+      expect(result.updated).toBeNull();
+      expect(result.rejected).toEqual({ name: "Sol Ring", reason: "Card not in deck" });
+    });
+
+    it("rejects count < 1", async () => {
+      await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+      await addCards("Selesnya Value", [{ name: "Forest" }], resolver, decksDir);
+
+      const result = await setCardCount("Selesnya Value", "Forest", 0, resolver, decksDir);
+      expect(result.updated).toBeNull();
+      expect(result.rejected).toEqual({ name: "Forest", reason: "Count must be an integer >= 1" });
+    });
   });
 
   it("reports total/targetTotal/overUnder against the 99-card EDH target", async () => {

@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { parseDecklist, type DeckImportEntry } from "../src/import.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { parseDecklist, importDecklist, type DeckImportEntry } from "../src/import.js";
+import type { CardResolver, ResolvedCard } from "../src/decks.js";
 
 /** Helper: assert every non-blank/non-comment/non-excluded-section input line is
  * accounted for as either an entry or an unparsed line. We verify this per-test
@@ -377,5 +381,91 @@ describe("parseDecklist: mixed realistic paste", () => {
     expect(names).not.toContain("Tormod's Crypt");
     expect(names).not.toContain("Cyclonic Rift");
     expect(result.unparsed.join(" ")).not.toMatch(/Rest in Peace|Tormod|Cyclonic Rift/);
+  });
+});
+
+describe("importDecklist", () => {
+  const FIXTURES: Record<string, ResolvedCard> = {
+    "atraxa, praetors' voice": {
+      name: "Atraxa, Praetors' Voice",
+      colorIdentity: ["W", "U", "B", "G"],
+      cmc: 4,
+      typeLine: "Legendary Creature — Phyrexian Angel",
+      legalCommander: true,
+      arena: true,
+    },
+    "sol ring": {
+      name: "Sol Ring",
+      colorIdentity: [],
+      cmc: 1,
+      typeLine: "Artifact",
+      legalCommander: true,
+      arena: true,
+    },
+    forest: {
+      name: "Forest",
+      colorIdentity: [],
+      cmc: 0,
+      typeLine: "Basic Land — Forest",
+      legalCommander: true,
+      arena: true,
+    },
+  };
+
+  const resolver: CardResolver = async (name: string) => {
+    return FIXTURES[name.toLowerCase()] ?? null;
+  };
+
+  let decksDir: string;
+
+  beforeEach(async () => {
+    decksDir = await fs.mkdtemp(path.join(os.tmpdir(), "scrychat-import-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(decksDir, { recursive: true, force: true });
+  });
+
+  it("new mode with a *CMDR* marker creates a deck and adds the remaining cards", async () => {
+    const text = ["1 Atraxa, Praetors' Voice *CMDR*", "1 Sol Ring", "10 Forest"].join("\n");
+
+    const result: any = await importDecklist(text, {}, resolver, decksDir);
+
+    expect(result.mode).toBe("new");
+    expect(result.created.commander).toBe("Atraxa, Praetors' Voice");
+    expect(result.added.map((c: any) => c.name).sort()).toEqual(["Forest", "Sol Ring"]);
+    expect(result.rejected).toEqual([]);
+    expect(result.unparsed).toEqual([]);
+    expect(result.summary.total).toBe(11);
+  });
+
+  it("existing mode adds parsed cards to an already-created deck", async () => {
+    await importDecklist(
+      "1 Atraxa, Praetors' Voice *CMDR*",
+      { deckName: "My Deck" },
+      resolver,
+      decksDir
+    );
+
+    const result: any = await importDecklist(
+      "1 Sol Ring\n1 Forest",
+      { deckName: "My Deck", mode: "existing" },
+      resolver,
+      decksDir
+    );
+
+    expect(result.mode).toBe("existing");
+    expect(result.added.map((c: any) => c.name).sort()).toEqual(["Forest", "Sol Ring"]);
+    expect(result.rejected).toEqual([]);
+  });
+
+  it("existing mode errors when the target deck doesn't exist", async () => {
+    const result: any = await importDecklist(
+      "1 Sol Ring",
+      { deckName: "Nope", mode: "existing" },
+      resolver,
+      decksDir
+    );
+    expect(result.error).toMatch(/Deck not found/);
   });
 });

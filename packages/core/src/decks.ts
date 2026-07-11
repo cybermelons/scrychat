@@ -499,6 +499,78 @@ export async function renameTag(
   return deck;
 }
 
+export type SetCardCountResult = {
+  deck: Deck;
+  updated: { name: string; count: number } | null;
+  rejected: RejectedCard | null;
+};
+
+export async function setCardCount(
+  name: string,
+  cardName: string,
+  count: number,
+  resolver: CardResolver,
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<SetCardCountResult> {
+  const deck = await getDeck(name, decksDir);
+  if (!deck) {
+    throw new Error(`Deck not found: ${name}`);
+  }
+
+  if (!Number.isInteger(count) || count < 1) {
+    return { deck, updated: null, rejected: { name: cardName, reason: "Count must be an integer >= 1" } };
+  }
+
+  const card = deck.cards.find((c) => c.name.toLowerCase() === cardName.toLowerCase());
+  if (!card) {
+    return { deck, updated: null, rejected: { name: cardName, reason: "Card not in deck" } };
+  }
+
+  if (count > 1) {
+    const resolved = await resolver(card.name);
+    if (!resolved || !resolved.typeLine.includes("Basic Land")) {
+      return {
+        deck,
+        updated: null,
+        rejected: { name: cardName, reason: "Count > 1 only allowed for Basic Land" },
+      };
+    }
+  }
+
+  card.count = count;
+  deck.updatedAt = new Date().toISOString();
+  await writeDeckFile(decksDir, deck);
+
+  return { deck, updated: { name: card.name, count }, rejected: null };
+}
+
+export type RemoveTagResult = {
+  deck: Deck;
+  affected: number;
+};
+
+export async function removeTag(
+  name: string,
+  tag: string,
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<RemoveTagResult> {
+  const deck = await getDeck(name, decksDir);
+  if (!deck) {
+    throw new Error(`Deck not found: ${name}`);
+  }
+
+  let affected = 0;
+  deck.cards = deck.cards.map((c) => {
+    if (!c.tags || !c.tags.includes(tag)) return c;
+    affected += 1;
+    return { ...c, tags: c.tags.filter((t) => t !== tag) };
+  });
+  deck.updatedAt = new Date().toISOString();
+
+  await writeDeckFile(decksDir, deck);
+  return { deck, affected };
+}
+
 const QUOTA_TAG_NAMES = new Set(["land", "ramp", "draw", "interaction", "wipe"]);
 const UNTAGGED = "untagged";
 

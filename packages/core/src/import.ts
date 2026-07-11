@@ -1,9 +1,18 @@
-// Pure decklist text parser.
+// Decklist text parser + import orchestration.
 //
-// This module is intentionally free of I/O, card resolution, and network access.
-// It only performs deterministic text parsing to extract {name, count, commander?}
-// tuples from a pasted decklist. Card legality / color identity / name resolution
-// against Scryfall happens later, in addCards (see decks.ts) — NOT here.
+// parseDecklist() is intentionally free of I/O, card resolution, and network
+// access. It only performs deterministic text parsing to extract
+// {name, count, commander?} tuples from a pasted decklist. Card legality /
+// color identity / name resolution against Scryfall happens later, in
+// addCards (see decks.ts) — NOT here.
+//
+// importDecklist() is the orchestration layer on top: it drives parseDecklist
+// plus decks.ts (createDeck/getDeck/addCards/deckSummary) to implement the
+// full deck_import behavior (new-deck vs existing-deck modes, commander
+// inference, accounting of added/rejected/unparsed).
+
+import type { CardEntry, CardResolver, Deck, DeckSummary } from "./decks.js";
+import { addCards, createDeck, deckSummary, getDeck } from "./decks.js";
 
 export type DeckImportEntry = { name: string; count: number; commander?: boolean };
 export type DeckImportResult = { entries: DeckImportEntry[]; unparsed: string[] };
@@ -287,4 +296,136 @@ export function parseDecklist(text: string): DeckImportResult {
   }
 
   return { entries, unparsed };
+}
+
+function toCardEntry(e: DeckImportEntry): CardEntry {
+  return { name: e.name, count: e.count };
+}
+
+export type ImportDecklistOptions = {
+  deckName?: string;
+  mode?: "new" | "existing";
+};
+
+/**
+ * Orchestrates a full decklist import: parses the pasted text, then either
+ * adds the parsed cards to an existing deck or creates a new deck (inferring
+ * the commander from *CMDR*-marked entries, or resolving a single legendary
+ * creature candidate when mode is forced to "new" with none marked).
+ *
+ * This is the implementation behind the MCP deck_import tool — factored out
+ * here so it's usable without going through MCP, and to keep tools.ts as a
+ * thin registration layer. Return shape is deliberately unchanged from the
+ * original tools.ts implementation (parsed/error/needsCommander/candidates/
+ * added/rejected/unparsed/summary/etc).
+ */
+export async function importDecklist(
+  text: string,
+  opts: ImportDecklistOptions,
+  resolver: CardResolver,
+  decksDir?: string,
+): Promise<unknown> {
+  const deckNameArg = opts.deckName;
+  const modeArg = opts.mode;
+
+  const parsed = parseDecklist(text);
+  const parsedOut = { entries: parsed.entries, unparsed: parsed.unparsed };
+  const commanderEntries = parsed.entries.filter((e) => e.commander);
+
+  const mode: "new" | "existing" = modeArg ?? (commanderEntries.length > 0 ? "new" : "existing");
+
+  if (mode === "existing") {
+    if (!deckNameArg) {
+      return { error: "deck_name required for existing-deck import", parsed: parsedOut };
+    }
+    const deck = await getDeck(deckNameArg, decksDir);
+    if (!deck) {
+      return { error: `Deck not found: ${deckNameArg}`, parsed: parsedOut };
+    }
+    const result = await addCards(deckNameArg, parsed.entries.map(toCardEntry), resolver, decksDir);
+    const summary = await deckSummary(deckNameArg, resolver, decksDir);
+    return {
+      mode,
+      added: result.added,
+      rejected: result.rejected,
+      unparsed: parsed.unparsed,
+      summary,
+    };
+  }
+
+  // mode === "new"
+  let commanderName: string | undefined;
+  let commanderNote: string | undefined;
+  let nonCommanderEntries: DeckImportEntry[];
+
+  if (commanderEntries.length === 1) {
+    commanderName = commanderEntries[0].name;
+    nonCommanderEntries = parsed.entries.filter((e) => e !== commanderEntries[0]);
+  } else if (commanderEntries.length > 1) {
+    // Partner/background pair or ambiguous multi-marker list. Phase 1: keep it
+    // simple, use the first as commander, demote the rest to normal cards.
+    commanderName = commanderEntries[0].name;
+    commanderNote =
+      `Multiple *CMDR* markers found; used "${commanderName}" as commander and treated ` +
+      `the rest (${commanderEntries.slice(1).map((e) => e.name).join(", ")}) as normal cards ` +
+      `(partner/background pairing is not auto-resolved in phase 1).`;
+    nonCommanderEntries = parsed.entries.filter((e) => e !== commanderEntries[0]);
+  } else {
+    // Zero commander-marked entries but mode forced to "new": try to infer a
+    // single legal-commander candidate by resolving every entry. Only done in
+    // this rare forced path — the common (marked) path above never resolves.
+    const candidateEntries: DeckImportEntry[] = [];
+    for (const entry of parsed.entries) {
+      const resolved = await resolver(entry.name);
+      if (resolved && resolved.typeLine.includes("Legendary") && resolved.typeLine.includes("Creature")) {
+        candidateEntries.push(entry);
+      }
+    }
+    // Dedupe candidate NAMES for the needsCommander list (a duplicate legendary
+    // line shouldn't make it look like 2 distinct candidates).
+    const candidates = [...new Set(candidateEntries.map((e) => e.name))];
+    if (candidates.length === 1) {
+      commanderName = candidates[0];
+      const commanderEntry = candidateEntries[0]; // first matching entry object
+      nonCommanderEntries = parsed.entries.filter((e) => e !== commanderEntry);
+    } else if (candidates.length > 1) {
+      return { needsCommander: true, candidates, parsed: parsedOut };
+    } else {
+      return {
+        error: "No commander found in list; specify deck_name + a commander.",
+        parsed: parsedOut,
+      };
+    }
+  }
+
+  const deckName = deckNameArg ?? commanderName!;
+  if (!deckNameArg) {
+    const defaultNote = `deck_name not given; defaulted to commander name "${deckName}".`;
+    commanderNote = commanderNote ? `${commanderNote} ${defaultNote}` : defaultNote;
+  }
+
+  let deck: Deck;
+  try {
+    deck = await createDeck(deckName, commanderName!, resolver, decksDir);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: message, parsed: parsedOut };
+  }
+
+  const result = await addCards(deckName, nonCommanderEntries!.map(toCardEntry), resolver, decksDir);
+  const summary: DeckSummary = await deckSummary(deckName, resolver, decksDir);
+
+  return {
+    mode,
+    created: {
+      name: deck.name,
+      commander: deck.commander,
+      commanderIdentity: deck.commanderIdentity.join(""),
+    },
+    ...(commanderNote ? { commanderNote } : {}),
+    added: result.added,
+    rejected: result.rejected,
+    unparsed: parsed.unparsed,
+    summary,
+  };
 }

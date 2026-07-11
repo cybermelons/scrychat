@@ -71,6 +71,29 @@ export type AddCardsResult = {
   rejected: RejectedCard[];
 };
 
+export type IllegalCard = { name: string; reason: string };
+
+export type CommanderChangeResult = {
+  deck: Deck;
+  changed: boolean;
+  nowIllegal: IllegalCard[];
+};
+
+export type ImportCandidate = { name: string; [key: string]: unknown };
+
+export type DeckImportResult = {
+  error?: string;
+  needsCommander?: boolean;
+  candidates?: ImportCandidate[];
+  deck?: Deck;
+  added?: CardEntry[];
+  rejected?: RejectedCard[];
+  unparsed?: string[];
+  summary?: string;
+};
+
+export type ExportFormat = "mtga" | "plain" | "moxfield";
+
 export const LEGACY_ROLE_TAGS = [
   "land",
   "ramp",

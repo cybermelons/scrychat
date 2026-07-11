@@ -119,7 +119,10 @@ instead of asking.
    untaggedForQuota, remaining) is enough to track quota progress without a round-trip — only
    call `deck_get` when you need the full card list (final review, grouped display).
 8. Iterate additions/swaps until: 100 cards, singleton, quotas green, curve reasonable.
-   After building, `deck_set_card_tags` bulk-retags cards already in the deck, `deck_rename`
+   After building, `deck_set_card_tags` bulk-retags cards already in the deck, `deck_rename_tag`
+   bulk-renames a tag across every card carrying it (e.g. fixing a typo'd tag or merging two tag
+   names), `deck_set_card_count` adjusts a basic land's copy count in place (prefer this over
+   remove+re-add when just changing how many Forests/Islands/etc. are in the deck), `deck_rename`
    renames the deck (rejects on name collision), and `deck_set_commander` swaps the commander
    (reports but does not auto-remove cards outside the new identity, via `nowIllegal`).
 9. If a budget was given, run a final pass replacing over-budget cards via `find_alternatives`
@@ -231,3 +234,6 @@ instead of asking.
 - `deck_add` rejections (color identity violation, singleton violation, not legal) carry a
   reason — relay it to the user verbatim; don't silently retry with a different card without
   explaining why the first failed.
+- There is deliberately NO `deck_delete` tool — deck deletion is UI-only (destructive, same policy
+  as chat deletion). If the user asks to delete a deck, tell them to use the trash affordance in
+  the web UI's deck panel; don't try to fake it with other tools.

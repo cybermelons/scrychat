@@ -16,6 +16,11 @@ import {
   deleteDeck,
   setCardTags,
   renameTag,
+  renameDeck,
+  setCommander,
+  importDecklist,
+  setCardCount,
+  removeTag,
   getLocalDb,
   categoryTagMembersLocal,
   parseCiMask,
@@ -38,6 +43,7 @@ import {
   type CategoryResolver,
 } from "./group-chips-core.js";
 import { parseCollectionBody, buildImportResult } from "./collection-core.js";
+import { isValidDeckName } from "./deck-name-core.js";
 
 // CRITICAL: strip stale ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the
 // process env at startup, before anything else touches process.env or the
@@ -1013,6 +1019,10 @@ app.get("/api/decks", async (_req: Request, res: Response) => {
 
 app.get("/api/decks/:name", async (req: Request, res: Response) => {
   try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
     const deck = await getDeck(req.params.name, DECKS_DIR);
     if (!deck) {
       res.status(404).json({ error: "Deck not found" });
@@ -1071,6 +1081,10 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
 
 app.get("/api/decks/:name/export", async (req: Request, res: Response) => {
   try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
     const allowedFormats = ["plain", "mtga", "moxfield"] as const;
     const rawFormat = req.query.format;
     const format = allowedFormats.includes(rawFormat as (typeof allowedFormats)[number])
@@ -1095,6 +1109,10 @@ app.post("/api/decks", async (req: Request, res: Response) => {
       res.status(400).json({ error: "name and commander are required" });
       return;
     }
+    if (!isValidDeckName(name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
     const deck = await createDeck(name, commander, resolver, DECKS_DIR);
     logAction(`created deck "${deck.name}" (commander ${deck.commander})`);
     res.json({ deck });
@@ -1105,6 +1123,10 @@ app.post("/api/decks", async (req: Request, res: Response) => {
 
 app.post("/api/decks/:name/cards", async (req: Request, res: Response) => {
   try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
     const { cards } = req.body ?? {};
     if (!Array.isArray(cards)) {
       res.status(400).json({ error: "cards array is required" });
@@ -1125,6 +1147,10 @@ app.post("/api/decks/:name/cards", async (req: Request, res: Response) => {
 
 app.patch("/api/decks/:name/cards", async (req: Request, res: Response) => {
   try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
     const { cards } = req.body ?? {};
     if (!Array.isArray(cards)) {
       res.status(400).json({ error: "cards array is required" });
@@ -1154,6 +1180,10 @@ app.patch("/api/decks/:name/cards", async (req: Request, res: Response) => {
 
 app.patch("/api/decks/:name/tags", async (req: Request, res: Response) => {
   try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
     const { from, to } = req.body ?? {};
     if (typeof from !== "string" || from.length === 0 || typeof to !== "string" || to.length === 0) {
       res.status(400).json({ error: "from and to are required non-empty strings" });
@@ -1169,6 +1199,10 @@ app.patch("/api/decks/:name/tags", async (req: Request, res: Response) => {
 
 app.delete("/api/decks/:name/cards", async (req: Request, res: Response) => {
   try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
     const { cards } = req.body ?? {};
     if (!Array.isArray(cards)) {
       res.status(400).json({ error: "cards array is required" });
@@ -1186,6 +1220,10 @@ app.delete("/api/decks/:name/cards", async (req: Request, res: Response) => {
 
 app.delete("/api/decks/:name", async (req: Request, res: Response) => {
   try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
     const ok = await deleteDeck(req.params.name, DECKS_DIR);
     if (!ok) {
       res.status(404).json({ error: "Deck not found" });
@@ -1195,6 +1233,137 @@ app.delete("/api/decks/:name", async (req: Request, res: Response) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post("/api/decks/import", async (req: Request, res: Response) => {
+  try {
+    const { text, deckName, mode } = req.body ?? {};
+    if (typeof text !== "string" || text.trim().length === 0) {
+      res.status(400).json({ error: "text is required" });
+      return;
+    }
+    if (deckName !== undefined && !isValidDeckName(deckName)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    if (mode !== undefined && mode !== "new" && mode !== "existing") {
+      res.status(400).json({ error: 'mode must be "new" or "existing"' });
+      return;
+    }
+    const result = (await importDecklist(text, { deckName, mode }, resolver, DECKS_DIR)) as {
+      created?: { name: string };
+      added?: { name: string }[];
+    };
+    if (result.created) {
+      logAction(`imported decklist into new deck "${result.created.name}"`);
+    } else if (result.added && result.added.length > 0) {
+      logAction(`imported ${result.added.length} card(s) into "${deckName}"`);
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.patch("/api/decks/:name", async (req: Request, res: Response) => {
+  try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const { name } = req.body ?? {};
+    if (!isValidDeckName(name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const deck = await renameDeck(req.params.name, name, DECKS_DIR);
+    logAction(`renamed deck "${req.params.name}" → "${name}"`);
+    res.json({ deck });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/not found/i.test(message)) {
+      res.status(404).json({ error: message });
+    } else {
+      res.status(400).json({ error: message });
+    }
+  }
+});
+
+app.patch("/api/decks/:name/commander", async (req: Request, res: Response) => {
+  try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const { commander } = req.body ?? {};
+    if (typeof commander !== "string" || commander.trim().length === 0) {
+      res.status(400).json({ error: "commander is required" });
+      return;
+    }
+    const result = await setCommander(req.params.name, commander, resolver, DECKS_DIR);
+    logAction(
+      `set commander of "${req.params.name}" to "${result.deck.commander}"` +
+        (result.nowIllegal.length > 0 ? ` (${result.nowIllegal.length} card(s) now illegal)` : "")
+    );
+    res.json({ deck: result.deck, changed: result.changed, nowIllegal: result.nowIllegal });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/not found/i.test(message)) {
+      res.status(404).json({ error: message });
+    } else {
+      res.status(400).json({ error: message });
+    }
+  }
+});
+
+app.patch("/api/decks/:name/cards/count", async (req: Request, res: Response) => {
+  try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const { card, count } = req.body ?? {};
+    if (typeof card !== "string" || card.trim().length === 0) {
+      res.status(400).json({ error: "card is required" });
+      return;
+    }
+    if (typeof count !== "number") {
+      res.status(400).json({ error: "count must be a number" });
+      return;
+    }
+    const result = await setCardCount(req.params.name, card, count, resolver, DECKS_DIR);
+    if (result.updated) {
+      logAction(`set "${result.updated.name}" count to ${result.updated.count} in "${req.params.name}"`);
+    }
+    res.json({ deck: result.deck, updated: result.updated, rejected: result.rejected });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/not found/i.test(message)) {
+      res.status(404).json({ error: message });
+    } else {
+      res.status(400).json({ error: message });
+    }
+  }
+});
+
+app.delete("/api/decks/:name/tags/:tag", async (req: Request, res: Response) => {
+  try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const tag = req.params.tag;
+    const result = await removeTag(req.params.name, tag, DECKS_DIR);
+    logAction(`removed tag "${tag}" from ${result.affected} card(s) in "${req.params.name}"`);
+    res.json({ deck: result.deck, affected: result.affected });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/not found/i.test(message)) {
+      res.status(404).json({ error: message });
+    } else {
+      res.status(400).json({ error: message });
+    }
   }
 });
 

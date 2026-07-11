@@ -1,5 +1,15 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import type { Deck, DeckReport, DeckSummary, QuotaCheck, RejectedCard } from "./types";
+import type {
+  CommanderChangeResult,
+  Deck,
+  DeckImportResult,
+  DeckReport,
+  DeckSummary,
+  ExportFormat,
+  IllegalCard,
+  QuotaCheck,
+  RejectedCard,
+} from "./types";
 import { LEGACY_ROLE_TAGS } from "./types";
 import { CardName } from "./CardName";
 import { renderManaSymbols } from "./markdown";
@@ -173,6 +183,39 @@ export function DeckPanel({
 
   // inline delete-deck confirm
   const [confirmingDeleteDeck, setConfirmingDeleteDeck] = useState(false);
+
+  // deck rename (pencil affordance next to selector)
+  const [renamingDeck, setRenamingDeck] = useState(false);
+  const [deckRenameValue, setDeckRenameValue] = useState("");
+  const [deckRenameBusy, setDeckRenameBusy] = useState(false);
+  const [deckRenameError, setDeckRenameError] = useState<string | null>(null);
+  const deckRenameTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // commander change ("change" affordance in commander block)
+  const [changingCommander, setChangingCommander] = useState(false);
+  const [commanderValue, setCommanderValue] = useState("");
+  const [commanderBusy, setCommanderBusy] = useState(false);
+  const [commanderError, setCommanderError] = useState<string | null>(null);
+  const [nowIllegal, setNowIllegal] = useState<IllegalCard[]>([]);
+  const commanderTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // paste-import (New Deck flow, second path)
+  const [showPasteImport, setShowPasteImport] = useState(false);
+  const [importDeckName, setImportDeckName] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<DeckImportResult | null>(null);
+
+  // basic-land count steppers
+  const [countBusy, setCountBusy] = useState<string | null>(null);
+  const [countError, setCountError] = useState<Record<string, string>>({});
+
+  // tag-group delete confirm
+  const [confirmingDeleteTag, setConfirmingDeleteTag] = useState<string | null>(null);
+  const [tagDeleteBusy, setTagDeleteBusy] = useState(false);
+
+  // export format picker
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("mtga");
 
   // undo chip for card removal (× button). Captures `deck` (the selection AT
   // REMOVAL TIME) alongside name/tags/count so a deck switch while the chip
@@ -449,9 +492,178 @@ export function DeckPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, refreshDecks]);
 
+  const openDeckRename = useCallback(() => {
+    setDeckRenameValue(selected);
+    setDeckRenameError(null);
+    setRenamingDeck(true);
+  }, [selected]);
+
+  const cancelDeckRename = useCallback(() => {
+    setRenamingDeck(false);
+    setDeckRenameError(null);
+    setTimeout(() => deckRenameTriggerRef.current?.focus(), 0);
+  }, []);
+
+  const submitDeckRename = useCallback(() => {
+    const to = deckRenameValue.trim();
+    if (!selected || !to || to === selected) {
+      cancelDeckRename();
+      return;
+    }
+    setDeckRenameBusy(true);
+    setDeckRenameError(null);
+    fetch(`/api/decks/${encodeURIComponent(selected)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: to }),
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+        return body.deck as Deck;
+      })
+      .then((renamed) => {
+        setRenamingDeck(false);
+        refreshDecks(renamed.name);
+      })
+      .catch((e: Error) => setDeckRenameError(e.message))
+      .finally(() => setDeckRenameBusy(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, deckRenameValue, cancelDeckRename, refreshDecks]);
+
+  const openCommanderChange = useCallback(() => {
+    if (!deck) return;
+    setCommanderValue(deck.commander);
+    setCommanderError(null);
+    setChangingCommander(true);
+  }, [deck]);
+
+  const cancelCommanderChange = useCallback(() => {
+    setChangingCommander(false);
+    setCommanderError(null);
+    setTimeout(() => commanderTriggerRef.current?.focus(), 0);
+  }, []);
+
+  const submitCommanderChange = useCallback(() => {
+    const commander = commanderValue.trim();
+    if (!selected || !commander || (deck && commander === deck.commander)) {
+      cancelCommanderChange();
+      return;
+    }
+    setCommanderBusy(true);
+    setCommanderError(null);
+    fetch(`/api/decks/${encodeURIComponent(selected)}/commander`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commander }),
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+        return body as CommanderChangeResult;
+      })
+      .then((result) => {
+        setChangingCommander(false);
+        setNowIllegal(result.nowIllegal ?? []);
+        loadDeck(selected);
+      })
+      .catch((e: Error) => setCommanderError(e.message))
+      .finally(() => setCommanderBusy(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, commanderValue, deck, cancelCommanderChange]);
+
+  const submitPasteImport = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!importText.trim()) return;
+      setImportBusy(true);
+      setImportResult(null);
+      fetch("/api/decks/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: importText,
+          deckName: importDeckName.trim() || undefined,
+        }),
+      })
+        .then(async (r) => {
+          const body = await r.json().catch(() => ({}));
+          // Server may report failure via non-2xx OR via a 200 body carrying
+          // `error`/`needsCommander` — handle both shapes defensively.
+          return body as DeckImportResult;
+        })
+        .then((result) => {
+          setImportResult(result);
+          if (result.deck && !result.needsCommander && !result.error) {
+            setShowPasteImport(false);
+            setImportText("");
+            setImportDeckName("");
+            refreshDecks(result.deck.name);
+          }
+        })
+        .catch((err: Error) => setImportResult({ error: err.message }))
+        .finally(() => setImportBusy(false));
+    },
+    [importText, importDeckName, refreshDecks]
+  );
+
+  const changeCardCount = useCallback(
+    (card: string, count: number) => {
+      if (!selected || count < 1) return;
+      setCountBusy(card);
+      setCountError((prev) => {
+        const { [card]: _drop, ...rest } = prev;
+        return rest;
+      });
+      fetch(`/api/decks/${encodeURIComponent(selected)}/cards/count`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ card, count }),
+      })
+        .then(async (r) => {
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+          return body as { deck: Deck; updated: boolean; rejected: RejectedCard | null };
+        })
+        .then((result) => {
+          if (result.rejected) {
+            setCountError((prev) => ({ ...prev, [card]: result.rejected!.reason }));
+          }
+          loadDeck(selected);
+        })
+        .catch((e: Error) => setCountError((prev) => ({ ...prev, [card]: e.message })))
+        .finally(() => setCountBusy(null));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected]
+  );
+
+  const deleteTagGroup = useCallback(
+    (tag: string) => {
+      if (!selected) return;
+      setActionError(null);
+      setTagDeleteBusy(true);
+      fetch(`/api/decks/${encodeURIComponent(selected)}/tags/${encodeURIComponent(tag)}`, {
+        method: "DELETE",
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const body = await r.json().catch(() => ({}));
+            throw new Error(body.error ?? `HTTP ${r.status}`);
+          }
+          setConfirmingDeleteTag(null);
+          loadDeck(selected);
+        })
+        .catch((e: Error) => setActionError(e.message))
+        .finally(() => setTagDeleteBusy(false));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected]
+  );
+
   const copyExport = useCallback(() => {
     if (!selected) return;
-    fetch(`/api/decks/${encodeURIComponent(selected)}/export?format=mtga`)
+    fetch(`/api/decks/${encodeURIComponent(selected)}/export?format=${exportFormat}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const text = await r.text();
@@ -467,7 +679,7 @@ export function DeckPanel({
         setCopyState("error");
         setTimeout(() => setCopyState("idle"), 1500);
       });
-  }, [selected]);
+  }, [selected, exportFormat]);
 
   const loadDeck = useCallback((name: string) => {
     if (!name) return;
@@ -537,13 +749,35 @@ export function DeckPanel({
         closeTagEditor();
         return;
       }
+      if (renamingDeck) {
+        cancelDeckRename();
+        return;
+      }
+      if (changingCommander) {
+        cancelCommanderChange();
+        return;
+      }
+      if (confirmingDeleteTag !== null) {
+        setConfirmingDeleteTag(null);
+        return;
+      }
       if (confirmingDeleteDeck) {
         setConfirmingDeleteDeck(false);
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [manualCopyText, editingCard, confirmingDeleteDeck, closeTagEditor]);
+  }, [
+    manualCopyText,
+    editingCard,
+    confirmingDeleteDeck,
+    closeTagEditor,
+    renamingDeck,
+    cancelDeckRename,
+    changingCommander,
+    cancelCommanderChange,
+    confirmingDeleteTag,
+  ]);
 
   // Live refresh: refetch the open deck when its file changes on disk.
   useEffect(() => {
@@ -654,6 +888,90 @@ export function DeckPanel({
         )}
       </div>
       {newDeckError && <div className="chip chip-error">{newDeckError}</div>}
+      {!showPasteImport ? (
+        <button
+          type="button"
+          className="btn btn-ghost btn-small paste-import-toggle"
+          onClick={() => {
+            setShowPasteImport(true);
+            setImportResult(null);
+          }}
+        >
+          or paste a decklist
+        </button>
+      ) : (
+        <div className="paste-import">
+          <input
+            className="text-input"
+            placeholder="Deck name (optional)"
+            value={importDeckName}
+            onChange={(e) => setImportDeckName(e.target.value)}
+            disabled={importBusy}
+            aria-label="Imported deck name"
+          />
+          <textarea
+            className="text-input paste-import-textarea"
+            placeholder={"Paste a decklist… mark the commander line with *CMDR* if needed"}
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            disabled={importBusy}
+            aria-label="Decklist to import"
+            rows={6}
+          />
+          <div className="form-row-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-small"
+              disabled={importBusy || !importText.trim()}
+              onClick={submitPasteImport}
+            >
+              {importBusy ? "Importing…" : "Import"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-small"
+              disabled={importBusy}
+              onClick={() => {
+                setShowPasteImport(false);
+                setImportResult(null);
+                setImportText("");
+                setImportDeckName("");
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {importResult && (
+            <div className="import-result">
+              {importResult.error && <div className="chip chip-error">{importResult.error}</div>}
+              {importResult.needsCommander && (
+                <div className="chip chip-muted">
+                  needs a commander — mark the commander line with <code>*CMDR*</code> and resubmit
+                  {importResult.candidates && importResult.candidates.length > 0 && (
+                    <>: {importResult.candidates.map((c) => c.name).join(", ")}</>
+                  )}
+                </div>
+              )}
+              {importResult.summary && <div className="quota-note">{importResult.summary}</div>}
+              {(importResult.added?.length ?? 0) > 0 && (
+                <div className="quota-note">{importResult.added!.length} added</div>
+              )}
+              {importResult.rejected && importResult.rejected.length > 0 && (
+                <div className="rejected-list">
+                  {importResult.rejected.map((r, i) => (
+                    <div className="chip chip-error" key={`${r.name}-${i}`}>
+                      {r.name}: {r.reason}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {importResult.unparsed && importResult.unparsed.length > 0 && (
+                <div className="chip chip-muted">unparsed: {importResult.unparsed.join(" · ")}</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </form>
   );
 
@@ -664,20 +982,52 @@ export function DeckPanel({
         <div className="deck-panel-header">
           <h1 className="app-title">scrychat</h1>
         <div className="deck-select-row">
-          <select
-            className="deck-select"
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            aria-label="Select deck"
-          >
-            {decks.length === 0 && <option value="">no decks</option>}
-            {decks.map((d) => (
-              <option key={d.name} value={d.name}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-          {decks.length > 0 && (
+          {renamingDeck ? (
+            <span className="inline-confirm deck-rename-row">
+              <input
+                className="text-input"
+                value={deckRenameValue}
+                onChange={(e) => setDeckRenameValue(e.target.value)}
+                disabled={deckRenameBusy}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitDeckRename();
+                  if (e.key === "Escape") cancelDeckRename();
+                }}
+                onBlur={submitDeckRename}
+                aria-label="Rename deck"
+              />
+            </span>
+          ) : (
+            <>
+              <select
+                className="deck-select"
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+                aria-label="Select deck"
+              >
+                {decks.length === 0 && <option value="">no decks</option>}
+                {decks.map((d) => (
+                  <option key={d.name} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              {decks.length > 0 && selected && (
+                <button
+                  type="button"
+                  className="rename-deck-btn"
+                  ref={deckRenameTriggerRef}
+                  onClick={openDeckRename}
+                  aria-label="Rename deck"
+                  title="Rename deck"
+                >
+                  ✎
+                </button>
+              )}
+            </>
+          )}
+          {decks.length > 0 && !renamingDeck && (
             <button
               type="button"
               className="btn btn-ghost btn-small"
@@ -687,6 +1037,7 @@ export function DeckPanel({
             </button>
           )}
         </div>
+        {deckRenameError && <div className="chip chip-error">{deckRenameError}</div>}
         {decks.length > 0 && showNewDeck && newDeckForm}
         {refreshFailed && <div className="chip chip-muted">couldn't refresh decks</div>}
         <CollectionSync onImported={onCollectionImported} />
@@ -719,9 +1070,57 @@ export function DeckPanel({
                 />
               )}
               <div>
-                <div className="commander-name">
-                  <CardName name={deck.commander} image={deck.commanderImage} />
-                </div>
+                {changingCommander ? (
+                  <span
+                    className="inline-confirm commander-change-row"
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") cancelCommanderChange();
+                    }}
+                  >
+                    <input
+                      className="text-input"
+                      value={commanderValue}
+                      onChange={(e) => setCommanderValue(e.target.value)}
+                      disabled={commanderBusy}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitCommanderChange();
+                      }}
+                      aria-label="Change commander"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-small"
+                      onClick={submitCommanderChange}
+                      disabled={commanderBusy}
+                    >
+                      {commanderBusy ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-small"
+                      onClick={cancelCommanderChange}
+                      disabled={commanderBusy}
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <div className="commander-name">
+                    <CardName name={deck.commander} image={deck.commanderImage} />
+                    <button
+                      type="button"
+                      className="change-commander-btn"
+                      ref={commanderTriggerRef}
+                      onClick={openCommanderChange}
+                      aria-label="Change commander"
+                      title="Change commander"
+                    >
+                      change
+                    </button>
+                  </div>
+                )}
+                {commanderError && <div className="chip chip-error">{commanderError}</div>}
                 <div className="commander-meta">
                   {deck.commanderIdentity.join("")} · {totalCards + 1} cards
                   {collectionInfo && (
@@ -736,13 +1135,47 @@ export function DeckPanel({
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              className="btn btn-ghost btn-small export-deck-btn"
-              onClick={copyExport}
-            >
-              {copyState === "copied" ? "Copied ✓" : copyState === "error" ? "Copy failed" : "Export"}
-            </button>
+            {nowIllegal.length > 0 && (
+              <div className="chip chip-error chip-dismissible now-illegal-warning">
+                <div>
+                  <strong>{nowIllegal.length} card{nowIllegal.length === 1 ? "" : "s"} now illegal:</strong>
+                  <ul className="now-illegal-list">
+                    {nowIllegal.map((c, i) => (
+                      <li key={`${c.name}-${i}`}>
+                        {c.name} — {c.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <button
+                  type="button"
+                  className="chip-dismiss"
+                  onClick={() => setNowIllegal([])}
+                  aria-label="Dismiss illegal-cards warning"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            <div className="export-row">
+              <select
+                className="role-select export-format-select"
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+                aria-label="Export format"
+              >
+                <option value="mtga">MTGA</option>
+                <option value="moxfield">Moxfield</option>
+                <option value="plain">Plain</option>
+              </select>
+              <button
+                type="button"
+                className="btn btn-ghost btn-small export-deck-btn"
+                onClick={copyExport}
+              >
+                {copyState === "copied" ? "Copied ✓" : copyState === "error" ? "Copy failed" : "Export"}
+              </button>
+            </div>
             {confirmingDeleteDeck ? (
               <span className="inline-confirm" onKeyDown={(e) => {
                 if (e.key === "Escape") setConfirmingDeleteDeck(false);
@@ -940,6 +1373,29 @@ export function DeckPanel({
                               Cancel
                             </button>
                           </span>
+                        ) : confirmingDeleteTag === tag ? (
+                          <span className="inline-confirm group-delete-row" onClick={(e) => e.stopPropagation()}>
+                            <span className="inline-confirm-text">
+                              remove tag "{tag}" from {cards.length} card{cards.length === 1 ? "" : "s"}?
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-small"
+                              onClick={() => deleteTagGroup(tag)}
+                              disabled={tagDeleteBusy}
+                              autoFocus
+                            >
+                              {tagDeleteBusy ? "Removing…" : "Yes"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-small"
+                              onClick={() => setConfirmingDeleteTag(null)}
+                              disabled={tagDeleteBusy}
+                            >
+                              No
+                            </button>
+                          </span>
                         ) : (
                           <>
                             <span className="role-name">{tag}</span>
@@ -961,6 +1417,17 @@ export function DeckPanel({
                                 ✎
                               </button>
                             )}
+                            {tag !== UNTAGGED && (
+                              <button
+                                type="button"
+                                className="group-delete-btn"
+                                onClick={() => setConfirmingDeleteTag(tag)}
+                                aria-label={`Remove tag ${tag}`}
+                                title="Remove tag"
+                              >
+                                ×
+                              </button>
+                            )}
                             <span className="role-count">
                               {cards.reduce((n, c) => n + c.count, 0)}
                             </span>
@@ -974,7 +1441,31 @@ export function DeckPanel({
                       <Fragment key={c.name}>
                         <tr className={c.arena === false ? "card-row card-row-no-arena" : "card-row"}>
                           <td className="card-count-cell">
-                            {c.count > 1 ? `${c.count}×` : ""}
+                            {(c.typeLine ?? "").includes("Basic Land") ? (
+                              <span className="count-stepper">
+                                <button
+                                  type="button"
+                                  className="count-stepper-btn"
+                                  onClick={() => changeCardCount(c.name, c.count - 1)}
+                                  disabled={c.count <= 1 || countBusy === c.name}
+                                  aria-label={`Decrease ${c.name} count`}
+                                >
+                                  −
+                                </button>
+                                <span className="count-stepper-val">{c.count}</span>
+                                <button
+                                  type="button"
+                                  className="count-stepper-btn"
+                                  onClick={() => changeCardCount(c.name, c.count + 1)}
+                                  disabled={countBusy === c.name}
+                                  aria-label={`Increase ${c.name} count`}
+                                >
+                                  +
+                                </button>
+                              </span>
+                            ) : (
+                              c.count > 1 ? `${c.count}×` : ""
+                            )}
                           </td>
                           <td className="card-name-cell">
                             <CardName name={c.name} image={c.image} />
@@ -1037,6 +1528,28 @@ export function DeckPanel({
                             </button>
                           </td>
                         </tr>
+                        {countError[c.name] && (
+                          <tr className="count-error-row">
+                            <td colSpan={5}>
+                              <div className="chip chip-error chip-dismissible">
+                                {c.name}: {countError[c.name]}
+                                <button
+                                  type="button"
+                                  className="chip-dismiss"
+                                  onClick={() =>
+                                    setCountError((prev) => {
+                                      const { [c.name]: _drop, ...rest } = prev;
+                                      return rest;
+                                    })
+                                  }
+                                  aria-label={`Dismiss error for ${c.name}`}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
                         {editingCard === editKey && (
                           <tr className="tag-editor-row">
                             <td colSpan={5}>

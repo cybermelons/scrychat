@@ -6,7 +6,7 @@
  * `decks/` directory it creates is isolated and easy to clean up), speaks
  * newline-delimited JSON-RPC over stdio, and asserts:
  *   1. initialize succeeds
- *   2. tools/list returns exactly 16 tools
+ *   2. tools/list returns exactly 18 tools
  *   3. tools/call search_cards {query:"otag:token-doubler"} -> total >= 10
  *   4. tools/call search_tags {query:"removal"} -> non-empty array
  *   5. tools/call deck_create + deck_add with an off-identity card -> a
@@ -134,7 +134,7 @@ async function main() {
     // 2. tools/list
     const listRes = await withTimeout(send("tools/list", {}), 10000, "tools/list");
     const tools = listRes.result?.tools ?? [];
-    assert(tools.length === 16, `tools/list returns 16 tools (got ${tools.length}: ${tools.map((t) => t.name).join(", ")})`);
+    assert(tools.length === 18, `tools/list returns 18 tools (got ${tools.length}: ${tools.map((t) => t.name).join(", ")})`);
 
     // 3. search_cards otag:token-doubler
     const searchRes = await withTimeout(
