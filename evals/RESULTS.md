@@ -74,3 +74,8 @@ correctly reflected deck state and prior turns.
 
 No leftover `tmp-tier-c-*` artifacts in `decks/` after either run (script deletes via API in
 each check plus a filesystem sweep in `finally`).
+
+## Tier B (formatting contracts) — 2026-07-11
+
+`env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN node evals/run-tier-b.mjs` — **6/6 PASSED** (live subscription chat, self-started server, API-cleaned artifacts):
+B-fmt-1 fenced decklist verbatim (no card-refs in fences) · B-fmt-2 table name cells all linked · B-fmt-3 category chips populated server-side · B-fmt-4 embed rubric (1 focal embed / 0 list embeds) · B-fmt-5 mtga export front-face-only DFC names · B-fmt-6 Arena claims tool-grounded (get_card before answer).
