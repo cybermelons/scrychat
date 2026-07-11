@@ -3,6 +3,7 @@ import type { Deck, DeckReport, DeckSummary, QuotaCheck, RejectedCard } from "./
 import { LEGACY_ROLE_TAGS } from "./types";
 import { CardName } from "./CardName";
 import { renderManaSymbols } from "./markdown";
+import { CollectionSync } from "./CollectionSync";
 
 const CURVE_ORDER = ["0", "1", "2", "3", "4", "5", "6", "7+"];
 
@@ -88,6 +89,9 @@ export function DeckPanel({
   const [decks, setDecks] = useState<DeckSummary[]>([]);
   const [deck, setDeck] = useState<Deck | null>(null);
   const [report, setReport] = useState<DeckReport | null>(null);
+  const [collectionInfo, setCollectionInfo] = useState<
+    { importedAt: string; ownedCount: number; missingCount: number } | null
+  >(null);
   const [loading, setLoading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const selectedRef = useRef(selected);
@@ -352,10 +356,11 @@ export function DeckPanel({
         }
         return r.json();
       })
-      .then((data: { deck: Deck; report?: DeckReport }) => {
+      .then((data: { deck: Deck; report?: DeckReport; collection?: { importedAt: string; ownedCount: number; missingCount: number } }) => {
         if (selectedRef.current !== name) return;
         setDeck(data.deck);
         setReport(data.report ?? null);
+        setCollectionInfo(data.collection ?? null);
         if (!data.report) setReportError("report unavailable");
         const names = new Set<string>([
           data.deck.commander.toLowerCase(),
@@ -367,6 +372,7 @@ export function DeckPanel({
         if (selectedRef.current !== name) return;
         setDeck(null);
         setReport(null);
+        setCollectionInfo(null);
         setReportError(err.message);
         onDeckNames?.(new Set());
       })
@@ -379,6 +385,7 @@ export function DeckPanel({
   useEffect(() => {
     setDeck(null);
     setReport(null);
+    setCollectionInfo(null);
     if (!selected) {
       onDeckNames?.(new Set());
       return;
@@ -386,6 +393,10 @@ export function DeckPanel({
     loadDeck(selected);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, loadDeck]);
+
+  const onCollectionImported = useCallback(() => {
+    if (selectedRef.current) loadDeck(selectedRef.current);
+  }, [loadDeck]);
 
   // Live refresh: refetch the open deck when its file changes on disk.
   useEffect(() => {
@@ -414,6 +425,7 @@ export function DeckPanel({
     manaCost?: string | null;
     producedMana?: string[] | null;
     typeLine?: string | null;
+    owned?: boolean;
   };
   const tagGroups: [string, CardRow[]][] = [];
   const allDeckTags: string[] = [];
@@ -430,6 +442,7 @@ export function DeckPanel({
         manaCost: c.manaCost,
         producedMana: c.producedMana,
         typeLine: c.typeLine,
+        owned: c.owned,
       };
       if (tags.length === 0) {
         if (!map.has(UNTAGGED)) map.set(UNTAGGED, []);
@@ -526,6 +539,7 @@ export function DeckPanel({
           )}
         </div>
         {decks.length > 0 && showNewDeck && newDeckForm}
+        <CollectionSync onImported={onCollectionImported} />
       </div>
 
       {decks.length === 0 && (
@@ -560,6 +574,14 @@ export function DeckPanel({
                 </div>
                 <div className="commander-meta">
                   {deck.commanderIdentity.join("")} · {totalCards + 1} cards
+                  {collectionInfo && (
+                    <>
+                      {" · "}
+                      {collectionInfo.missingCount === 0
+                        ? "all owned ✓"
+                        : `${collectionInfo.missingCount} missing on Arena`}
+                    </>
+                  )}
                   {loading && <span className="refreshing"> · refreshing…</span>}
                 </div>
               </div>
@@ -731,6 +753,12 @@ export function DeckPanel({
                           </td>
                           <td className="card-name-cell">
                             <CardName name={c.name} image={c.image} />
+                            {c.owned === false && (
+                              <span className="owned-chip owned-missing">missing</span>
+                            )}
+                            {c.owned === true && (
+                              <span className="owned-chip owned-yes">✓</span>
+                            )}
                           </td>
                           <td className="card-mana-cell">
                             {(() => {

@@ -4,3 +4,4 @@ data/
 chats/
 .DS_Store
 evals/transcripts/
+collection.json

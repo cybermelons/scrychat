@@ -8,7 +8,12 @@
  * and drives its HTTP API with plain fetch/http calls. No LLM calls in the default run.
  *
  * Mirrors run-tier-a.mjs's style: one OK/FAIL line per check, exit 1 on any FAIL,
- * ends with `TIER C: n/9 PASSED`.
+ * ends with `TIER C: n/10 PASSED`.
+ *
+ * C-COLLECT: Arena-collection import e2e (POST/GET /api/collection + owned flag via
+ * a spawned MCP server's get_card, mirroring packages/mcp/test/rpc-smoke.mjs). Uses a
+ * fixture Player.log (evals/fixtures/arena-player.log) and backs up/restores any
+ * pre-existing repo-root collection.json around the check.
  *
  * --with-chat: also runs three LLM-dependent checks against POST /api/chat (skipped
  * by default). These are judged by simple substring match and may be flaky.
@@ -18,6 +23,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import http from "node:http";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,6 +31,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 const SERVER_PATH = path.join(REPO_ROOT, "apps", "web", "dist", "server.js");
 const DECKS_DIR = path.join(REPO_ROOT, "decks");
+const COLLECTION_JSON_PATH = path.join(REPO_ROOT, "collection.json");
+const MCP_SERVER_PATH = path.join(REPO_ROOT, "packages", "mcp", "dist", "index.js");
+const FIXTURE_LOG_PATH = path.join(__dirname, "fixtures", "arena-player.log");
 
 const WITH_CHAT = process.argv.includes("--with-chat");
 
@@ -306,6 +315,62 @@ async function main() {
       record("C9", false, `threw: ${err.message}`);
     }
 
+    // --- C-COLLECT: collection import e2e ---
+    // Safety: back up any pre-existing repo-root collection.json (bytes, not
+    // parsed) and restore it verbatim in finally, regardless of pass/fail.
+    // If it didn't exist before this check, delete whatever we created.
+    let collectionBackup = null;
+    let collectionPreexisted = false;
+    try {
+      collectionPreexisted = fs.existsSync(COLLECTION_JSON_PATH);
+      if (collectionPreexisted) {
+        collectionBackup = fs.readFileSync(COLLECTION_JSON_PATH);
+      }
+
+      const fixtureText = fs.readFileSync(FIXTURE_LOG_PATH, "utf8");
+
+      const postRes = await fetch(`${baseUrl}/api/collection`, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: fixtureText,
+      });
+      const postJson = await postRes.json();
+      const postOk =
+        postRes.status === 200 &&
+        postJson?.ok === true &&
+        typeof postJson?.stats?.uniqueOwned === "number" &&
+        postJson.stats.uniqueOwned >= 2;
+
+      const getRes = await fetch(`${baseUrl}/api/collection`);
+      const getJson = await getRes.json();
+      const getOk = getRes.status === 200 && getJson?.exists === true && getJson?.totalCards === 11;
+
+      // Verify the owned flag via the MCP server's get_card tool (Doubling
+      // Season is arena_id 93929, present in the fixture blob).
+      const ownedResult = await checkOwnedViaMcp(REPO_ROOT, "Doubling Season");
+
+      const ok = postOk && getOk && ownedResult.ok === true;
+      record(
+        "C-COLLECT",
+        ok,
+        `postStatus=${postRes.status} postStats=${JSON.stringify(postJson?.stats)} getStatus=${getRes.status} getBody=${JSON.stringify(
+          getJson,
+        )} ownedCheck=${JSON.stringify(ownedResult)}`,
+      );
+    } catch (err) {
+      record("C-COLLECT", false, `threw: ${err.message}`);
+    } finally {
+      try {
+        if (collectionPreexisted && collectionBackup) {
+          fs.writeFileSync(COLLECTION_JSON_PATH, collectionBackup);
+        } else if (!collectionPreexisted) {
+          fs.rmSync(COLLECTION_JSON_PATH, { force: true });
+        }
+      } catch {
+        // best-effort restore; nothing more we can do here
+      }
+    }
+
     // --- --with-chat: three LLM-dependent checks, skipped by default ---
     if (!WITH_CHAT) {
       skip("C10", "activeDeck context relay (LLM-dependent; run with --with-chat)");
@@ -349,9 +414,9 @@ async function main() {
     }
   }
 
-  const expectedCount = WITH_CHAT ? 12 : 9;
+  const expectedCount = WITH_CHAT ? 13 : 10;
   const passed = results.filter((r) => r.ok).length;
-  const label = WITH_CHAT ? `TIER C: ${passed}/12 PASSED` : `TIER C: ${passed}/9 PASSED`;
+  const label = WITH_CHAT ? `TIER C: ${passed}/13 PASSED` : `TIER C: ${passed}/10 PASSED`;
   console.log(`\n${label}`);
   if (passed < results.length || results.length < expectedCount) {
     process.exit(1);
@@ -440,6 +505,89 @@ async function runChatChecks(baseUrl, tmpDeckNames) {
     tmpDeckNames.delete(chatDeckName);
   } catch {
     // swept by fs fallback in main()'s finally
+  }
+}
+
+// --- C-COLLECT helper: spawn the built MCP server (stdio JSON-RPC) the same
+// way packages/mcp/test/rpc-smoke.mjs does, call get_card once, and return
+// its `owned` flag. Isolated cwd so it doesn't touch this repo's decks/.
+async function checkOwnedViaMcp(repoRoot, cardName) {
+  if (!fs.existsSync(MCP_SERVER_PATH)) {
+    return { ok: false, reason: `mcp build missing: ${MCP_SERVER_PATH}` };
+  }
+
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrychat-tierc-mcp-"));
+  const child = spawn(process.execPath, [MCP_SERVER_PATH], {
+    cwd: workDir,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  let buf = "";
+  const pending = new Map();
+  let nextId = 1;
+  child.stdout.on("data", (d) => {
+    buf += d.toString();
+    let idx;
+    while ((idx = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, idx);
+      buf = buf.slice(idx + 1);
+      if (!line.trim()) continue;
+      let msg;
+      try {
+        msg = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (msg.id != null && pending.has(msg.id)) {
+        pending.get(msg.id)(msg);
+        pending.delete(msg.id);
+      }
+    }
+  });
+
+  function send(method, params) {
+    const id = nextId++;
+    const req = { jsonrpc: "2.0", id, method, params };
+    const p = new Promise((resolve) => pending.set(id, resolve));
+    child.stdin.write(JSON.stringify(req) + "\n");
+    return p;
+  }
+  function notify(method, params) {
+    child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
+  }
+  function withTimeout(promise, ms, label) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout waiting for ${label}`)), ms)),
+    ]);
+  }
+
+  try {
+    await withTimeout(
+      send("initialize", {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "tier-c-collect", version: "0.0.1" },
+      }),
+      10000,
+      "initialize",
+    );
+    notify("notifications/initialized", {});
+
+    const res = await withTimeout(
+      send("tools/call", { name: "get_card", arguments: { name: cardName } }),
+      15000,
+      "tools/call get_card",
+    );
+    const text = res.result?.content?.[0]?.text ?? "{}";
+    const json = JSON.parse(text);
+    return { ok: json?.owned === true, card: json?.name, owned: json?.owned };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  } finally {
+    child.stdin.end();
+    child.kill();
+    fs.rmSync(workDir, { recursive: true, force: true });
   }
 }
 

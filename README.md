@@ -10,8 +10,12 @@ One MCP server, two frontends:
 - **Claude Code chat** — mount the server in a terminal session.
 - **Local browser app** — chat panel + deck panel, same server underneath.
 
-No collection tracking. No per-token API billing — everything runs on your
-Claude subscription.
+Arena-only collection tracking via a local snapshot import — link your Arena
+log folder or drop `Player.log` in the web UI (Detailed Logs must be enabled
+in Arena) to see owned/missing on deck cards and `owned` flags in tool
+results; paper collections are out of scope, and the snapshot stays local in
+`collection.json`. No per-token API billing — everything runs on your Claude
+subscription.
 
 ## Demo
 

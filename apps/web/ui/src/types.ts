@@ -6,6 +6,7 @@ export type CardEntry = {
   manaCost?: string | null;
   producedMana?: string[] | null;
   typeLine?: string | null;
+  owned?: boolean;
 };
 
 export type Deck = {
@@ -47,6 +48,11 @@ export type DeckReport = {
 export type DeckResponse = {
   deck: Deck;
   report: DeckReport;
+  collection?: {
+    importedAt: string;
+    ownedCount: number;
+    missingCount: number;
+  };
 };
 
 export type RejectedCard = { name: string; reason: string };

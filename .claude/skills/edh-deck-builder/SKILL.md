@@ -30,6 +30,21 @@ not oracle-text tags, so decompose them into their component mechanics instead).
 - Building/validating for Arena or Brawl: validate EVERY suggestion against the flag; never present a
   card as Arena-legal without a true flag.
 
+## Arena collection (owned cards)
+
+- `collection_stats` tells you whether a collection is imported at all. When tool results
+  (`get_card`, `search_cards`, `find_alternatives` members, `deck_get` cards) carry
+  `owned: true`/`false`, use it. Absent field = no collection imported — never guess ownership.
+- Workflow for "what can I build with my cards" / "with what I own": call `collection_stats`
+  first; then run the normal role searches, but prefer `owned: true` candidates when presenting.
+  Explicitly flag any suggested card the user does NOT own (`owned: false`) as missing, and offer
+  an alternative they do own via `find_alternatives` with `owned_only: true`.
+- Arena deck requests: combine `game:arena` filtering AND owned flags — a card can be on Arena but
+  still unowned by this player. Don't conflate "is on Arena" with "I have it."
+- The collection is a point-in-time snapshot imported via the web UI (link an Arena log folder or
+  drop `Player.log`). If stats look stale or empty, tell the user to re-import, and that Arena's
+  Detailed Logs option must be enabled for the log to contain collection data.
+
 ## Scryfall query recipes (`search_cards`)
 
 `search_cards` accepts full Scryfall syntax and auto-appends `legal:commander` — don't add it

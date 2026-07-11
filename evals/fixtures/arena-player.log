@@ -1,0 +1,6 @@
+[UnityCrossThreadLogger]Some unrelated startup line
+[UnityCrossThreadLogger]==> Deck.GetDeckLists(456)
+{"junk":true}
+[UnityCrossThreadLogger]<== PlayerInventory.GetPlayerCardsV3(123)
+{"id":1,"payload":{"93929":1,"96269":4,"70001":2,"70002":1,"70003":3}}
+[UnityCrossThreadLogger]Some trailing noise line
