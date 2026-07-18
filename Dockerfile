@@ -38,7 +38,12 @@ FROM node:24-bookworm-slim AS runtime
 
 # libstdc++ is already present in the node image; better-sqlite3's prebuilt
 # .node from the build stage runs against it. No compiler needed at runtime.
-RUN corepack enable && corepack prepare pnpm@10.11.1 --activate \
+# gosu lets the entrypoint drop from root to scrychat after fixing bind-mount
+# ownership (see docker-entrypoint.sh).
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends gosu \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable && corepack prepare pnpm@10.11.1 --activate \
   && groupadd -r scrychat && useradd -r -g scrychat -m -d /home/scrychat scrychat
 
 WORKDIR /app
@@ -54,12 +59,20 @@ ENV HOME=/home/scrychat
 
 EXPOSE 8787
 
+# Entrypoint runs as ROOT: it chowns the bind-mounted state dirs to scrychat
+# (bind mounts inherit the host uid, which won't match the in-image user) and
+# then drops to scrychat via gosu. Fixes the "/app/decks/.tmp..." EACCES on write.
+COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
+
 # The server serves the built UI and spawns the MCP server as a node stdio child.
 # Repo root is discovered by walking up to pnpm-workspace.yaml (see
 # packages/core/src/db/connection.ts), which resolves to /app. So the DB lives at
 # /app/data/scrychat.db and decks/chats/config at /app/ — these are the volume
 # mount targets (see docker-compose.yml). No env override exists for these paths.
 WORKDIR /app/apps/web
-USER scrychat
+# NOTE: stays root here so the entrypoint can chown the mounts; it drops to
+# scrychat with gosu before exec-ing the server. Do not add `USER scrychat`.
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "dist/server.js"]
