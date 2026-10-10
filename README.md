@@ -155,9 +155,9 @@ and tags. Use `--cards` / `--prices` / `--tags` / `--combos` to refresh one
 dataset at a time.
 
 Without the local mirror, every tool falls back to live API calls — nothing
-breaks, it's just slower. One caveat: a running MCP server or web app decides
-local-vs-live once at first use, so restart it after running the ingest for
-the first time (or after a refresh) to pick up the mirror.
+breaks, it's just slower. A running MCP server or web app re-checks
+`data/scrychat.db`'s mtime (throttled to once per 5 seconds), so it picks up a
+fresh or refreshed mirror within about 5 seconds — no restart needed.
 
 `scrychat.config.json` at repo root: `linkifyPass` (default `true`) runs a
 second cheap-model pass over each reply to wrap any bare card names the model
