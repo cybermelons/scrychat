@@ -1,4 +1,4 @@
-import type { ResolvedCard } from "./decks.js";
+import type { CardResolver, Deck, ResolvedCard } from "./decks.js";
 
 // Deterministic goldfish: what does this deck do unopposed? Pure and seeded —
 // same cards + same options => byte-identical result, so two decks compare.
@@ -159,5 +159,49 @@ export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): Gol
     manaAvailable: manaSum.map((x) => round(x / n)),
     stalledGames: stalled,
     castByTurn: castSum.map((x) => round(x / n)),
+  };
+}
+
+// Deck -> the real library goldfish() shuffles: a 4-of appears 4 times. One resolver call per
+// DISTINCT name. goldfish never mutates its cards, so copies share one ResolvedCard reference.
+// ponytail: deckReport (decks.ts:683) keeps its own near-identical resolve loop. Upgrade: route it through this helper.
+export async function resolveDeckLibrary(
+  deck: Deck,
+  resolver: CardResolver,
+): Promise<{ library: ResolvedCard[]; unresolved: string[] }> {
+  const resolvedByName = new Map<string, ResolvedCard | null>();
+  await Promise.all(
+    [...new Set(deck.cards.map((c) => c.name))].map(async (name) => {
+      resolvedByName.set(name, await resolver(name));
+    }),
+  );
+  const library: ResolvedCard[] = [];
+  // Set keeps first-appearance (deck) order and reports each missing name once, not once per copy.
+  const unresolved = new Set<string>();
+  for (const entry of deck.cards) {
+    const resolved = resolvedByName.get(entry.name);
+    if (!resolved) { unresolved.add(entry.name); continue; }
+    for (let i = 0; i < (entry.count ?? 1); i++) library.push(resolved);
+  }
+  return { library, unresolved: [...unresolved] };
+}
+
+// Presentation spec the web chart component renders. x / y are AXIS LABELS, not data keys.
+export type ChartSpec = {
+  type: "bar";
+  data: { x: string; y: number }[];
+  x: string;
+  y: string;
+  caption?: string;
+};
+
+export function goldfishChart(r: GoldfishResult): ChartSpec {
+  return {
+    type: "bar",
+    // castByTurn[0] is documented unused (always 0): start at turn 1 or the chart draws a meaningless empty bar.
+    data: Array.from({ length: r.maxTurns }, (_, i) => ({ x: String(i + 1), y: r.castByTurn[i + 1] ?? 0 })),
+    x: "turn",
+    y: "spells cast",
+    caption: `mulligan ${Math.round(r.mulliganRate * 100)}% · ${r.stalledGames}/${r.iterations} games stalled · seed ${r.seed}`,
   };
 }

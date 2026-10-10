@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AppConfig, ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
+import type { AppConfig, ChartSpec, ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
 import { renderMarkdown } from "./markdown";
 import { SettingsDrawer } from "./SettingsDrawer";
 
@@ -53,6 +53,75 @@ function toolResultStatus(result: string | undefined): "pending" | "error" | "ok
   }
 }
 
+// The spec is untrusted (derived from card data the model saw). Any failure
+// returns null; callers fall back to the plain tool chip. Truncated results
+// (2048 chars + "…") fail JSON.parse and land here too.
+function parseChartSpec(result?: string): ChartSpec | null {
+  if (typeof result !== "string" || result.length === 0) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result);
+  } catch {
+    console.debug("parseChartSpec: result is not JSON");
+    return null;
+  }
+  const bad = (why: string): null => {
+    console.debug(`parseChartSpec: ${why}`);
+    return null;
+  };
+  if (parsed === null || typeof parsed !== "object") return bad("not an object");
+  const chart = (parsed as Record<string, unknown>).chart;
+  if (chart === null || typeof chart !== "object") return bad("no chart");
+  const c = chart as Record<string, unknown>;
+  if (c.type !== "bar") return bad("unsupported type");
+  if (!Array.isArray(c.data) || c.data.length < 1 || c.data.length > 32) {
+    return bad("bad data length");
+  }
+  for (const row of c.data) {
+    if (row === null || typeof row !== "object") return bad("bad row");
+    const r = row as Record<string, unknown>;
+    if (typeof r.x !== "string" || r.x.length > 16) return bad("bad row x");
+    if (typeof r.y !== "number" || !Number.isFinite(r.y) || r.y < 0) {
+      return bad("bad row y");
+    }
+  }
+  if (typeof c.x !== "string" || c.x.length > 80) return bad("bad x label");
+  if (typeof c.y !== "string" || c.y.length > 80) return bad("bad y label");
+  if (c.caption !== undefined && (typeof c.caption !== "string" || c.caption.length > 120)) {
+    return bad("bad caption");
+  }
+  return chart as ChartSpec;
+}
+
+// Labels and caption are React text children only: never innerHTML, never
+// renderMarkdown (that would expand [[Card]] tokens from untrusted text).
+// The only spec-derived value reaching style is a clamped integer 0..100.
+function Chart({ spec }: { spec: ChartSpec }) {
+  const max = Math.max(1, ...spec.data.map((d) => d.y));
+  return (
+    <div className="sim-chart">
+      <div className="curve">
+        {spec.data.map((d, i) => {
+          const pct = Math.min(100, Math.max(0, Math.round((d.y / max) * 100)));
+          return (
+            <div className="curve-col" key={i}>
+              <div className="curve-val">{Math.round(d.y * 100) / 100}</div>
+              <div className="curve-bar-track">
+                <div className="curve-bar" style={{ height: `${pct}%` }} />
+              </div>
+              <div className="curve-key">{d.x}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div>
+        {spec.y} by {spec.x}
+      </div>
+      {spec.caption && <div>{spec.caption}</div>}
+    </div>
+  );
+}
+
 function AssistantBody({ msg }: { msg: ChatMessage }) {
   return (
     <>
@@ -71,6 +140,10 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
             >
               ⚙ {toolChipLabel(seg.name, seg.input)}
             </span>
+            {seg.name.replace(/^mcp__scrychat__/, "") === "goldfish_deck" && (() => {
+              const spec = parseChartSpec(seg.result);
+              return spec ? <Chart spec={spec} /> : null;
+            })()}
           </div>
         )
       )}

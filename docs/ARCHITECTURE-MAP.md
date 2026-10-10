@@ -209,9 +209,9 @@ Shapes of record live in `packages/core/src/`. Do not restate them elsewhere.
   `STAT_THROTTLE_MS = 5000`, so a long-lived server picks up a fresh ingest
   within ~5s. The README's "restart it after the ingest" is stricter than the
   code now requires; the README was corrected to match.
-- **Tool count: 21 registered, 18 in the chat allowlist.**
-  `packages/mcp/src/tools.ts` registers 21 tools; the `server.ts:518`
-  allowlist carries 18 `mcp__scrychat__*` names. The 3 not in the chat
+- **Tool count: 22 registered, 19 in the chat allowlist.**
+  `packages/mcp/src/tools.ts` registers 22 tools; the `server.ts:518`
+  allowlist carries 19 `mcp__scrychat__*` names. The 3 not in the chat
   allowlist are `collection_stats`, `deck_rename_tag` and
   `deck_set_card_count`. Re-counted 2026-10-10 with
   `grep -o 'mcp__scrychat__[a-z_]*' apps/web/src/server.ts | sort -u | wc -l`;
@@ -247,7 +247,8 @@ card cache"; the landed commits cover suggestions only.
 | README coverage | `cbb0693` | LANDED |
 | gitignore runtime `suggestions/` | `4506e94` | LANDED |
 | card cache | — | not started / not in this branch |
-| goldfish simulation | — | proposed, not started (see `CLAUDE.md` §simulation) |
+| goldfish simulation | `155e1a2` | LANDED — deterministic, seeded, colour-aware |
+| goldfish chart spec | — | LANDED in branch (#52): `goldfish_deck` returns a `ChartSpec`, `Chart` renders it |
 
 No tracking issue found in-repo; the git log is the record.
 

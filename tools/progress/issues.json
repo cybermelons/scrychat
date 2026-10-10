@@ -46,9 +46,9 @@
       "n": 52,
       "anchor": "#sim-chart",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "Render the sim as a chart spec",
-      "pin": "goldfish returns JSON today and nothing draws it. Model emits {type,data,x,y}; one Recharts component renders. Spec, not a model-authored component."
+      "pin": "Goldfish results render as a bar chart. goldfish_deck returns a ChartSpec from goldfishChart; parseChartSpec validates it and Chart draws it in ChatPanel.tsx."
     },
     {
       "n": 53,
@@ -88,7 +88,7 @@
       "side": "left",
       "state": "closed",
       "title": "Focal card images",
-      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric appended to the system prompt at server.ts:558."
+      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric appended to the system prompt at server.ts:559."
     },
     {
       "n": 20,

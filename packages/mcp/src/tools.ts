@@ -37,6 +37,9 @@ import {
   renameTag,
   setCardCount,
   exportDeck,
+  goldfish,
+  resolveDeckLibrary,
+  goldfishChart,
 } from "@scrychat/core";
 import { importDecklist } from "@scrychat/core";
 import {
@@ -721,6 +724,52 @@ export function registerTools(server: McpServer): void {
       return safe(async () => {
         const suggestion = await decideSuggestion(deck_name, id, status, note, suggestionsDir);
         return { deck: deck_name, suggestion };
+      });
+    },
+  );
+
+  server.registerTool(
+    "goldfish_deck",
+    {
+      title: "Goldfish a deck",
+      description:
+        "Monte Carlo goldfish simulation of a saved deck: shuffles the library, opens 7 (Commander), mulligans " +
+        "unkeepable hands, and plays out turns with no opponent to measure how reliably the deck develops. " +
+        "Use when the user asks how consistent, fast or mana-hungry a deck is, or whether it keeps its hands. " +
+        "Returns mulliganRate, turnToCast, castByTurn, stalledGames, unresolved (card names that could not be " +
+        "resolved and were left out of the simulation), and a bar `chart` spec of cast-by-turn. Deterministic for " +
+        "a given seed. Read-only.",
+      inputSchema: {
+        deck: z.string().describe("Deck name"),
+        iterations: z.number().int().min(1).max(5000).optional().describe("Simulated games, 1-5000 (default 1000)"),
+        seed: z.number().int().optional().describe("RNG seed (default 0); same seed gives the same result"),
+        maxTurns: z.number().int().min(1).max(20).optional().describe("Turns to play per game, 1-20 (default 15)"),
+      },
+    },
+    async ({ deck: deckName, iterations = 1000, seed = 0, maxTurns = 15 }) => {
+      return safe(async () => {
+        const deck = await getDeck(deckName, decksDir);
+        if (!deck) return { error: `Deck not found: ${deckName}` };
+        // Resolve the whole list in one batched request first; resolveDeckLibrary
+        // reads the same memo, so this replaces ~75 round trips with one.
+        await getCards(deck.cards.map((c) => c.name));
+        const { library, unresolved } = await resolveDeckLibrary(deck, resolveCard);
+        if (library.length === 0) {
+          return { error: `No cards in deck "${deckName}" could be resolved; nothing to simulate`, unresolved };
+        }
+        const r = goldfish(library, { iterations, seed, maxTurns });
+        return {
+          deck: deckName,
+          iterations: r.iterations,
+          seed: r.seed,
+          maxTurns: r.maxTurns,
+          mulliganRate: r.mulliganRate,
+          turnToCast: r.turnToCast,
+          castByTurn: r.castByTurn,
+          stalledGames: r.stalledGames,
+          unresolved,
+          chart: goldfishChart(r),
+        };
       });
     },
   );

@@ -125,6 +125,19 @@ export type ChatSegment =
   | { type: "text"; text: string }
   | { type: "tool"; name: string; input: unknown; result?: string };
 
+/**
+ * Mirrors ChartSpec in @scrychat/core (the UI cannot import from core, so the
+ * shape is restated here). Rendered by Chart in ChatPanel.tsx; always
+ * validated by parseChartSpec first, since it arrives as untrusted tool output.
+ */
+export type ChartSpec = {
+  type: "bar";
+  data: { x: string; y: number }[];
+  x: string;
+  y: string;
+  caption?: string;
+};
+
 export type ChatEvent =
   | { type: "chat"; chatId: string }
   | { type: "text-delta"; text: string }
