@@ -296,8 +296,8 @@
   <p class="subtitle">This is the chat and deck surface as it should end up, not
      as it is today. Every pin marks a control and links to its record: an
      issue number for work still tracked, a commit for work already shipped.</p>
-  <div class="bar2"><i style="width:64%"></i></div>
-  <p class="counts">21 closed · 12 open · 64% of 33</p>
+  <div class="bar2"><i style="width:67%"></i></div>
+  <p class="counts">22 closed · 11 open · 67% of 33</p>
   <div class="links"><span><b>deploy</b><a href="http://noel:8787/" target="_blank" rel="noopener">noel, LAN only</a></span><span><b>dev</b><a href="http://localhost:8787" target="_blank" rel="noopener">pnpm --filter @scrychat/web dev</a></span><span><b>preview</b><a href="http://100.113.182.40:8130/progress.html" target="_blank" rel="noopener">this board, served from tsunomaki</a></span></div>
   <div class="legend">
     <span><i style="background:var(--open)"></i> still to build</span>
@@ -386,7 +386,7 @@
               <div class="xaxis"><span>T1</span><span>T8</span></div>
             </div>
             <p class="sim-note" id="sim-caveats">
-              No colour requirements, greedy sequencing &mdash; optimistic.
+              Per-colour sources, greedy sequencing &mdash; still optimistic.
             </p>
             <div id="sim-compare">
               <span class="cmp-row">this build <b>T4.1</b></span>
@@ -551,7 +551,7 @@
   </div>
   <div id="pin-left"><a class="pin shipped closed left" data-anchor="#chip-goldfish" href="https://github.com/cybermelons/scrychat/commit/155e1a232e9f924743002eb82a04f488ea4fe176" target="_blank" rel="noopener"><span class="pin-n">155e1a2</span><span class="pin-t">Deterministic goldfish sim</span><span class="pin-p">packages/core/src/goldfish.ts. mulberry32 + Fisher-Yates, no Math.random. Same deck + seed is byte-identical, which is what makes two decks comparable. 5 tests pass.</span></a>
   <a class="pin shipped closed left" data-anchor="#sim-seed" href="https://github.com/cybermelons/scrychat/commit/155e1a232e9f924743002eb82a04f488ea4fe176" target="_blank" rel="noopener"><span class="pin-n">155e1a2</span><span class="pin-t">Seed and iterations in the result</span><span class="pin-p">GoldfishResult carries seed, iterations and maxTurns, so a result is self-describing and a reader can reproduce it.</span></a>
-  <a class="pin open left" data-anchor="#sim-caveats" href="https://github.com/cybermelons/scrychat/issues/51" target="_blank" rel="noopener"><span class="pin-n">51</span><span class="pin-t">Colour requirements</span><span class="pin-p">Biggest ponytail ceiling: every land is 1 generic mana, so turn-to-cast is optimistic. Upgrade = track coloured sources against manaCost pips.</span></a>
+  <a class="pin closed left" data-anchor="#sim-caveats" href="https://github.com/cybermelons/scrychat/issues/51" target="_blank" rel="noopener"><span class="pin-n">51</span><span class="pin-t">Colour requirements</span><span class="pin-p">goldfish.ts:60 pips() reads manaCost; a cast needs cmc &lt;= avail AND each colour&#x27;s pips &lt;= that colour&#x27;s sources. Land drop takes a colour the hand demands more of than play supplies. Still optimistic: per-colour, not a matching; hybrid rides on cmc.</span></a>
   <a class="pin open left" data-anchor="#sim-chart" href="https://github.com/cybermelons/scrychat/issues/52" target="_blank" rel="noopener"><span class="pin-n">52</span><span class="pin-t">Render the sim as a chart spec</span><span class="pin-p">goldfish returns JSON today and nothing draws it. Model emits {type,data,x,y}; one Recharts component renders. Spec, not a model-authored component.</span></a>
   <a class="pin open left" data-anchor="#sim-compare" href="https://github.com/cybermelons/scrychat/issues/53" target="_blank" rel="noopener"><span class="pin-n">53</span><span class="pin-t">Compare two builds</span><span class="pin-p">The reason determinism was worth paying for. Same seed across two deck versions, diff the histograms side by side.</span></a>
   <a class="pin closed left" data-anchor="#chip-search" href="https://github.com/cybermelons/scrychat/issues/9" target="_blank" rel="noopener"><span class="pin-n">9</span><span class="pin-t">Tool chips stream live</span><span class="pin-p">tool-use at server.ts:597 opens the chip, tool-result at :616 fills it. Chat SSE, consumed by ChatPanel.</span></a>

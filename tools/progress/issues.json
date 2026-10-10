@@ -38,9 +38,9 @@
       "n": 51,
       "anchor": "#sim-caveats",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "Colour requirements",
-      "pin": "Biggest ponytail ceiling: every land is 1 generic mana, so turn-to-cast is optimistic. Upgrade = track coloured sources against manaCost pips."
+      "pin": "goldfish.ts:60 pips() reads manaCost; a cast needs cmc <= avail AND each colour's pips <= that colour's sources. Land drop takes a colour the hand demands more of than play supplies. Still optimistic: per-colour, not a matching; hybrid rides on cmc."
     },
     {
       "n": 52,

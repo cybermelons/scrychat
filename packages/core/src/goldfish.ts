@@ -55,6 +55,13 @@ const median = (xs: number[]) => {
   const m = s.length >> 1;
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 };
+// Coloured pips in manaCost, e.g. "{W}{W}" -> {W: 2}. Everything else (numbers, hybrid, Phyrexian, {X}, {C}) rides on cmc as generic.
+// No manaCost => no pips => the card is all generic (castable on cmc alone).
+const pips = (c: ResolvedCard): Record<string, number> => {
+  const out: Record<string, number> = {};
+  for (const m of (c.manaCost ?? "").matchAll(/\{([WUBRG])\}/g)) out[m[1]!] = (out[m[1]!] ?? 0) + 1;
+  return out;
+};
 
 export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): GoldfishResult {
   const iterations = opts.iterations ?? 1000;
@@ -82,8 +89,9 @@ export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): Gol
       hand = library.splice(0, handSize);
     }
 
-    let landsInPlay = 0;
-    let rocks = 0; // nonland permanents with producedMana
+    let total = 0; // one per land in play + one per cast nonland with producedMana
+    const src: Record<string, number> = {}; // coloured sources, by producedMana colour
+    const addSrc = (c: ResolvedCard) => { for (const m of c.producedMana ?? []) src[m] = (src[m] ?? 0) + 1; };
     let cast = 0;
     const seen = new Set<string>();
 
@@ -91,15 +99,25 @@ export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): Gol
       const drawn = library.shift();
       if (drawn) hand.push(drawn);
 
-      const li = hand.findIndex(isLand);
+      // Colour-aware land drop: prefer a land making a colour the hand DEMANDS MORE OF than
+      // play supplies. Demand is the max pip count over the hand, not a boolean — a {W}{W} card
+      // still wants a second white source when one Plains is already down.
+      const want: Record<string, number> = {};
+      for (const c of hand) if (!isLand(c)) for (const [k, n] of Object.entries(pips(c))) want[k] = Math.max(want[k] ?? 0, n);
+      let li = hand.findIndex((c) => isLand(c) && !!c.producedMana?.some((m) => (want[m] ?? 0) > (src[m] ?? 0)));
+      if (li < 0) li = hand.findIndex(isLand);
       if (li >= 0) {
-        hand.splice(li, 1);
-        landsInPlay++;
+        const [l] = hand.splice(li, 1);
+        total++;
+        addSrc(l!);
       }
 
-      // ponytail: no color requirements — every land is 1 generic mana, so numbers are OPTIMISTIC. Upgrade: track colored sources vs. manaCost pips.
-      // ponytail: any nonland card with producedMana = +1 mana from the turn it is cast (no summoning sickness, always 1). Upgrade: sum producedMana per source.
-      let avail = landsInPlay + rocks;
+      // ponytail: per-colour check is independent, not a bipartite matching — a dual land counts toward every colour it lists at once. OPTIMISTIC. Upgrade: match sources to pips.
+      // ponytail: coloured sources are not consumed between casts within one turn (only the generic total is). OPTIMISTIC. Upgrade: decrement src per pip paid.
+      // ponytail: hybrid / Phyrexian / {X} / {C} pips are treated as generic. OPTIMISTIC. Upgrade: parse them into pips.
+      // ponytail: land drop has no look-ahead and does not resolve fetches (a land without producedMana = 1 generic). OPTIMISTIC. Upgrade: simulate the land drop against the next turns' casts.
+      // ponytail: any nonland card with producedMana = +1 mana from the turn it is cast (no summoning sickness, always 1), plus its colours as sources. Upgrade: sum producedMana per source.
+      let avail = total;
       manaSum[turn]! += avail;
 
       // ponytail: greedy sequencing, no lookahead (highest castable CMC first, creatures win ties, then name for determinism). Upgrade to 1-turn lookahead if numbers disagree with real play.
@@ -107,7 +125,7 @@ export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): Gol
         let best = -1;
         for (let i = 0; i < hand.length; i++) {
           const c = hand[i]!;
-          if (isLand(c) || c.cmc > avail) continue;
+          if (isLand(c) || c.cmc > avail || Object.entries(pips(c)).some(([k, n]) => n > (src[k] ?? 0))) continue;
           if (best < 0) { best = i; continue; }
           const b = hand[best]!;
           if (
@@ -120,7 +138,7 @@ export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): Gol
         const [c] = hand.splice(best, 1);
         avail -= c!.cmc;
         cast++;
-        if (c!.producedMana?.length) { rocks++; avail++; }
+        if (c!.producedMana?.length) { total++; avail++; addSrc(c!); }
         const k = bucket(c!.cmc);
         if (!seen.has(k)) { seen.add(k); (firstCast[k] ??= []).push(turn); }
       }

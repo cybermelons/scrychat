@@ -91,7 +91,7 @@ def surface_html() -> str:
               <div class="xaxis"><span>T1</span><span>T8</span></div>
             </div>
             <p class="sim-note" id="sim-caveats">
-              No colour requirements, greedy sequencing &mdash; optimistic.
+              Per-colour sources, greedy sequencing &mdash; still optimistic.
             </p>
             <div id="sim-compare">
               <span class="cmp-row">this build <b>T4.1</b></span>
