@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r build",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "typescript": "^5.9",
