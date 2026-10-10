@@ -289,6 +289,8 @@
     "45": "A result record for one deck: 20k seeded trials. Closing it changes no control; #52 and #53 build the sim surface.",
     "46": "Evidence for #47, not separate work. Its actionable half is the grounding guarantee pinned at the search chip.",
     "48": "A strategy conclusion about one deck, not a product change.",
-    "49": "A record of one deck queue: 9 accepted, 6 rejected. If the queue and the land quota ever disagree, that is a new bug, not this."
+    "49": "A record of one deck queue: 9 accepted, 6 rejected. If the queue and the land quota ever disagree, that is a new bug, not this.",
+    "63": "Research notes on card-similarity approaches, and the conclusion is to build nothing yet: otag already encodes function, which an oracle-text embedding would duplicate worse. No control follows until that changes.",
+    "64": "A competitive analysis of other AI deckbuilders. It argues what the product already is, so it pins to no new control; where it names a gap, that gap gets its own issue."
   }
 }
