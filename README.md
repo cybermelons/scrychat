@@ -93,15 +93,18 @@ described below.
 - **packages/core** — Scryfall and Commander Spellbook clients, the local tag
   index, functional-alternatives scoring, and deck file CRUD. Decks are JSON
   files under `decks/`.
-- **packages/mcp** — MCP stdio server exposing 18 tools over core: card
+- **packages/mcp** — MCP stdio server exposing 21 tools over core: card
   search (`search_cards`, `get_card`), tag search (`search_tags`), functional
   alternatives (`find_alternatives`), combo search (`find_combos`), deck CRUD
   (`deck_list`, `deck_create`, `deck_get`, `deck_add`, `deck_remove`,
   `deck_import`, `deck_rename`, `deck_set_commander`, `deck_export`), tag
   management (`deck_set_card_tags`, `deck_rename_tag`), card count edits
-  (`deck_set_card_count`), and collection stats (`collection_stats`).
+  (`deck_set_card_count`), collection stats (`collection_stats`), and
+  suggestions (`deck_suggest`, `deck_suggestions`,
+  `deck_suggestion_decide`).
 - **apps/web** — Express + Claude Agent SDK backend, React frontend, SSE
-  streaming between chat and deck panel.
+  streaming between chat and deck panel. AI-proposed deck changes appear as
+  a section of the open deck in the deck manager, on desktop and phone.
 
 Regenerate the tag index (from Scryfall's `oracle_tags` bulk export):
 
