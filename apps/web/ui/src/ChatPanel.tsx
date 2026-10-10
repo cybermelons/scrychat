@@ -75,10 +75,10 @@ function Chart({ spec }: { spec: ChartSpec }) {
           );
         })}
       </div>
-      <div>
+      <div className="sim-chart-axis">
         {spec.y} by {spec.x}
       </div>
-      {spec.caption && <div>{spec.caption}</div>}
+      {spec.caption && <div className="sim-chart-caption">{spec.caption}</div>}
     </div>
   );
 }

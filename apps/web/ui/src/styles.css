@@ -611,6 +611,23 @@ body {
   margin-top: 3px;
 }
 
+/* The chart follows an inline tool chip inside .tool-chip-row (margin 2px 0),
+   which is too tight for a 110px-tall block. This is the wrapper's only job;
+   .curve brings its own height and padding. */
+.sim-chart {
+  margin-top: 6px;
+}
+
+/* The axis label and caption are the chart's only text rows; without these
+   they inherit 15px body text and sit flush against the bars. Same treatment
+   as .curve-key, which labels the other side of the same chart. */
+.sim-chart-axis,
+.sim-chart-caption {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
 /* role groups: single table, tbody per role -> shared column tracks across
    all groups (count | name | mana cost | remove) */
 .card-table {
