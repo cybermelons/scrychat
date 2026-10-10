@@ -32,6 +32,10 @@ import {
   getOwnedIndex,
   resolveQuotaTargets,
   RECOGNIZED_QUOTA_TAGS,
+  addSuggestions,
+  listSuggestions,
+  decideSuggestion,
+  clearDecided,
   type CardResolver,
 } from "@scrychat/core";
 import {
@@ -62,6 +66,9 @@ delete SDK_ENV.ANTHROPIC_AUTH_TOKEN;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../../");
 const DECKS_DIR = path.join(REPO_ROOT, "decks");
+// Sibling of decks/, never inside it: listDecks reads every *.json under
+// decks/ and would parse a suggestions file as a malformed deck.
+const SUGGESTIONS_DIR = path.join(REPO_ROOT, "suggestions");
 const CHATS_DIR = path.join(REPO_ROOT, "chats");
 const MCP_SERVER_PATH = path.join(REPO_ROOT, "packages/mcp/dist/index.js");
 const CONFIG_PATH = path.join(REPO_ROOT, "scrychat.config.json");
@@ -1461,6 +1468,124 @@ app.get("/api/collection", async (_req: Request, res: Response) => {
   }
 });
 
+
+// ---- suggestions: AI proposes deck changes, human accepts/rejects ----
+// The AI writes these through the MCP deck_suggest tool; this surface is for
+// browsing and deciding them (mobile-friendly UI at /suggestions).
+
+app.get("/api/decks/:name/suggestions", async (req: Request, res: Response) => {
+  try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const all = await listSuggestions(req.params.name, SUGGESTIONS_DIR);
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const suggestions = status ? all.filter((s) => s.status === status) : all;
+    res.json({
+      deck: req.params.name,
+      pending: all.filter((s) => s.status === "pending").length,
+      suggestions,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post("/api/decks/:name/suggestions", async (req: Request, res: Response) => {
+  try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const proposals = Array.isArray(req.body) ? req.body : req.body?.suggestions;
+    if (!Array.isArray(proposals) || proposals.length === 0) {
+      res.status(400).json({ error: "expected a non-empty 'suggestions' array" });
+      return;
+    }
+    const all = await addSuggestions(req.params.name, proposals, SUGGESTIONS_DIR);
+    res.json({ deck: req.params.name, added: proposals.length, suggestions: all });
+  } catch (err) {
+    // Validation failures (missing 'in'/'out'/'why') are client errors.
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post("/api/decks/:name/suggestions/:id/:verdict", async (req: Request, res: Response) => {
+  try {
+    const { name, id, verdict } = req.params;
+    if (!isValidDeckName(name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    if (verdict !== "accept" && verdict !== "reject") {
+      res.status(400).json({ error: "verdict must be 'accept' or 'reject'" });
+      return;
+    }
+    const status = verdict === "accept" ? "accepted" : "rejected";
+
+    // Validate BEFORE recording the verdict. decideSuggestion refuses to
+    // decide the same suggestion twice, so writing the verdict first and
+    // then failing would leave it accepted-but-unapplied with no way to
+    // retry. Check the deck can take the change, then record, then apply.
+    let outCard: string | undefined;
+    if (status === "accepted") {
+      const pendingList = await listSuggestions(name, SUGGESTIONS_DIR);
+      const target = pendingList.find((s) => s.id === id);
+      if (target?.out) {
+        const current = await getDeck(name, DECKS_DIR);
+        const present = current?.cards.some(
+          (c) => c.name.toLowerCase() === target.out!.toLowerCase(),
+        );
+        if (!present) {
+          res.status(409).json({
+            deck: name,
+            error: `"${target.out}" is no longer in the deck — suggestion is stale`,
+          });
+          return;
+        }
+        outCard = target.out;
+      }
+    }
+
+    const suggestion = await decideSuggestion(name, id, status, req.body?.note, SUGGESTIONS_DIR);
+
+    // Accepting records intent AND applies the card change, so the mobile
+    // surface is one tap. decideSuggestion never writes the deck file itself,
+    // keeping a single writer per deck.
+    let applied: unknown = null;
+    if (status === "accepted") {
+      if (outCard) {
+        await removeCards(name, [outCard], DECKS_DIR);
+      }
+      if (suggestion.in) {
+        applied = await addCards(
+          name,
+          [{ name: suggestion.in, ...(suggestion.role ? { tags: [suggestion.role] } : {}) }],
+          resolver,
+          DECKS_DIR,
+        );
+      }
+    }
+    res.json({ deck: name, suggestion, applied });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.delete("/api/decks/:name/suggestions", async (req: Request, res: Response) => {
+  try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const removed = await clearDecided(req.params.name, SUGGESTIONS_DIR);
+    res.json({ deck: req.params.name, removed });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // ---- settings surface: scrychat.config.json read/write over HTTP (issue #37) ----
 app.get("/api/config", (_req: Request, res: Response) => {
   res.json({
@@ -1556,6 +1681,169 @@ app.get("/api/health", (_req: Request, res: Response) => {
 });
 
 // ---- static UI (built by apps/web/ui -> ui/dist) ----
+
+// ---- mobile browse surface for suggestions (server-rendered, no build step) ----
+// Deliberately not part of the React app: this is a read-mostly phone surface,
+// so a single self-contained page avoids a Vite build and loads on one request.
+app.get("/suggestions", async (req: Request, res: Response) => {
+  const deckParam = typeof req.query.deck === "string" ? req.query.deck : undefined;
+  try {
+    const decks = await listDecks(DECKS_DIR);
+    const deckName = deckParam && isValidDeckName(deckParam) ? deckParam : decks[0]?.name;
+    if (!deckName) {
+      res.type("html").send(renderSuggestionsPage(null, [], [], ""));
+      return;
+    }
+    const suggestions = await listSuggestions(deckName, SUGGESTIONS_DIR);
+    const deck = await getDeck(deckName, DECKS_DIR);
+    res.type("html").send(
+      renderSuggestionsPage(deck, suggestions, decks.map((d) => d.name), deckName),
+    );
+  } catch (err) {
+    res.status(500).type("html").send(
+      `<pre>${escapeHtml(err instanceof Error ? err.message : String(err))}</pre>`,
+    );
+  }
+});
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
+  );
+}
+
+function renderSuggestionsPage(
+  deck: Awaited<ReturnType<typeof getDeck>>,
+  suggestions: Awaited<ReturnType<typeof listSuggestions>>,
+  deckNames: string[],
+  activeDeck: string,
+): string {
+  const pending = suggestions.filter((s) => s.status === "pending");
+  const decided = suggestions.filter((s) => s.status !== "pending");
+  const art = (name: string) =>
+    `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
+
+  const card = (s: (typeof suggestions)[number]) => {
+    const rows = [
+      s.out ? `<div class="c out"><img loading="lazy" src="${art(s.out)}" alt=""><span class="m">&minus;</span><span class="n">${escapeHtml(s.out)}</span></div>` : "",
+      s.in ? `<div class="c in"><img loading="lazy" src="${art(s.in)}" alt=""><span class="m">+</span><span class="n">${escapeHtml(s.in)}</span></div>` : "",
+    ].join("");
+    const acts =
+      s.status === "pending"
+        ? `<div class="acts">
+             <button class="acc" data-id="${s.id}" data-v="accept">Accept</button>
+             <button class="rej" data-id="${s.id}" data-v="reject">Reject</button>
+           </div>`
+        : `<div class="verdict ${s.status}">${s.status}${s.note ? " &middot; " + escapeHtml(s.note) : ""}</div>`;
+    return `<article class="s ${s.status}" id="${s.id}">
+      <header><span class="k ${s.kind}">${s.kind}</span>${s.role ? `<span class="r">${escapeHtml(s.role)}</span>` : ""}<span class="id">${s.id}</span></header>
+      ${rows}
+      <p class="why">${escapeHtml(s.why)}</p>
+      ${acts}
+    </article>`;
+  };
+
+  const picker =
+    deckNames.length > 1
+      ? `<select id="deck">${deckNames
+          .map((n) => `<option${n === activeDeck ? " selected" : ""}>${escapeHtml(n)}</option>`)
+          .join("")}</select>`
+      : `<span class="dn">${escapeHtml(activeDeck)}</span>`;
+
+  return `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>scrychat suggestions${activeDeck ? " — " + escapeHtml(activeDeck) : ""}</title>
+<style>
+  :root{--bg:#0e1013;--p:#16191e;--l:#262b33;--ink:#e7e9ee;--dim:#878e9c;
+    --ok:#4ec98a;--cut:#e0675f;--swap:#6ba8f5}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:0 0 env(safe-area-inset-bottom)}
+  .top{position:sticky;top:0;background:#0e1013f2;backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--l);padding:12px 16px;display:flex;
+    align-items:center;gap:10px;z-index:5}
+  h1{font-size:15px;margin:0;font-weight:600}
+  .count{margin-left:auto;font-size:13px;color:var(--dim)}
+  select,.dn{background:#1b1f26;color:var(--ink);border:1px solid var(--l);
+    border-radius:7px;padding:6px 9px;font:inherit;font-size:13px;max-width:52vw}
+  main{padding:14px 16px 28px;max-width:720px;margin:0 auto}
+  .s{background:var(--p);border:1px solid var(--l);border-radius:11px;
+    padding:14px;margin-bottom:12px}
+  .s.rejected{opacity:.5}.s.accepted{border-color:#2c4a39}
+  .s header{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+  .k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    padding:3px 7px;border-radius:4px;color:#0e1013}
+  .k.add{background:var(--ok)}.k.cut{background:var(--cut)}.k.swap{background:var(--swap)}
+  .r{font-size:12.5px;color:var(--dim)}
+  .id{margin-left:auto;font-size:11px;color:#5c636f}
+  .c{display:flex;align-items:center;gap:9px;background:#1b1f26;
+    border:1px solid var(--l);border-radius:8px;padding:7px 11px 7px 7px;margin-bottom:7px}
+  .c img{width:58px;height:42px;object-fit:cover;border-radius:5px;background:#232830;flex:0 0 auto}
+  .c .m{font-weight:700;flex:0 0 auto}
+  .c.out .m{color:var(--cut)}.c.in .m{color:var(--ok)}
+  .c.out .n{text-decoration:line-through;color:var(--dim)}
+  .n{font-size:14.5px;min-width:0;overflow-wrap:anywhere}
+  .why{margin:9px 0 0;font-size:14px;color:#c3c9d4}
+  .acts{display:flex;gap:9px;margin-top:13px}
+  button{flex:1;font:inherit;font-size:15px;padding:11px;border-radius:9px;
+    border:1px solid var(--l);background:#1b1f26;color:var(--ink);min-height:44px}
+  button:active{transform:scale(.98)}
+  button:disabled{opacity:.4}
+  .acc{border-color:#2c4a39;color:var(--ok)}
+  .rej{border-color:#4a2c2c;color:var(--cut)}
+  .verdict{margin-top:11px;font-size:12.5px;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--dim)}
+  .verdict.accepted{color:var(--ok)}.verdict.rejected{color:var(--cut)}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);
+    margin:24px 0 11px;font-weight:600}
+  .empty{color:var(--dim);font-size:14.5px;text-align:center;padding:48px 16px;line-height:1.7}
+  .empty code{background:#1b1f26;padding:2px 6px;border-radius:4px;font-size:13px}
+</style>
+<div class="top">
+  <h1>Suggestions</h1>
+  ${picker}
+  <span class="count">${pending.length} pending</span>
+</div>
+<main>
+  ${
+    suggestions.length === 0
+      ? `<p class="empty">No suggestions for this deck yet.<br>Ask Claude to review it, then it calls<br><code>deck_suggest</code>.</p>`
+      : ""
+  }
+  ${pending.map(card).join("")}
+  ${decided.length ? `<h2>Decided</h2>` + decided.map(card).join("") : ""}
+</main>
+<script>
+  const deck = ${JSON.stringify(activeDeck)};
+  const sel = document.getElementById("deck");
+  if (sel) sel.onchange = () => { location.search = "?deck=" + encodeURIComponent(sel.value); };
+
+  for (const b of document.querySelectorAll(".acc,.rej")) {
+    b.addEventListener("click", async () => {
+      const card = b.closest(".s");
+      for (const x of card.querySelectorAll("button")) x.disabled = true;
+      b.textContent = "...";
+      try {
+        const r = await fetch(
+          "/api/decks/" + encodeURIComponent(deck) + "/suggestions/" +
+            encodeURIComponent(b.dataset.id) + "/" + b.dataset.v,
+          { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+        );
+        if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+        location.reload();
+      } catch (e) {
+        b.textContent = "Failed";
+        alert(e.message);
+        for (const x of card.querySelectorAll("button")) x.disabled = false;
+      }
+    });
+  }
+</script>`;
+}
+
 const UI_DIST = path.resolve(__dirname, "../ui/dist");
 app.use(express.static(UI_DIST));
 
