@@ -195,11 +195,29 @@ export type ChartSpec = {
   caption?: string;
 };
 
+/** Longest `data` array a ChartSpec consumer is required to render.
+ *
+ *  This mirrors MAX_CHART_ROWS in the web app's chart-core, which REJECTS a
+ *  longer spec outright — a 33-row chart does not render small, it renders
+ *  not at all, falling back to a plain tool chip. The two bounds live in
+ *  different packages because core must not import from apps/web, so this
+ *  constant is the only thing tying them: grep it before changing either.
+ *
+ *  Today the only production caller clamps maxTurns to 20 in the MCP tool
+ *  schema (packages/mcp/src/tools.ts), so nothing hits this. A direct
+ *  goldfish() caller asking for more turns would, and would lose its chart
+ *  with no error anywhere. Hence clamping here rather than trusting callers. */
+export const CHART_MAX_ROWS = 32;
+
 export function goldfishChart(r: GoldfishResult): ChartSpec {
+  // Clamp, not reject: the scalars in the caption are still valid at any
+  // maxTurns, so a long sim keeps a readable chart of its first 32 turns
+  // instead of silently losing the whole spec at the consumer.
+  const rows = Math.min(r.maxTurns, CHART_MAX_ROWS);
   return {
     type: "bar",
     // castByTurn[0] is documented unused (always 0): start at turn 1 or the chart draws a meaningless empty bar.
-    data: Array.from({ length: r.maxTurns }, (_, i) => ({ x: String(i + 1), y: r.castByTurn[i + 1] ?? 0 })),
+    data: Array.from({ length: rows }, (_, i) => ({ x: String(i + 1), y: r.castByTurn[i + 1] ?? 0 })),
     x: "turn",
     y: "spells cast",
     caption: `mulligan ${Math.round(r.mulliganRate * 100)}% · ${r.stalledGames}/${r.iterations} games stalled · seed ${r.seed}`,

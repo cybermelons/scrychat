@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { goldfish, goldfishChart, resolveDeckLibrary } from "../src/goldfish.js";
+import { goldfish, goldfishChart, resolveDeckLibrary, CHART_MAX_ROWS } from "../src/goldfish.js";
 import type { GoldfishResult } from "../src/goldfish.js";
 import type { CardResolver, Deck, ResolvedCard } from "../src/decks.js";
 
@@ -132,6 +132,27 @@ describe("goldfishChart", () => {
 
   it("composes the caption from the scalars", () => {
     expect(goldfishChart(result()).caption).toBe("mulligan 12% · 3/1000 games stalled · seed 0");
+  });
+
+  // The consumer (apps/web chart-core MAX_CHART_ROWS) REJECTS a spec longer than
+  // 32 rows, so an unclamped producer loses the entire chart rather than drawing
+  // a long one. The MCP schema caps maxTurns at 20 so no shipped path hits this;
+  // a direct goldfish() caller does. These two assertions are the only thing
+  // tying the two bounds together across the package boundary.
+  it("clamps data to CHART_MAX_ROWS so the consumer cannot reject the spec", () => {
+    expect(CHART_MAX_ROWS).toBe(32);
+    const long = goldfishChart(result({ maxTurns: 60, castByTurn: Array.from({ length: 61 }, () => 1) }));
+    expect(long.data.length).toBe(CHART_MAX_ROWS);
+    // Still turn-indexed from 1, not resampled or windowed to the tail.
+    expect(long.data[0]!.x).toBe("1");
+    expect(long.data[CHART_MAX_ROWS - 1]!.x).toBe(String(CHART_MAX_ROWS));
+    // The scalars stay valid at any maxTurns, so the caption is unaffected.
+    expect(long.caption).toContain("seed 0");
+  });
+
+  it("leaves a spec at or under the bound untouched", () => {
+    expect(goldfishChart(result({ maxTurns: 32, castByTurn: Array.from({ length: 33 }, () => 1) })).data.length).toBe(32);
+    expect(goldfishChart(result({ maxTurns: 15, castByTurn: Array.from({ length: 16 }, () => 1) })).data.length).toBe(15);
   });
 
   it("end to end: deck -> library -> goldfish -> chart", async () => {
