@@ -238,9 +238,9 @@
       "n": 58,
       "anchor": "#set-seed",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "Expose the seed in settings",
-      "pin": "A fixed seed is what keeps two runs comparable. Surfacing it makes the determinism contract visible instead of implicit."
+      "pin": "A fixed seed keeps two runs comparable, so the determinism contract is now visible instead of implicit. Shipped as a number input plus Randomize, not a slider: a seed is an identifier, not a magnitude. The value rides the config file into the sim, because the server injects no tool arguments."
     },
     {
       "n": 37,
