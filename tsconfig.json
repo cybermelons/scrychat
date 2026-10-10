@@ -1,0 +1,18 @@
+{
+  // Editor/typecheck-only project (tsserver). Builds use each package's tsconfig.build.json.
+  // paths resolves @scrychat/core to source so references cross packages instead of hitting dist.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "paths": {
+      "@scrychat/core": ["./packages/core/src/index.ts"]
+    }
+  },
+  "include": [
+    "packages/*/src",
+    "packages/*/test",
+    "packages/*/scripts",
+    "apps/web/src",
+    "apps/web/test"
+  ]
+}
