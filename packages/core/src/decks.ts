@@ -677,6 +677,16 @@ export async function deckReport(
   const arenaMissing: string[] = [];
   const arenaUnknown: string[] = [];
 
+  // Resolve every card up front, concurrently. Resolving inside the loop below
+  // made the report cost one serial round trip per card, which is ~75 of them
+  // for a full Commander deck. Duplicate names are resolved once.
+  const resolvedByName = new Map<string, ResolvedCard | null>();
+  await Promise.all(
+    [...new Set(deck.cards.map((c) => c.name))].map(async (name) => {
+      resolvedByName.set(name, await resolver(name));
+    }),
+  );
+
   for (const card of deck.cards) {
     const count = card.count ?? 1;
     total += count;
@@ -696,7 +706,7 @@ export async function deckReport(
       interactionHave += count;
     }
 
-    const resolved = await resolver(card.name);
+    const resolved = resolvedByName.get(card.name) ?? null;
     if (resolved) {
       if (!isSubsetIdentity(resolved.colorIdentity, deck.commanderIdentity)) {
         identityViolations.push(card.name);

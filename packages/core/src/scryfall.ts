@@ -42,15 +42,20 @@ export function escapeQuotedTerm(name: string): string {
   return name.replace(/"/g, '\\"');
 }
 
-let lastRequestAt = 0;
+/**
+ * Time the next request may be sent, as a timestamp rather than a record of the
+ * last one. Concurrent callers each claim their own slot off this value and
+ * push it forward, so N callers arriving together are spaced instead of all
+ * reading the same "last request" time and firing at once.
+ */
+let nextRequestAt = 0;
 
 async function throttle(): Promise<void> {
   const now = Date.now();
-  const elapsed = now - lastRequestAt;
-  if (elapsed < SCRYFALL_MIN_INTERVAL_MS) {
-    await new Promise((resolve) => setTimeout(resolve, SCRYFALL_MIN_INTERVAL_MS - elapsed));
-  }
-  lastRequestAt = Date.now();
+  const slot = Math.max(now, nextRequestAt);
+  nextRequestAt = slot + SCRYFALL_MIN_INTERVAL_MS;
+  const wait = slot - now;
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
 }
 
 export class ScryfallError extends Error {
@@ -85,7 +90,7 @@ function parseRetryAfterMs(res: Response): number | null {
  * (Retry-After header if present, else RETRY_BACKOFF_MS) before finally
  * throwing ScryfallError.
  */
-export async function scryfallFetch<T = unknown>(path: string): Promise<T | null> {
+export async function scryfallFetch<T = unknown>(path: string, body?: unknown): Promise<T | null> {
   const url = path.startsWith("http") ? path : `${SCRYFALL_API_BASE}${path}`;
 
   let attempt = 0;
@@ -93,10 +98,13 @@ export async function scryfallFetch<T = unknown>(path: string): Promise<T | null
     await throttle();
 
     const res = await fetch(url, {
+      method: body === undefined ? "GET" : "POST",
       headers: {
         "User-Agent": USER_AGENT,
         Accept: "application/json",
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
 
     if (res.status === 404) {
@@ -212,6 +220,11 @@ interface ScryfallSearchResponse {
   data: ScryfallCardResponse[];
 }
 
+interface ScryfallCollectionResponse {
+  data: ScryfallCardResponse[];
+  not_found?: { name?: string }[];
+}
+
 export interface SearchCardsOptions {
   limit?: number;
   order?: string;
@@ -260,7 +273,98 @@ export async function searchCards(query: string, opts: SearchCardsOptions = {}):
   };
 }
 
+/**
+ * Memo of resolved lookups, keyed by the caller's name string.
+ * A deck report resolves every card in the list on every call, so without this
+ * a 75-card deck costs 75 throttled Scryfall round trips each time. Misses are
+ * cached too: a name Scryfall does not know will not be known on a retry.
+ * Process-lifetime only, deliberately: card data is static enough that a
+ * long-lived MCP server rereading it is waste, and a fresh process reloads it.
+ */
+const cardCache = new Map<string, Card | null>();
+
+/** Clears the getCard() memo. Exists for tests that change the backing data. */
+export function clearCardCache(): void {
+  cardCache.clear();
+}
+
 export async function getCard(name: string): Promise<Card | null> {
+  const cached = cardCache.get(name);
+  if (cached !== undefined) return cached;
+
+  const card = await getCardUncached(name);
+  cardCache.set(name, card);
+  return card;
+}
+
+/** Scryfall accepts at most 75 identifiers per /cards/collection request. */
+const COLLECTION_BATCH_SIZE = 75;
+
+/**
+ * Resolves many card names in as few requests as possible.
+ *
+ * /cards/collection takes 75 names per request, which turns a whole deck into
+ * one or two round trips instead of one per card. It matches exact names only,
+ * so any name it reports as not_found is retried through getCard()'s fuzzy
+ * lookup. Results go through the same memo as getCard(), so a later getCard()
+ * for any of these names costs nothing.
+ */
+export async function getCards(names: string[]): Promise<Map<string, Card | null>> {
+  const out = new Map<string, Card | null>();
+  const unresolved: string[] = [];
+
+  for (const name of new Set(names)) {
+    const cached = cardCache.get(name);
+    if (cached !== undefined) out.set(name, cached);
+    else unresolved.push(name);
+  }
+
+  const db = getLocalDb();
+  const needRemote: string[] = [];
+  for (const name of unresolved) {
+    const local = db ? getCardLocal(db, name) : null;
+    if (local) {
+      cardCache.set(name, local);
+      out.set(name, local);
+    } else {
+      needRemote.push(name);
+    }
+  }
+
+  for (let i = 0; i < needRemote.length; i += COLLECTION_BATCH_SIZE) {
+    const chunk = needRemote.slice(i, i + COLLECTION_BATCH_SIZE);
+    const res = await scryfallFetch<ScryfallCollectionResponse>("/cards/collection", {
+      identifiers: chunk.map((name) => ({ name })),
+    });
+
+    // Scryfall returns the matched cards in data and echoes the identifiers it
+    // could not match in not_found. It does not say which request name produced
+    // which card, so match them back up by name, case-insensitively.
+    const byLowerName = new Map<string, Card>();
+    for (const raw of res?.data ?? []) {
+      const card = mapCard(raw);
+      byLowerName.set(card.name.toLowerCase(), card);
+    }
+
+    for (const name of chunk) {
+      const card = byLowerName.get(name.toLowerCase());
+      if (card) {
+        cardCache.set(name, card);
+        out.set(name, card);
+      }
+    }
+  }
+
+  // Anything the exact-name batch missed gets one fuzzy lookup each. A deck
+  // normally has few of these, so the serial cost is small.
+  for (const name of needRemote) {
+    if (!out.has(name)) out.set(name, await getCard(name));
+  }
+
+  return out;
+}
+
+async function getCardUncached(name: string): Promise<Card | null> {
   const db = getLocalDb();
   if (db) {
     const local = getCardLocal(db, name);
