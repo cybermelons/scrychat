@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc -p . && tsc -p ui && vite build ui",
+    "build": "tsc -p tsconfig.build.json && tsc -p ui && vite build ui",
     "dev": "pnpm build && node dist/server.js",
     "probe": "node scripts/probe-auth.mjs",
     "test": "vitest run --passWithNoTests"
