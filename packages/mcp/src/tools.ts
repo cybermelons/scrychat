@@ -14,6 +14,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   searchCards,
   getCard,
+  getCards,
   searchTags,
   findCombos,
   findAlternatives,
@@ -38,10 +39,19 @@ import {
   exportDeck,
 } from "@scrychat/core";
 import { importDecklist } from "@scrychat/core";
+import {
+  addSuggestions,
+  listSuggestions,
+  decideSuggestion,
+} from "@scrychat/core";
+import type { NewSuggestion } from "@scrychat/core";
 import type { CardResolver, CardEntry, QuotaTargets } from "@scrychat/core";
 import type { Card } from "@scrychat/core";
 
 const decksDir = path.resolve(process.cwd(), "decks");
+// Sibling of decks/, never inside it: listDecks reads every *.json under
+// decks/ and would parse a suggestions file as a malformed deck.
+const suggestionsDir = path.resolve(process.cwd(), "suggestions");
 
 /**
  * Loads `quotaTargets` from scrychat.config.json (repo root, cwd-relative) once
@@ -356,6 +366,12 @@ export function registerTools(server: McpServer): void {
           }
         }
 
+        // Resolve the whole list in one batched request before building the
+        // report. deckReport() resolves card by card, and getCards() populates
+        // the same memo those lookups read, so this turns ~75 round trips into
+        // one.
+        await getCards(deck.cards.map((c) => c.name));
+
         const report = await deckReport(name, resolveCard, decksDir, globalQuotaTargets);
 
         return {
@@ -620,6 +636,91 @@ export function registerTools(server: McpServer): void {
           return { exists: false, hint: "import via web UI: link Arena log folder or drag-drop Player.log" };
         }
         return stats;
+      });
+    },
+  );
+
+  server.registerTool(
+    "deck_suggest",
+    {
+      title: "Suggest deck changes",
+      description:
+        "Proposes one or more deck changes for the human to review in the web UI. Each suggestion needs a 'kind' " +
+        "(add/cut/swap), the card(s) involved, and a 'why' explaining the functional reason. This does NOT modify " +
+        "the deck - it queues proposals. Use after analyzing a deck when you want the human to approve changes " +
+        "rather than applying them directly. For a swap, set both 'out' and 'in'.",
+      inputSchema: {
+        deck_name: z.string().describe("Deck to attach the suggestions to"),
+        suggestions: z
+          .array(
+            z.object({
+              kind: z.enum(["add", "cut", "swap"]),
+              out: z.string().optional().describe("Card leaving the deck (cut, swap)"),
+              in: z.string().optional().describe("Card entering the deck (add, swap)"),
+              role: z.string().optional().describe("Functional role served, e.g. 'removal'"),
+              why: z.string().describe("Why this change improves the deck"),
+            }),
+          )
+          .min(1)
+          .describe("One or more proposed changes"),
+      },
+    },
+    async ({ deck_name, suggestions }) => {
+      return safe(async () => {
+        const all = await addSuggestions(
+          deck_name,
+          suggestions as NewSuggestion[],
+          suggestionsDir,
+        );
+        const pending = all.filter((s) => s.status === "pending").length;
+        return { deck: deck_name, added: suggestions.length, pending, suggestions: all };
+      });
+    },
+  );
+
+  server.registerTool(
+    "deck_suggestions",
+    {
+      title: "List deck suggestions",
+      description:
+        "Lists queued suggestions for a deck with their status (pending/accepted/rejected). Use to check what " +
+        "the human has already decided before proposing more, so you do not re-suggest a rejected change.",
+      inputSchema: {
+        deck_name: z.string(),
+        status: z
+          .enum(["pending", "accepted", "rejected"])
+          .optional()
+          .describe("Filter to one status; omit for all"),
+      },
+    },
+    async ({ deck_name, status }) => {
+      return safe(async () => {
+        const all = await listSuggestions(deck_name, suggestionsDir);
+        const suggestions = status ? all.filter((s) => s.status === status) : all;
+        return { deck: deck_name, count: suggestions.length, suggestions };
+      });
+    },
+  );
+
+  server.registerTool(
+    "deck_suggestion_decide",
+    {
+      title: "Decide a suggestion",
+      description:
+        "Records accept/reject on a queued suggestion. Recording 'accepted' marks intent only - it does not " +
+        "change the deck. Apply the card change with deck_add / deck_remove so there is one writer per deck file. " +
+        "Normally the human decides in the web UI; use this when they tell you the verdict in chat.",
+      inputSchema: {
+        deck_name: z.string(),
+        id: z.string().describe("Suggestion id, e.g. 's3'"),
+        status: z.enum(["accepted", "rejected"]),
+        note: z.string().optional().describe("Optional reason to record"),
+      },
+    },
+    async ({ deck_name, id, status, note }) => {
+      return safe(async () => {
+        const suggestion = await decideSuggestion(deck_name, id, status, note, suggestionsDir);
+        return { deck: deck_name, suggestion };
       });
     },
   );
