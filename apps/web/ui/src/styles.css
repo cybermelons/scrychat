@@ -1739,3 +1739,140 @@ body {
     max-width: 100%;
   }
 }
+
+/* ---------- suggestions (deck manager section) ---------- */
+.suggestions h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.suggestion-count {
+  background: var(--accent);
+  color: #10131a;
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.suggestion {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.suggestion-accepted {
+  border-left-color: var(--ok);
+  opacity: 0.75;
+}
+
+.suggestion-rejected {
+  border-left-color: var(--bad);
+  opacity: 0.6;
+}
+
+.suggestion-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.suggestion-kind {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: var(--chip-bg);
+  color: var(--text-dim);
+}
+
+.kind-add {
+  color: var(--ok);
+}
+
+.kind-cut {
+  color: var(--bad);
+}
+
+.kind-swap {
+  color: var(--accent);
+}
+
+.suggestion-role {
+  margin: 0;
+}
+
+.suggestion-verdict {
+  margin-left: auto;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.verdict-accepted {
+  color: var(--ok);
+}
+
+.verdict-rejected {
+  color: var(--bad);
+}
+
+.suggestion-change {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.suggestion-out {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.suggestion-arrow {
+  color: var(--text-dim);
+}
+
+.suggestion-why {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.suggestion-note {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--text-dim);
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.suggestions-decided {
+  margin-top: 4px;
+}
+
+@media (max-width: 600px) {
+  /* Thumb-sized verdict buttons: the deck panel is a slide-over drawer on
+     a phone, and Accept/Reject are the two actions used there. */
+  .suggestion-actions .btn {
+    flex: 1;
+    min-height: 44px;
+  }
+}

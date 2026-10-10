@@ -166,3 +166,25 @@ export type ChatFile = {
   messages: ChatFileMsg[];
   deckRefs?: string[];
 };
+
+/**
+ * Mirrors Suggestion in @scrychat/core. The UI cannot import from core
+ * (the browser bundle has no access to the workspace package), so the
+ * shape is restated here and must stay in step with
+ * packages/core/src/suggestions.ts.
+ */
+export type SuggestionKind = "add" | "cut" | "swap";
+export type SuggestionStatus = "pending" | "accepted" | "rejected";
+
+export type Suggestion = {
+  id: string;
+  kind: SuggestionKind;
+  status: SuggestionStatus;
+  out?: string;
+  in?: string;
+  role?: string;
+  why: string;
+  createdAt: string;
+  decidedAt?: string;
+  note?: string;
+};

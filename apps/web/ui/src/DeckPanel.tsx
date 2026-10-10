@@ -14,6 +14,7 @@ import { LEGACY_ROLE_TAGS } from "./types";
 import { CardName } from "./CardName";
 import { renderManaSymbols } from "./markdown";
 import { CollectionSync } from "./CollectionSync";
+import { Suggestions } from "./Suggestions";
 
 const CURVE_ORDER = ["0", "1", "2", "3", "4", "5", "6", "7+"];
 const LAST_DECK_KEY = "scrychat.lastDeck";
@@ -746,6 +747,12 @@ export function DeckPanel({
     if (selectedRef.current) loadDeck(selectedRef.current);
   }, [loadDeck]);
 
+  // Accepting a suggestion applies the add/cut server-side, so the open deck
+  // is stale until it is refetched. Rejections do not touch the deck file.
+  const onSuggestionApplied = useCallback(() => {
+    if (selectedRef.current) loadDeck(selectedRef.current);
+  }, [loadDeck]);
+
   // Global Escape: close whichever dismissible popover/editor is open.
   // Tag editor and manual-copy popover close via this even when focus is on
   // a chip/button inside them (not just the text input).
@@ -1281,6 +1288,8 @@ export function DeckPanel({
           ) : (
             <div className="deck-loading">loading report…</div>
           )}
+
+          <Suggestions deckName={deck.name} onApplied={onSuggestionApplied} />
 
           <section className="deck-section">
             <h2>Cards</h2>
