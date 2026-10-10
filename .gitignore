@@ -6,3 +6,5 @@ suggestions/
 .DS_Store
 evals/transcripts/
 collection.json
+__pycache__/
+*.pyc

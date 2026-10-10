@@ -1,0 +1,3 @@
+# Regenerable, and large. Rebuild with tools/progress/build.py and the
+# throwaway capture script; do not carry 3 MB of PNG in history.
+*.png
