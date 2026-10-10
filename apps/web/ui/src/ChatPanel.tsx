@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppConfig, ChartSpec, ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
+import { parseChartSpec } from "./chart-core";
 import { renderMarkdown } from "./markdown";
 import { SettingsDrawer } from "./SettingsDrawer";
 
@@ -51,46 +52,6 @@ function toolResultStatus(result: string | undefined): "pending" | "error" | "ok
   } catch {
     return /error/i.test(result) ? "error" : "ok";
   }
-}
-
-// The spec is untrusted (derived from card data the model saw). Any failure
-// returns null; callers fall back to the plain tool chip. Truncated results
-// (2048 chars + "…") fail JSON.parse and land here too.
-function parseChartSpec(result?: string): ChartSpec | null {
-  if (typeof result !== "string" || result.length === 0) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result);
-  } catch {
-    console.debug("parseChartSpec: result is not JSON");
-    return null;
-  }
-  const bad = (why: string): null => {
-    console.debug(`parseChartSpec: ${why}`);
-    return null;
-  };
-  if (parsed === null || typeof parsed !== "object") return bad("not an object");
-  const chart = (parsed as Record<string, unknown>).chart;
-  if (chart === null || typeof chart !== "object") return bad("no chart");
-  const c = chart as Record<string, unknown>;
-  if (c.type !== "bar") return bad("unsupported type");
-  if (!Array.isArray(c.data) || c.data.length < 1 || c.data.length > 32) {
-    return bad("bad data length");
-  }
-  for (const row of c.data) {
-    if (row === null || typeof row !== "object") return bad("bad row");
-    const r = row as Record<string, unknown>;
-    if (typeof r.x !== "string" || r.x.length > 16) return bad("bad row x");
-    if (typeof r.y !== "number" || !Number.isFinite(r.y) || r.y < 0) {
-      return bad("bad row y");
-    }
-  }
-  if (typeof c.x !== "string" || c.x.length > 80) return bad("bad x label");
-  if (typeof c.y !== "string" || c.y.length > 80) return bad("bad y label");
-  if (c.caption !== undefined && (typeof c.caption !== "string" || c.caption.length > 120)) {
-    return bad("bad caption");
-  }
-  return chart as ChartSpec;
 }
 
 // Labels and caption are React text children only: never innerHTML, never
