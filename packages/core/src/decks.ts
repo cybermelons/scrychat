@@ -7,6 +7,11 @@ export type CardEntry = {
   count?: number;
 };
 
+export type CardInput = CardEntry & {
+  /** @deprecated use `tags`; accepted as a single-tag alias */
+  role?: string;
+};
+
 export type QuotaTargets = {
   lands: [number, number];
   ramp: [number, number];
@@ -347,7 +352,7 @@ export async function setCommander(
 
 export async function addCards(
   name: string,
-  cards: CardEntry[],
+  cards: CardInput[],
   resolver: CardResolver,
   decksDir: string = DEFAULT_DECKS_DIR()
 ): Promise<AddCardsResult> {
@@ -400,7 +405,7 @@ export async function addCards(
       }
     }
 
-    const tags = card.tags ?? (typeof (card as any).role === "string" ? [(card as any).role] : undefined);
+    const tags = card.tags ?? (typeof card.role === "string" ? [card.role] : undefined);
     const entry: CardEntry = {
       name: resolved.name,
       tags,
