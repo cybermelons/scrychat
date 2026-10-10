@@ -219,6 +219,18 @@ const MEASURE = `(() => {
     wide,
     pinCount: pins.length,
     dotCount: dots.length,
+    // dotCount counts what is in the DOM, which display:none does not
+    // change: hiding every dot kept the count at 33 and the test passed,
+    // while the page showed leader lines ending at nothing. That is the
+    // one shape this page must never take, so count PAINTED dots, and do
+    // it at every width — narrow mode keeps the dots on their controls.
+    dotsPainted: dots.filter(d => {
+      const st = getComputedStyle(d);
+      if (st.display === 'none' || st.visibility === 'hidden') return false;
+      if (Number(st.opacity) === 0) return false;
+      const r = d.getBoundingClientRect();
+      return r.width > 1 && r.height > 1;
+    }).length,
     leadCount: leads.querySelectorAll('line').length,
     anchorMisses, overlaps,
     offPage: boxes.filter(b => b.left < 0 || b.right > window.innerWidth).length,
@@ -265,6 +277,12 @@ for (const vp of VIEWPORTS) {
       ? ok(vp.name, `${m.pinCount} pins rendered`)
       : fail(vp.name, "no pins rendered — data or template emitted nothing");
 
+    m.dotsPainted === m.pinCount
+      ? ok(vp.name, `every dot is painted (${m.dotsPainted})`)
+      : fail(
+          vp.name,
+          `${m.dotsPainted} of ${m.pinCount} dots actually paint — a pin that marks no control`
+        );
     m.dotCount === m.pinCount
       ? ok(vp.name, `one dot per pin (${m.dotCount})`)
       : fail(
