@@ -824,6 +824,69 @@ def check_commits(data):
     return 0
 
 
+def check_cites(data):
+    """Report any `file.ts:N` citation whose line no longer matches the claim.
+
+    A `file:line` citation is the most drift-prone thing on the board. Any
+    edit ABOVE the cited line moves it, and nothing fails: the annotation
+    keeps naming a line that now holds unrelated code, and it still reads as
+    authoritative. #26 cited `server.ts:556` for the card-image rubric; two
+    lines had been inserted above it, so 556 was `preset: "claude_code"` and
+    the rubric had moved to 557. The board was wrong and every gate passed.
+
+    A line number alone cannot be checked, so the check needs to know what the
+    line should SAY. The annotation already names it: the prose around the
+    citation mentions the symbol (`decideSuggestion at suggestions.ts:149`).
+    So take the identifiers from the annotation and require that at least one
+    of them appears on the cited line.
+
+    The accepted cost: an annotation whose prose shares no identifier with its
+    line cannot be checked this way, and is reported as UNCHECKABLE rather
+    than passed in silence. Rewrite such an annotation to name the symbol. A
+    citation nobody can verify is the state this check exists to end.
+    """
+    tracked = subprocess.run(['git', 'ls-files'], capture_output=True,
+                             text=True, cwd=ROOT).stdout.split()
+    bad, unchecked, ok = [], [], 0
+    for i in data['issues']:
+        pin = i.get('pin', '')
+        who = i.get('n') and f"#{i['n']}" or (i.get('commit', '')[:7] or i['title'])
+        for m in re.finditer(r'([A-Za-z0-9_.-]+\.(?:ts|tsx|py|mjs)):(\d+)', pin):
+            fname, ln = m.group(1), int(m.group(2))
+            cands = [f for f in tracked if f.endswith('/' + fname) or f == fname]
+            if len(cands) != 1:
+                bad.append((who, f'{fname}:{ln}',
+                            f'{len(cands)} files match {fname!r}'))
+                continue
+            lines = open(os.path.join(ROOT, cands[0])).read().splitlines()
+            if ln > len(lines):
+                bad.append((who, f'{fname}:{ln}',
+                            f'past end of file ({len(lines)} lines)'))
+                continue
+            line = lines[ln - 1]
+            # Identifiers from the annotation, minus the filename itself and
+            # short words that would match almost any line by accident.
+            words = {w for w in re.findall(r'[A-Za-z_][A-Za-z0-9_]{3,}', pin)
+                     if w not in fname}
+            hit = [w for w in words if w in line]
+            if hit:
+                ok += 1
+            else:
+                unchecked.append((who, f'{fname}:{ln}', line.strip()[:48]))
+    for who, cite, why in bad:
+        print(f'STALE   {cite}  {who}: {why}')
+    for who, cite, line in unchecked:
+        print(f'UNCHECKABLE {cite}  {who}: no identifier from the annotation '
+              f'is on that line, which reads {line!r}')
+    if bad or unchecked:
+        print(f'\n{len(bad) + len(unchecked)} citation(s) that do not verify. '
+              f'Re-read the file and fix the line number, or name the symbol '
+              f'in the annotation.')
+        return 1
+    print(f'{ok} file:line citation(s) still name their symbol')
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--check', action='store_true',
@@ -832,6 +895,8 @@ def main():
                     help='compare the board against the tracker')
     ap.add_argument('--check-commits', action='store_true',
                     help='exit 1 if a commit pin is not on a remote branch')
+    ap.add_argument('--check-cites', action='store_true',
+                    help='exit 1 if a file:line citation no longer matches')
     args = ap.parse_args()
 
     with open(DATA) as fh:
@@ -842,6 +907,9 @@ def main():
 
     if args.check_commits:
         return check_commits(data)
+
+    if args.check_cites:
+        return check_cites(data)
 
     page = render(data)
 

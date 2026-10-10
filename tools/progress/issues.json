@@ -88,7 +88,7 @@
       "side": "left",
       "state": "closed",
       "title": "Focal card images",
-      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric appended to the system prompt at server.ts:556."
+      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric appended to the system prompt at server.ts:558."
     },
     {
       "n": 20,

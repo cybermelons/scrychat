@@ -23,8 +23,24 @@ import { connect } from "./ws-min.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PAGE = path.join(HERE, "..", "..", "docs", "progress", "index.html");
-const PORT = Number(process.env.PROGRESS_PORT || 8132);
-const CDP_PORT = Number(process.env.CDP_PORT || 9334);
+// Port 0 lets the OS pick a free one. A fixed default collides with whatever
+// else is serving on this shared host — melee-pc holds 8132 — and the test
+// then dies with EADDRINUSE, which reads like a layout failure and is not.
+const PORT = Number(process.env.PROGRESS_PORT || 0);
+// A fixed CDP port makes the reuse check below attach to ANY browser already
+// listening there. On this shared host that was a browser another project
+// started, so the test drove a window it does not own and that could close
+// mid-run. Pick a free port per run instead; set CDP_PORT to reuse one on
+// purpose.
+const CDP_PORT = Number(process.env.CDP_PORT || 0) || (await freePort());
+
+async function freePort() {
+  const srv = http.createServer();
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  const { port } = srv.address();
+  await new Promise((r) => srv.close(r));
+  return port;
+}
 
 const VIEWPORTS = [
   { name: "wide", width: 1420, height: 1000 },
@@ -54,7 +70,9 @@ if (!url) {
     s.end(fs.readFileSync(PAGE));
   });
   await new Promise((r) => server.listen(PORT, "127.0.0.1", r));
-  url = `http://127.0.0.1:${PORT}/`;
+  // With PORT 0 the OS assigned one, so ask the server what it got rather
+  // than reusing the request.
+  url = `http://127.0.0.1:${server.address().port}/`;
 }
 
 // ---- launch headless Chromium ----
