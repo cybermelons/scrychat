@@ -104,6 +104,7 @@ export type AppConfig = {
   linkifyPass: boolean;
   defaultExportFormat: ExportFormat;
   quotaTargets?: QuotaTargets;
+  goldfishSeed: number;
   recognizedQuotaTags: string[];
   effectiveQuotaTargets: EffectiveQuotaTargets;
 };

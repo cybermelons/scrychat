@@ -13,12 +13,14 @@ import type { QuotaTargets } from "@scrychat/core";
 export type ScrychatConfig = {
   linkifyPass: boolean;
   defaultExportFormat: "mtga" | "plain" | "moxfield";
+  goldfishSeed: number;
   quotaTargets?: Partial<QuotaTargets>;
 };
 
 export const DEFAULT_CONFIG: ScrychatConfig = {
   linkifyPass: true,
   defaultExportFormat: "mtga",
+  goldfishSeed: 0,
 };
 
 const EXPORT_FORMATS = ["mtga", "plain", "moxfield"] as const;
@@ -26,6 +28,14 @@ const QUOTA_TARGET_FIELDS = ["lands", "ramp", "draw", "interaction", "wipes"] as
 
 function isExportFormat(value: unknown): value is ScrychatConfig["defaultExportFormat"] {
   return typeof value === "string" && (EXPORT_FORMATS as readonly string[]).includes(value);
+}
+
+// int32 max. The MCP goldfish tool schema puts no bound on `seed`, so this
+// validator is the only gate on what reaches the RNG.
+const GOLDFISH_SEED_MAX = 2147483647;
+
+function isGoldfishSeed(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= GOLDFISH_SEED_MAX;
 }
 
 /** A valid quota-target field value: a 2-tuple of finite numbers, min <= max. */
@@ -74,16 +84,18 @@ export function parseConfig(raw: unknown): ScrychatConfig {
   const defaultExportFormat = isExportFormat(src.defaultExportFormat)
     ? src.defaultExportFormat
     : DEFAULT_CONFIG.defaultExportFormat;
+  const goldfishSeed = isGoldfishSeed(src.goldfishSeed) ? src.goldfishSeed : DEFAULT_CONFIG.goldfishSeed;
   const quotaTargets = sanitizeQuotaTargets(src.quotaTargets);
 
   return {
     linkifyPass,
     defaultExportFormat,
+    goldfishSeed,
     ...(quotaTargets ? { quotaTargets } : {}),
   };
 }
 
-const KNOWN_PATCH_KEYS = new Set(["linkifyPass", "defaultExportFormat", "quotaTargets"]);
+const KNOWN_PATCH_KEYS = new Set(["linkifyPass", "defaultExportFormat", "goldfishSeed", "quotaTargets"]);
 
 /**
  * Apply a partial PATCH /api/config body on top of the current config.
@@ -131,6 +143,16 @@ export function applyConfigPatch(
       next.defaultExportFormat = src.defaultExportFormat;
     } else {
       errors.push(`defaultExportFormat must be one of: ${EXPORT_FORMATS.join(", ")}`);
+    }
+  }
+
+  // The config file is the only channel from the UI to the goldfish sim (the
+  // server injects no tool arguments), so a bad seed here would reach the RNG.
+  if ("goldfishSeed" in src) {
+    if (isGoldfishSeed(src.goldfishSeed)) {
+      next.goldfishSeed = src.goldfishSeed;
+    } else {
+      errors.push(`goldfishSeed must be an integer from 0 to ${GOLDFISH_SEED_MAX}`);
     }
   }
 

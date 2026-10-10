@@ -79,6 +79,28 @@ function loadGlobalQuotaTargets(): Partial<QuotaTargets> | undefined {
 
 const globalQuotaTargets = loadGlobalQuotaTargets();
 
+/**
+ * Loads `goldfishSeed` from scrychat.config.json once at module init, same
+ * tolerance as loadGlobalQuotaTargets. The config file is the only channel
+ * from the web UI to the sim: the server injects no tool arguments, so an
+ * omitted `seed` argument falls back to this. Validation lives in the web
+ * app's config-core; here we only guard the type.
+ */
+function loadGlobalSeed(): number | undefined {
+  try {
+    const configPath = path.resolve(process.cwd(), "scrychat.config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    if (config && typeof config === "object" && Number.isInteger(config.goldfishSeed)) {
+      return config.goldfishSeed as number;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const globalSeed = loadGlobalSeed();
+
 /** Adapts core's getCard() into the shape decks.ts's CardResolver expects. */
 const resolveCard: CardResolver = async (name: string) => {
   const card = await getCard(name);
@@ -746,7 +768,7 @@ export function registerTools(server: McpServer): void {
         maxTurns: z.number().int().min(1).max(20).optional().describe("Turns to play per game, 1-20 (default 15)"),
       },
     },
-    async ({ deck: deckName, iterations = 1000, seed = 0, maxTurns = 15 }) => {
+    async ({ deck: deckName, iterations = 1000, seed = globalSeed ?? 0, maxTurns = 15 }) => {
       return safe(async () => {
         const deck = await getDeck(deckName, decksDir);
         if (!deck) return { error: `Deck not found: ${deckName}` };

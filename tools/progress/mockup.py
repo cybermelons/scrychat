@@ -228,7 +228,8 @@ def surface_html() -> str:
         </div>
         <div class="setting" id="set-seed">
           <span class="setting-label">Goldfish seed</span>
-          <input type="range" value="20">
+          <input type="number" min="0" max="2147483647" value="20">
+          <button>Randomize</button>
           <span class="setting-hint">Fixed seed keeps two runs comparable</span>
         </div>
         <div class="setting" id="set-codeexec">

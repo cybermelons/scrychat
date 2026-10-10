@@ -6,6 +6,7 @@ describe("parseConfig", () => {
     expect(parseConfig({ linkifyPass: true })).toEqual({
       linkifyPass: true,
       defaultExportFormat: "mtga",
+      goldfishSeed: 0,
     });
   });
 
@@ -13,6 +14,7 @@ describe("parseConfig", () => {
     expect(parseConfig({ linkifyPass: false })).toEqual({
       linkifyPass: false,
       defaultExportFormat: "mtga",
+      goldfishSeed: 0,
     });
   });
 
@@ -24,6 +26,20 @@ describe("parseConfig", () => {
 
   it("falls back to defaults for invalid field types", () => {
     expect(parseConfig({ linkifyPass: "yes", defaultExportFormat: "pdf" })).toEqual(DEFAULT_CONFIG);
+  });
+
+  it("defaults goldfishSeed to 0 when absent", () => {
+    expect(parseConfig({ linkifyPass: true }).goldfishSeed).toBe(0);
+  });
+
+  it("keeps a valid goldfishSeed", () => {
+    expect(parseConfig({ goldfishSeed: 42 }).goldfishSeed).toBe(42);
+  });
+
+  it("falls back to the default goldfishSeed on invalid values", () => {
+    for (const bad of ["7", 1.5, -1, NaN, 2147483648, null]) {
+      expect(parseConfig({ goldfishSeed: bad }).goldfishSeed).toBe(0);
+    }
   });
 
   it("drops junk quotaTargets fields and keeps valid partial fields", () => {
@@ -60,18 +76,42 @@ describe("parseConfig", () => {
 });
 
 describe("applyConfigPatch", () => {
-  const base = { linkifyPass: true, defaultExportFormat: "mtga" as const };
+  const base = { linkifyPass: true, defaultExportFormat: "mtga" as const, goldfishSeed: 0 };
 
   it("merges a valid partial patch", () => {
     const { config, errors } = applyConfigPatch(base, { linkifyPass: false });
     expect(errors).toEqual([]);
-    expect(config).toEqual({ linkifyPass: false, defaultExportFormat: "mtga" });
+    expect(config).toEqual({ linkifyPass: false, defaultExportFormat: "mtga", goldfishSeed: 0 });
   });
 
   it("merges a valid defaultExportFormat patch", () => {
     const { config, errors } = applyConfigPatch(base, { defaultExportFormat: "plain" });
     expect(errors).toEqual([]);
     expect(config.defaultExportFormat).toBe("plain");
+  });
+
+  it("merges a valid goldfishSeed patch", () => {
+    const { config, errors } = applyConfigPatch(base, { goldfishSeed: 1234 });
+    expect(errors).toEqual([]);
+    expect(config.goldfishSeed).toBe(1234);
+  });
+
+  it("accepts the goldfishSeed bounds 0 and 2147483647", () => {
+    expect(applyConfigPatch(base, { goldfishSeed: 0 }).errors).toEqual([]);
+    expect(applyConfigPatch(base, { goldfishSeed: 2147483647 }).config.goldfishSeed).toBe(2147483647);
+  });
+
+  it.each([
+    ["non-number", "7"],
+    ["non-integer", 1.5],
+    ["negative", -1],
+    ["NaN", NaN],
+    ["Infinity", Infinity],
+    ["above int32 max", 2147483648],
+  ])("rejects a %s goldfishSeed, leaving config unchanged", (_label, value) => {
+    const { config, errors } = applyConfigPatch(base, { goldfishSeed: value });
+    expect(errors).toEqual(["goldfishSeed must be an integer from 0 to 2147483647"]);
+    expect(config).toEqual(base);
   });
 
   it("rejects unknown top-level keys as errors, leaving config unchanged", () => {

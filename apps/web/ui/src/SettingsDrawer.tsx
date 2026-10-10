@@ -42,12 +42,16 @@ export function SettingsDrawer({
   const [quotaDraft, setQuotaDraft] = useState<QuotaDraft | null>(null);
   const [quotaBusy, setQuotaBusy] = useState(false);
   const [quotaErrors, setQuotaErrors] = useState<string[]>([]);
+  const [seedDraft, setSeedDraft] = useState("");
+  const [seedBusy, setSeedBusy] = useState(false);
+  const [seedErrors, setSeedErrors] = useState<string[]>([]);
 
   // Reset the quota draft from the latest effective targets whenever the
   // drawer (re)opens or the config's effective targets change underneath it
   // (e.g. after a save or a reset-to-defaults).
   useEffect(() => {
     if (open && config) setQuotaDraft(draftFromEffective(config));
+    if (open && config) setSeedDraft(String(config.goldfishSeed));
   }, [open, config]);
 
   // Escape closes the drawer, focus returns to the gear button that opened
@@ -66,7 +70,7 @@ export function SettingsDrawer({
   }, [open, onClose, triggerRef]);
 
   const patchConfig = useCallback(
-    (body: Partial<{ linkifyPass: boolean; defaultExportFormat: ExportFormat; quotaTargets: QuotaTargets | null }>) => {
+    (body: Partial<{ linkifyPass: boolean; defaultExportFormat: ExportFormat; quotaTargets: QuotaTargets | null; goldfishSeed: number }>) => {
       return fetch("/api/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -114,6 +118,25 @@ export function SettingsDrawer({
       .catch((e: Error) => setQuotaErrors([e.message]))
       .finally(() => setQuotaBusy(false));
   }, [quotaDraft, patchConfig]);
+
+  const commitSeed = useCallback(
+    (value: number) => {
+      setSeedBusy(true);
+      setSeedErrors([]);
+      patchConfig({ goldfishSeed: value })
+        .catch((e: Error) => setSeedErrors([e.message]))
+        .finally(() => setSeedBusy(false));
+    },
+    [patchConfig]
+  );
+
+  const saveSeed = useCallback(() => commitSeed(Number(seedDraft)), [commitSeed, seedDraft]);
+
+  const randomizeSeed = useCallback(() => {
+    const value = Math.floor(Math.random() * 2147483648);
+    setSeedDraft(String(value));
+    commitSeed(value);
+  }, [commitSeed]);
 
   const resetQuotaTargets = useCallback(() => {
     setQuotaBusy(true);
@@ -254,6 +277,56 @@ export function SettingsDrawer({
                     type="button"
                     className="chip-dismiss"
                     onClick={() => setQuotaErrors([])}
+                    aria-label="Dismiss error"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </section>
+
+            <section className="settings-section" id="settings-goldfish-seed-section">
+              <label className="settings-label" htmlFor="settings-goldfish-seed">
+                Goldfish seed
+              </label>
+              <div className="form-row-actions">
+                <input
+                  id="settings-goldfish-seed"
+                  className="text-input count-input"
+                  type="number"
+                  min={0}
+                  max={2147483647}
+                  step={1}
+                  value={seedDraft}
+                  onChange={(e) => setSeedDraft(e.target.value)}
+                  aria-label="Goldfish seed"
+                  disabled={seedBusy}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary btn-small"
+                  onClick={saveSeed}
+                  disabled={seedBusy}
+                >
+                  {seedBusy ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-small"
+                  onClick={randomizeSeed}
+                  disabled={seedBusy}
+                >
+                  Randomize
+                </button>
+              </div>
+              <p className="settings-hint">Fixed seed keeps two runs comparable</p>
+              {seedErrors.length > 0 && (
+                <div className="chip chip-error chip-dismissible">
+                  {seedErrors.join("; ")}
+                  <button
+                    type="button"
+                    className="chip-dismiss"
+                    onClick={() => setSeedErrors([])}
                     aria-label="Dismiss error"
                   >
                     ×
