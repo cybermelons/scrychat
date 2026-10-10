@@ -9,3 +9,4 @@ export * from "./import.js";
 export * from "./local.js";
 export * from "./arena-log.js";
 export * from "./collection.js";
+export * from "./suggestions.js";
