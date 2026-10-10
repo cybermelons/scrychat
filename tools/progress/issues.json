@@ -67,6 +67,14 @@
       "pin": "tool-use at server.ts:597 opens the chip, tool-result at :616 fills it. Chat SSE, consumed by ChatPanel."
     },
     {
+      "n": 47,
+      "anchor": "#chip-search",
+      "side": "left",
+      "state": "open",
+      "title": "Ground every card claim in a fetch",
+      "pin": "Every card name or effect a reply states must trace to a Scryfall fetch, shown as this chip. A claim with no chip behind it is the from-memory defect: #46 found 13 of them in one analysis, and #47 repeated it immediately after that audit. The chip is the proof, so \"chip present on every card claim\" is the test."
+    },
+    {
       "n": 18,
       "anchor": "#card-hover",
       "side": "left",
@@ -251,6 +259,14 @@
       "commit": "6f8de38aa6cfbebe1220b2f896158863d16a9f88"
     },
     {
+      "n": 50,
+      "anchor": "#health-mirror",
+      "side": "right",
+      "state": "open",
+      "title": "Mirror row count and local-hit share",
+      "pin": "scrychat.db is empty, so every deck-report lookup leaves the machine. This row must show the mirror row count and the local-hit share. Collection lookups batch 75 ids per POST /cards/collection; search does not batch at all."
+    },
+    {
       "n": 59,
       "anchor": "#health-arena",
       "side": "right",
@@ -267,5 +283,12 @@
       "pin": "This board tracks the goal; it is not the goal. This pin is the tracked item that retires the mockup. The board itself shipped in f78993d (tools/progress/)."
     }
   ],
-  "commit_base": "https://github.com/cybermelons/scrychat/commit/"
+  "commit_base": "https://github.com/cybermelons/scrychat/commit/",
+  "off_board": {
+    "44": "Data error in two generated deck pages, not a target control: regenerate them. The behaviour that caused it is tracked by #47.",
+    "45": "A result record for one deck: 20k seeded trials. Closing it changes no control; #52 and #53 build the sim surface.",
+    "46": "Evidence for #47, not separate work. Its actionable half is the grounding guarantee pinned at the search chip.",
+    "48": "A strategy conclusion about one deck, not a product change.",
+    "49": "A record of one deck queue: 9 accepted, 6 rejected. If the queue and the land quota ever disagree, that is a new bug, not this."
+  }
 }

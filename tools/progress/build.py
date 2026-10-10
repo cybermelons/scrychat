@@ -137,13 +137,42 @@ def render(data):
             f'<span class="pin-p">{e(i["pin"])}</span>{close_tag}'))
 
     return TEMPLATE.format(
-        surface=surface,
+        off_board=off_board_html(data), surface=surface,
         links=links_html(data.get('links', {})),
         pins_left='\n  '.join(h for side, h in pins if side == 'left'),
         pins_right='\n  '.join(h for side, h in pins if side == 'right'),
         done=done, total=total, pct=pct, open_count=total - done,
         note=e(data.get('note', '')), base=e(data['base']),
     )
+
+
+def off_board_html(data):
+    """Render the open issues that are deliberately NOT pinned.
+
+    The board's value is the mapping from an issue to the control that proves
+    it done. Showing only the mapping hides its own complement: a reader sees
+    22 pins and cannot tell whether the other open issues were considered and
+    excused, or simply missed. The audit knows the difference; a reader of the
+    page does not, and the page is what gets shared.
+
+    So the excuses are rendered, with their reasons, as a footnote. Not pins:
+    they have no anchor and nothing to point at.
+    """
+    e = html.escape
+    off = data.get('off_board') or {}
+    if not off:
+        return ''
+    rows = '\n'.join(
+        f'    <li><a href="{e(data["base"])}{e(str(n))}">#{e(str(n))}</a> '
+        f'{e(why)}</li>'
+        for n, why in sorted(off.items(), key=lambda kv: int(kv[0])))
+    return (f'<section class="off-board">\n'
+            f'  <h2>Open, and deliberately not on the board '
+            f'({len(off)})</h2>\n'
+            f'  <p>These are findings and records, not controls this target '
+            f'has to grow. Each one is excused by name, so a gap in the '
+            f'mapping is a decision a reader can check, not an omission.</p>\n'
+            f'  <ul>\n{rows}\n  </ul>\n</section>')
 
 
 TEMPLATE = """<!DOCTYPE html>
@@ -425,6 +454,15 @@ TEMPLATE = """<!DOCTYPE html>
     .pane-grid {{ grid-template-columns:1fr; }}
     .qrow {{ grid-template-columns:4.6rem 1fr 4.6rem; }}
   }}
+  /* The board's complement. Dimmer than a pin label on purpose: it is
+     context for the mapping, never a competing list of work. */
+  .off-board {{ max-width:46rem; margin:2.4rem auto 0; padding:0 1rem;
+                color:var(--dim); font-size:.82rem; }}
+  .off-board h2 {{ font-size:.82rem; font-weight:600; margin:0 0 .4rem;
+                   color:#9aa0a6; }}
+  .off-board p {{ margin:0 0 .6rem; }}
+  .off-board ul {{ margin:0; padding-left:1.1rem; }}
+  .off-board li {{ margin:.3rem 0; }}
   footer {{ max-width:46rem; margin:0 auto; padding:0 1rem 3rem;
             color:var(--dim); font-size:.82rem; text-align:center; }}
 </style>
@@ -452,6 +490,7 @@ TEMPLATE = """<!DOCTYPE html>
   <div id="pin-left">{pins_left}</div>
   <div id="pin-right">{pins_right}</div>
 </div>
+{off_board}
 <footer>{note} · <a href="{base}">All issues</a></footer>
 
 <script>
@@ -625,10 +664,22 @@ def audit(data):
     it reads as authoritative. Reports pins whose issue is not in the tracker,
     and pins whose state disagrees with the tracker.
 
-    The tracker holds far more issues than the board pins, and that is correct:
-    a board pins the controls one design needs, not every issue in the repo.
-    So "in the tracker but not pinned" is only reported for issues the board
-    SHOULD carry — ones labelled with `board_label` — and is otherwise silent.
+    Every OPEN issue in the tracker must be accounted for: either pinned to a
+    control, or listed in `off_board` with a reason. This is default-IN, and
+    it replaces an earlier opt-in that keyed off a `board_label`. Opt-in was
+    the hole that let 7 open issues (#44-#50) drift off the board unseen: an
+    unlabelled issue was invisible to the audit, so silence read as agreement.
+
+    An `off_board` entry is a decision, not a suppression, so two states are
+    errors rather than conveniences. An issue both pinned and listed is a
+    contradiction: the two records can disagree about whether it is tracked.
+    An entry naming a CLOSED issue is stale and gets pruned, because a reason
+    nobody has to justify any more is how a list rots into noise.
+
+    The cost of default-in: a lazy reason string silences the check, and the
+    only thing standing against that is review of the diff the entry lands in.
+    That is accepted. The gain is that a new issue forces a board decision at
+    the next build, rather than being absent by default.
 
     A foreign issue carries its own `base` and is skipped: it belongs to
     another tracker, so this repo's issue list says nothing about it.
@@ -660,20 +711,29 @@ def audit(data):
     shipped = [i['title'] for i in data['issues'] if i.get('commit')]
     unfiled = [i['title'] for i in data['issues']
                if not i.get('n') and not i.get('commit')]
-    label = data.get('board_label')
-
-    def labels_of(i):
-        return {l.get('name', '') for l in i.get('labels') or []}
+    # Keys are strings in JSON; the tracker speaks ints. Normalise once here
+    # so a correct entry cannot miss on type alone.
+    off = {int(n): why for n, why in (data.get('off_board') or {}).items()}
 
     problems = []
-    # Only issues carrying the board label are expected on the board. Without
-    # a label configured, this direction is skipped rather than reporting
-    # every unrelated issue in the repo as a problem.
-    if label:
-        for n in sorted(set(tracker) - set(local)):
-            if label in labels_of(tracker[n]):
-                problems.append(f'  #{n} labelled {label!r} but not pinned: '
-                                f'{tracker[n].get("title", "")}')
+    # Default-in: an open issue is either pinned or explicitly excused. The
+    # `and n not in off` is what makes `off_board` an answer to this check
+    # rather than a second list nobody reads.
+    for n in sorted(set(tracker) - set(local)):
+        if tracker[n].get('state', '').lower() == 'open' and n not in off:
+            problems.append(f'  #{n} open, not pinned and not in off_board: '
+                            f'{tracker[n].get("title", "")}')
+    # Both pinned and excused: two records of one decision, free to disagree.
+    for n in sorted(set(off) & set(local)):
+        problems.append(f'  #{n} is pinned AND in off_board: '
+                        f'pick one record, not two')
+    # An excuse for a closed issue has outlived the question it answered.
+    for n in sorted(off):
+        if n in tracker and tracker[n].get('state', '').lower() == 'closed':
+            problems.append(f'  #{n} in off_board but closed in tracker: '
+                            f'prune the entry')
+        elif n not in tracker:
+            problems.append(f'  #{n} in off_board but not in tracker at all')
     for n in sorted(set(local) - set(tracker)):
         problems.append(f'  #{n} on the board, not in tracker: '
                         f'{local[n]["title"]}')
@@ -691,14 +751,14 @@ def audit(data):
         print(f'skipped {len(shipped)} pin(s) pinned to a commit, not an issue')
     if unfiled:
         print(f'skipped {len(unfiled)} unfiled pin(s) with no issue number')
-    if not label:
-        print('no board_label set: not reporting tracker issues that are '
-              'missing from the board.')
+    if off:
+        print(f'{len(off)} open issue(s) deliberately off the board')
     if problems:
         print('board and tracker disagree:')
         print('\n'.join(problems))
         return 1
-    print(f'board matches tracker ({len(local)} pinned, {len(tracker)} in tracker)')
+    print(f'board matches tracker ({len(local)} pinned, {len(off)} excused, '
+          f'{len(tracker)} in tracker)')
     return 0
 
 

@@ -217,6 +217,20 @@ const MEASURE = `(() => {
       const fr = f.getBoundingClientRect();
       return boxes.filter(b => b.bottom > fr.top + 0.5 && b.top < fr.bottom - 0.5).length;
     })(),
+    // The off-board footnote sits between the label columns and the footer,
+    // so the footer check above cannot see it. An unmeasured block there is
+    // how a column with no height hides: the labels land on top of the prose
+    // and the footer still clears.
+    offBoardOverlap: (() => {
+      const o = document.querySelector('.off-board');
+      if (!o || !wide) return 0;
+      const or = o.getBoundingClientRect();
+      return boxes.filter(b => b.bottom > or.top + 0.5 && b.top < or.bottom - 0.5).length;
+    })(),
+    offBoardHeight: (() => {
+      const o = document.querySelector('.off-board');
+      return o ? o.getBoundingClientRect().height : -1;
+    })(),
     visibleLabels: pins.filter(p => {
       const s = getComputedStyle(p);
       return s.display !== 'none' && s.visibility !== 'hidden'
@@ -265,6 +279,22 @@ for (const vp of VIEWPORTS) {
           vp.name,
           `${m.footerOverlap} labels overlap the footer — a column has no height`
         );
+
+    // The footnote is rendered only when off_board has entries. When it is
+    // there it must carry real height and no label may sit on it.
+    if (m.offBoardHeight === -1) {
+      ok(vp.name, "no off-board footnote on this page");
+    } else {
+      m.offBoardHeight > 1
+        ? ok(vp.name, `off-board footnote has height (${m.offBoardHeight.toFixed(0)}px)`)
+        : fail(vp.name, "off-board footnote rendered with no height");
+      m.offBoardOverlap === 0
+        ? ok(vp.name, "no label overlaps the off-board footnote")
+        : fail(
+            vp.name,
+            `${m.offBoardOverlap} labels overlap the off-board footnote`
+          );
+    }
 
     // A tab switch must move nothing below it (the pane-height jump).
     const spread = await evalJs(`(async () => {
