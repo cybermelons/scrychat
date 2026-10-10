@@ -291,6 +291,7 @@
     "48": "A strategy conclusion about one deck, not a product change.",
     "49": "A record of one deck queue: 9 accepted, 6 rejected. If the queue and the land quota ever disagree, that is a new bug, not this.",
     "63": "Research notes on card-similarity approaches, and the conclusion is to build nothing yet: otag already encodes function, which an oracle-text embedding would duplicate worse. No control follows until that changes.",
-    "64": "A competitive analysis of other AI deckbuilders. It argues what the product already is, so it pins to no new control; where it names a gap, that gap gets its own issue."
+    "64": "A competitive analysis of other AI deckbuilders. It argues what the product already is, so it pins to no new control; where it names a gap, that gap gets its own issue.",
+    "65": "A feature inventory of one competitor, filling the undisclosed cells in #64's table. Its output is a doc and a correction diff, so it changes no control here; anything it turns into product work gets its own issue."
   }
 }
