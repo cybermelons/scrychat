@@ -1,0 +1,547 @@
+{
+  "name": "Grothama Fight Draw",
+  "commander": "Grothama, All-Devouring",
+  "commanderIdentity": [
+    "G"
+  ],
+  "cards": [
+    {
+      "name": "Krosan Grip",
+      "tags": [
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Medicine Bag",
+      "tags": [
+        "equipment"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Garruk's Uprising",
+      "tags": [
+        "draw"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Reclamation Sage",
+      "tags": [
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Beast Within",
+      "tags": [
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Combo Attack",
+      "tags": [
+        "fight"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Wildest Dreams",
+      "tags": [
+        "recursion"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Mossbridge Troll",
+      "tags": [
+        "threat"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Thrashing Brontodon",
+      "tags": [
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Eternal Witness",
+      "tags": [
+        "recursion"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Grow from the Ashes",
+      "tags": [
+        "ramp"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Kodama's Reach",
+      "tags": [
+        "ramp"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Lair of the Hydra",
+      "tags": [
+        "land"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Emergence Zone",
+      "tags": [
+        "land"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Desert of the Indomitable",
+      "tags": [
+        "land"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Reliquary Tower",
+      "tags": [
+        "land",
+        "draw"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Endless Sands",
+      "tags": [
+        "land"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Mirrorpool",
+      "tags": [
+        "land"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Erratic Portal",
+      "tags": [
+        "blink"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Saber Ants",
+      "tags": [
+        "damage-payoff"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Surrak, the Hunt Caller",
+      "tags": [
+        "threat",
+        "haste"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Golden Guardian",
+      "tags": [
+        "fight",
+        "land"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Greater Good",
+      "tags": [
+        "sac-outlet",
+        "draw"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Ambitious Dragonborn",
+      "tags": [
+        "threat"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Withstand Death",
+      "tags": [
+        "indestructible"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Vines of Vastwood",
+      "tags": [
+        "protection"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Nim Deathmantle",
+      "tags": [
+        "recursion"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Thought Vessel",
+      "tags": [
+        "ramp",
+        "draw"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Loxodon Warhammer",
+      "tags": [
+        "equipment"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Lightning Greaves",
+      "tags": [
+        "equipment",
+        "protection"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Swiftfoot Boots",
+      "tags": [
+        "equipment",
+        "protection"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Cultivate",
+      "tags": [
+        "ramp"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Thran Dynamo",
+      "tags": [
+        "ramp"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Nylea, God of the Hunt",
+      "tags": [
+        "indestructible"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Gaea's Embrace",
+      "tags": [
+        "aura"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Yeva, Nature's Herald",
+      "tags": [
+        "threat"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Overwhelming Stampede",
+      "tags": [
+        "finisher"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Stuffy Doll",
+      "tags": [
+        "damage-payoff"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Genesis",
+      "tags": [
+        "recursion"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Acidic Slime",
+      "tags": [
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Psychosis Crawler",
+      "tags": [
+        "draw"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Conjurer's Closet",
+      "tags": [
+        "blink"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Thornling",
+      "tags": [
+        "indestructible"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Indrik Stomphowler",
+      "tags": [
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Nissa, Vital Force",
+      "tags": [
+        "draw",
+        "recursion"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Wayfarer's Bauble",
+      "tags": [
+        "ramp"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Basilisk Collar",
+      "tags": [
+        "equipment"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Sol Ring",
+      "tags": [
+        "ramp"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Darksteel Plate",
+      "tags": [
+        "indestructible"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Multani, Yavimaya's Avatar",
+      "tags": [
+        "recursion"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Vigor",
+      "tags": [
+        "indestructible"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Bane of Progress",
+      "tags": [
+        "wipe"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Woodland Bellower",
+      "tags": [
+        "threat"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Spearbreaker Behemoth",
+      "tags": [
+        "indestructible"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Soul of New Phyrexia",
+      "tags": [
+        "indestructible"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Seasons Past",
+      "tags": [
+        "recursion"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Ulvenwald Tracker",
+      "tags": [
+        "fight"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Regrowth",
+      "tags": [
+        "recursion"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Rampant Growth",
+      "tags": [
+        "ramp"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Broodhatch Nantuko",
+      "tags": [
+        "damage-payoff"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Mortal's Resolve",
+      "tags": [
+        "indestructible"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Scavenging Ooze",
+      "tags": [
+        "threat"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Pounce",
+      "tags": [
+        "fight",
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Druid's Call",
+      "tags": [
+        "damage-payoff"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Prizefight",
+      "tags": [
+        "fight",
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Ancient Animus",
+      "tags": [
+        "fight",
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Bonds of Mortality",
+      "tags": [
+        "draw"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Ancient Brontodon",
+      "tags": [
+        "threat"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Ghalta, Primal Hunger",
+      "tags": [
+        "threat"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Foe-Razer Regent",
+      "tags": [
+        "fight",
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Terastodon",
+      "tags": [
+        "removal"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Pelakka Wurm",
+      "tags": [
+        "draw"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Impervious Greatwurm",
+      "tags": [
+        "indestructible"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Not of This World",
+      "tags": [
+        "counterspell"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Forest",
+      "tags": [
+        "land"
+      ],
+      "count": 25
+    }
+  ],
+  "updatedAt": "2026-10-10T00:26:50.399Z"
+}
