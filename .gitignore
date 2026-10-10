@@ -2,6 +2,7 @@ node_modules
 dist
 data/
 chats/
+suggestions/
 .DS_Store
 evals/transcripts/
 collection.json
