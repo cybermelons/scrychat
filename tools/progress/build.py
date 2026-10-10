@@ -709,9 +709,34 @@ def check_commits(data):
     this clone resolves locally and still 404s for every reader, so a pin
     that looks like a citation is a dead link. `git branch -r --contains`
     answers the question the reader actually has: can the remote serve this.
+
+    The `commit` field is the strong path: it validates the shape, then
+    rejects a sha git does not know. A sha cited in annotation prose is
+    only a secondary net, because an English word can be all hex
+    characters ("effaced"), so the scan must ask git before treating a
+    word as a citation. The cost is that a TYPO in an annotation sha
+    reads as an ordinary word and passes. Put a sha a reader must be
+    able to open in `commit`, not in prose.
     """
     pinned = [(i['title'], i['commit'])
               for i in data['issues'] if i.get('commit')]
+
+    # A sha written into an annotation is a citation too, and an unguarded
+    # one is how a stale reference survives a rename or a rebase. Scan the
+    # prose for anything sha-shaped so the check covers both.
+    #
+    # An English word can be all hex characters ("effaced", "accede"), so a
+    # shape match alone would fail the build on ordinary prose. Ask git
+    # whether the word names a commit here, and only then treat it as a
+    # citation. A word git does not know is just a word.
+    for i in data['issues']:
+        for m in re.finditer(r'\b[0-9a-f]{7,40}\b', i.get('pin', '')):
+            w = m.group()
+            if subprocess.run(['git', 'rev-parse', '--verify', '-q',
+                               f'{w}^{{commit}}'],
+                              capture_output=True).returncode == 0:
+                pinned.append((f"{i['title']} (annotation)", w))
+
     if not pinned:
         return 0
 

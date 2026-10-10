@@ -264,7 +264,7 @@
       "side": "right",
       "state": "open",
       "title": "Replace the real UI with this target",
-      "pin": "This board tracks the goal; it is not the goal. This pin is the tracked item that retires the mockup."
+      "pin": "This board tracks the goal; it is not the goal. This pin is the tracked item that retires the mockup. The board itself shipped in f78993d (tools/progress/)."
     }
   ],
   "commit_base": "https://github.com/cybermelons/scrychat/commit/"
