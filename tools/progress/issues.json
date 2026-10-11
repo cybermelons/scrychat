@@ -396,7 +396,7 @@
       "side": "right",
       "state": "open",
       "title": "Hosted code execution",
-      "pin": "The discovery feature: answers questions no pre-written tool covers. Runs in Anthropic's sandbox, not on this host, so it cannot reach decks/ or data/. NOT Bash.",
+      "pin": "BLOCKED, measured 2026-10-11 against @anthropic-ai/claude-agent-sdk@0.1.77. Hosted code execution is not reachable from this SDK. cli.js builds a request object for every server tool it supports (web_search_20250305, 1 hit) and has no constructor for code execution (code_execution_20*, 0 hits) -- only three render-side `case \"code_execution_tool_result\":` passthroughs. The only escape hatches, betas and extraArgs --betas, cannot reach it either: the beta allowlist is a one-element array (context-1m-2025-08-07), and betas are discarded with a warning under subscription auth, which is the architecture's load-bearing choice. Stays open: the want is real, but CLAUDE.md says build the local sandbox only when the context limit actually blocks something, and NOT Bash. Reopen on an SDK release that exposes the tool.",
       "proves": [
         {
           "file": "apps/web/ui/src/SettingsDrawer.tsx",
