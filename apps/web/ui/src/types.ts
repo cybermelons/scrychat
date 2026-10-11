@@ -142,9 +142,11 @@ export type ChartSpec = {
 /**
  * Mirrors the deck_present result in @scrychat/mcp (the UI cannot import it, so
  * the shape is restated here). Rendered by SlideStrip in ChatPanel.tsx; always
- * validated by parseSlideSpec first. A slide has text, a chart, or both.
+ * validated by parseSlideSpec first. A slide has text, a chart, or model-
+ * authored html -- at least one. `html` is rendered via srcdoc into an iframe
+ * with sandbox="" and is always checked by checkSlideHtml first (#56).
  */
-export type Slide = { title: string; text?: string; chart?: ChartSpec };
+export type Slide = { title: string; text?: string; chart?: ChartSpec; html?: string };
 export type SlideSpec = { slides: Slide[] };
 
 export type ChatEvent =

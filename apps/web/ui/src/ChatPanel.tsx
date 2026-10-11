@@ -114,6 +114,32 @@ function CompareTable({ spec }: { spec: CompareSpec }) {
   );
 }
 
+/**
+ * Model-authored slide markup (#56), rendered into an iframe with an EMPTY
+ * sandbox attribute.
+ *
+ * `sandbox=""` -- not omitted, and not `sandbox="allow-scripts"` -- is the
+ * security boundary: it gives the frame an opaque origin with scripts, forms,
+ * popups and top-level navigation all disabled, so the markup cannot reach
+ * this document, its cookies or its storage even though it is same-document
+ * in the React tree. Do not add an allow-* token here; `allow-scripts` alone
+ * would let injected markup run JS in the user's browser.
+ *
+ * `html` has already passed checkSlideHtml, which covers what the sandbox
+ * does not: outbound subresource requests and meta-refresh.
+ */
+function SlideFrame({ html }: { html: string }) {
+  return (
+    <iframe
+      className="slide-frame"
+      sandbox=""
+      referrerPolicy="no-referrer"
+      title="Slide"
+      srcDoc={html}
+    />
+  );
+}
+
 // Title, text and chart are React text children / the Chart component only. The
 // selected index is local state; slides are never reordered or mutated.
 function SlideStrip({ spec }: { spec: SlideSpec }) {
@@ -133,6 +159,7 @@ function SlideStrip({ spec }: { spec: SlideSpec }) {
       ))}
       <div className="slide-body">
         {slide.text && <div className="slide-text">{slide.text}</div>}
+        {slide.html && <SlideFrame html={slide.html} />}
         {slide.chart && <Chart spec={slide.chart} />}
       </div>
     </div>

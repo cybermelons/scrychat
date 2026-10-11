@@ -751,7 +751,9 @@ export function registerTools(server: McpServer): void {
         // The web app truncates a tool result at 2048 chars; a longer result never renders. Every
         // field below is therefore clipped to the caps slides-core.ts enforces (title 40, text 320).
         const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-        const slides: { title: string; text?: string; chart?: ChartSpec }[] = [];
+        // `html` is only for a slide a chart spec cannot express (#56); the web
+        // app renders it in an iframe with sandbox="" after revalidating it.
+        const slides: { title: string; text?: string; chart?: ChartSpec; html?: string }[] = [];
 
         slides.push({
           title: "Curve",
@@ -765,14 +767,47 @@ export function registerTools(server: McpServer): void {
           },
         });
 
+        // Quotas are the slide a chart spec cannot express (#56): each row is
+        // a have/want pair plus a pass/fail, which reads as a table with the
+        // failing rows coloured, not as bars. Emitted as `html`, rendered by
+        // the web app into an iframe with sandbox="".
+        //
+        // Tag names and quota keys come from the deck file, so they are
+        // escaped here. The web app re-validates with checkSlideHtml and
+        // rejects the whole spec if anything is off -- this escaping is the
+        // producer doing its job, not the boundary.
+        const esc = (v: string) =>
+          v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        // Kept compact on purpose: with sandbox="" the frame has no stylesheet,
+        // so every cell would otherwise repeat a `style` attribute. Measured
+        // worst case (all 5 quotas OFF, 3-digit counts) is well inside
+        // MAX_HTML_LEN; a per-cell-styled version measured 1410 and was
+        // rejected outright, which would have dropped the slide exactly when
+        // the deck is in the worst shape.
+        const cell = 'style="padding:2px 6px"';
+        const rows = Object.entries(report.quotaCheck)
+          .map(([k, q]) =>
+            `<tr><td ${cell}>${esc(k)}</td><td ${cell}>${q.have}</td>` +
+            `<td ${cell}>${q.want}</td>` +
+            `<td style="padding:2px 6px;color:${q.ok ? "#9ece6a" : "#e0af68"}">` +
+            `${q.ok ? "ok" : "OFF"}</td></tr>`,
+          )
+          .join("");
+        const quotaHtml =
+          `<div style="font:12px system-ui;color:#c0caf5">` +
+          `<table><thead><tr style="color:#787c99">` +
+          `<th ${cell}>tag</th><th ${cell}>have</th><th ${cell}>want</th><th></th>` +
+          `</tr></thead><tbody>${rows}</tbody></table></div>`;
         slides.push({
           title: "Quotas",
+          // text is kept as the fallback for any client that rejects the html.
           text: clip(
             Object.entries(report.quotaCheck)
               .map(([k, q]) => `${k} ${q.have} (want ${q.want}) ${q.ok ? "ok" : "OFF"}`)
               .join("\n"),
             320,
           ),
+          html: quotaHtml,
         });
 
         if (suggestions.length > 0) {

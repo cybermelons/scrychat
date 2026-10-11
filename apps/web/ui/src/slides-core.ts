@@ -11,6 +11,7 @@
  */
 
 import { parseChartSpec } from "./chart-core.js";
+import { checkSlideHtml } from "./slide-html-core.js";
 import type { Slide, SlideSpec } from "./types.js";
 
 /** Most slides the strip will show. Also bounds the 2048-char tool-result budget. */
@@ -54,9 +55,20 @@ export function parseSlideSpec(result?: string): SlideSpec | null {
     }
     const hasText = typeof s.text === "string" && s.text.length > 0;
     const hasChart = s.chart !== undefined;
-    if (!hasText && !hasChart) return bad("slide has neither text nor chart");
+    const hasHtml = s.html !== undefined;
+    if (!hasText && !hasChart && !hasHtml) {
+      return bad("slide has neither text, chart nor html");
+    }
     const slide: Slide = { title: s.title };
     if (hasText) slide.text = s.text as string;
+    if (hasHtml) {
+      // Rejecting the html rejects the whole spec rather than silently
+      // dropping the slide: a slide that exists only to carry html would
+      // otherwise render as an empty titled tab.
+      const html = checkSlideHtml(s.html);
+      if (!html) return bad("bad html");
+      slide.html = html;
+    }
     if (hasChart) {
       // parseChartSpec reads the `chart` key of a JSON string, so re-wrap.
       const chart = parseChartSpec(JSON.stringify({ chart: s.chart }));

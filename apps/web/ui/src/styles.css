@@ -1992,3 +1992,13 @@ body {
   border-color: var(--border);
   color: var(--text-dim);
 }
+
+/* Model-authored slide markup (#56). The frame carries sandbox="" so it has no
+   stylesheet of its own; it is sized here and the markup styles itself inline. */
+.slide-frame {
+  width: 100%;
+  min-height: 160px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-raised);
+}
