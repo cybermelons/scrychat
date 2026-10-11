@@ -159,7 +159,7 @@
       "side": "right",
       "state": "closed",
       "title": "Accept / reject / note",
-      "pin": "decideSuggestion at suggestions.ts:149 records verdict, decidedAt and an optional human note.",
+      "pin": "Done: decideSuggestion (suggestions.ts:149) records verdict, decidedAt and an optional note; the Note... disclosure in Suggestions.tsx is what lets a human write one, and the body shape is pinned by suggestion-decide-core. Caught by a source-to-source read of this mockup on 2026-10-11: the backend, the MCP tool and the route all took a note while the UI sent a literal body \"{}\", so this pin had been closed on the backend alone -- the control it names did not exist.",
       "commit": "c282f3df89f54ed664d8e82abf7a2bc6e75a26a1"
     },
     {
@@ -297,6 +297,22 @@
       "state": "open",
       "title": "B-fmt-3 regressed: chips unpopulated",
       "pin": "These chips should arrive populated from the server. B-fmt-3 passed in the recorded 6/6 Tier B run and now reports populatedChips=0 with sample=null -- none populated at all, so it reads as the fill path being gone rather than a format drift. Found while running B-fmt-7 for #47; not investigated."
+    },
+    {
+      "n": 68,
+      "anchor": "#present-btn",
+      "side": "left",
+      "state": "open",
+      "title": "No Present trigger",
+      "pin": "The slide strip renders deck_present output (#56, shipped) but nothing invokes it: reaching a presentation needs a chat turn the model chooses to answer with the tool. Renderer built, trigger absent."
+    },
+    {
+      "n": 69,
+      "anchor": "#app-shell",
+      "side": "right",
+      "state": "open",
+      "title": "No pin-to-artifact parity gate",
+      "pin": "check_anchors proves a pin's anchor exists in THIS mockup; --audit proves the board matches the tracker. Neither opens the artifact. Mockup declares 58 ids, the real UI source has 8 (it keys off className), so a naive diff yields 52 false positives -- which is how #sug-actions stayed closed with its note control missing."
     }
   ],
   "commit_base": "https://github.com/cybermelons/scrychat/commit/",
