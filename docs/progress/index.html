@@ -53,14 +53,25 @@
   /* ---- the proposed surface ---- */
   #app-shell { background:#111; border:1px solid var(--line);
                 border-radius:12px; padding:16px; display:grid; gap:14px; }
-  #top-bar { display:flex; align-items:center; justify-content:space-between;
-              gap:12px; flex-wrap:wrap;
-              border-bottom:1px solid var(--line); padding-bottom:12px; }
-  .tb-left, .tb-right { display:flex; align-items:center; gap:8px; }
-  #app-title { font-weight:600; font-size:1rem; letter-spacing:.01em; }
+  /* The chat pane's header row. Mirrors `chat-panel-header`: the deck
+     toggle, the chat selector and the gear, with the deck chip alongside.
+     There is no global top bar in the artifact, so there is none here. */
+  #top-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+              border-bottom:1px solid var(--line); padding-bottom:10px; }
+  .tb-spacer { flex:1 1 auto; }
+  #chat-select { background:#191b24; color:var(--fg); font-size:.78rem;
+                  border:1px solid var(--line); border-radius:7px;
+                  padding:4px 7px; }
+  #deck-toggle, #settings-btn { line-height:1; }
+  #app-title { font-weight:600; font-size:.88rem; letter-spacing:.01em;
+                color:var(--dim); }
+  /* Export sits on the deck panel, as DeckPanel puts it. */
+  #deck-head { display:flex; align-items:center; gap:10px;
+                justify-content:space-between; }
+  .deck-name { font-weight:600; font-size:.9rem; }
   .chip { font-size:.74rem; color:var(--dim); background:#191b24;
            border:1px solid var(--line); border-radius:99px; padding:3px 9px; }
-  #export-btn, #settings-btn, #attach-btn, #stop-btn, #send-btn,
+  #export-btn, #settings-btn, #deck-toggle, #attach-btn, #stop-btn, #send-btn,
   .sbtn, .sug-acts button, .setting button {
            padding:6px 11px; border-radius:8px; background:#191b24;
            color:var(--fg); border:1px solid var(--line); font-size:.82rem; }
@@ -296,8 +307,8 @@
   <p class="subtitle">This is the chat and deck surface as it should end up, not
      as it is today. Every pin marks a control and links to its record: an
      issue number for work still tracked, a commit for work already shipped.</p>
-  <div class="bar2"><i style="width:95%"></i></div>
-  <p class="counts">36 closed · 2 open · 95% of 38</p>
+  <div class="bar2"><i style="width:97%"></i></div>
+  <p class="counts">37 closed · 1 open · 97% of 38</p>
   <div class="links"><span><b>deploy</b><a href="http://noel:8787/" target="_blank" rel="noopener">noel, LAN only</a></span><span><b>dev</b><a href="http://tsunomaki.tail623785.ts.net:8787" target="_blank" rel="noopener">pnpm --filter @scrychat/web dev (tsunomaki)</a></span><span><b>preview</b><a href="http://tsunomaki.tail623785.ts.net:8130/index.html" target="_blank" rel="noopener">this board, served from tsunomaki</a></span></div>
   <div class="legend">
     <span><i style="background:var(--open)"></i> still to build</span>
@@ -311,27 +322,26 @@
     
 <div id="app-shell">
 
-  <div id="top-bar">
-    <div class="tb-left">
-      <span id="app-title">scrychat</span>
-      <span class="chip" id="deck-chip">Teysa Karlov · 99</span>
-    </div>
-    <div class="tb-right">
-      <button id="export-btn">Export</button>
-      <button id="settings-btn">&#9881;</button>
-    </div>
-  </div>
 
   <div class="tab-heads">
     <button class="tab on" data-pane="pane-chat">Chat</button>
-    <button class="tab" data-pane="pane-deck">Deck</button>
-    <button class="tab" data-pane="pane-settings">Settings</button>
+    <button class="tab" data-pane="pane-deck">Deck &#9776;</button>
+    <button class="tab" data-pane="pane-settings">Settings &#9881;</button>
   </div>
 
   <div class="panes">
 
     <!-- ---------------- chat ---------------- -->
     <div class="pane" id="pane-chat">
+
+      <div id="top-bar">
+        <button id="deck-toggle" title="open deck panel">&#9776;</button>
+        <select id="chat-select"><option>New Chat</option></select>
+        <span class="chip" id="deck-chip">Teysa Karlov · 99</span>
+        <span class="tb-spacer"></span>
+        <span id="app-title">scrychat</span>
+        <button id="settings-btn" title="settings">&#9881;</button>
+      </div>
 
       <div id="chat-log">
 
@@ -413,6 +423,11 @@
 
     <!-- ---------------- deck ---------------- -->
     <div class="pane off" id="pane-deck">
+
+      <div id="deck-head">
+        <span class="deck-name">Teysa Karlov</span>
+        <button id="export-btn">Export</button>
+      </div>
 
       <div id="quota-bars">
         <div class="qrow" id="quota-lands">
@@ -583,7 +598,7 @@
   <a class="pin shipped closed right" data-anchor="#health-mirror" href="https://github.com/cybermelons/scrychat/commit/6f8de38aa6cfbebe1220b2f896158863d16a9f88" target="_blank" rel="noopener"><span class="pin-n">6f8de38</span><span class="pin-t">Health endpoint</span><span class="pin-p">GET /api/health reports skill readability and whether the mirror has cards and Arena data. Check it before re-diagnosing &#x27;not finding cards&#x27;.</span></a>
   <a class="pin closed right" data-anchor="#health-mirror" href="https://github.com/cybermelons/scrychat/issues/50" target="_blank" rel="noopener"><span class="pin-n">50</span><span class="pin-t">Mirror row count and local-hit share</span><span class="pin-p">scrychat.db is empty and until now nothing said so. GET /api/health tells absent / present-but-empty / populated apart (cardCount 0 means empty, null undeterminable) plus usableAsMirror for whether lookups actually go local; getLocalDb() conflates absent with empty by design for its fallback callers, so health stats the file and counts via core readLocalDbCounts (read-only, fileMustExist, never creates). This pill now renders it: healthPills() in apps/web/src/health-pills.ts, drawn by ui/src/HealthRow.tsx. A populated mirror with usableAsMirror false reads warn, not ok, because lookups still leave the machine. Verified live: this machine renders warn &#x27;mirror: empty&#x27;. The local-hit SHARE is still not measured anywhere - collection lookups batch 75 ids per POST /cards/collection and search does not batch at all - but that is a counter, not this pill.</span></a>
   <a class="pin closed right" data-anchor="#health-arena" href="https://github.com/cybermelons/scrychat/issues/59" target="_blank" rel="noopener"><span class="pin-n">59</span><span class="pin-t">Stale-snapshot warning</span><span class="pin-p">An Arena snapshot ages silently and owned/missing goes quietly wrong. GET /api/health returns a collection block (freshness, ageDays, label, staleAfterDays=14) computed from the file&#x27;s own importedAt, never mtime, which any rewrite would reset. The pill now renders it via healthPills(): fresh ok, stale warn, a future date warn as clock skew, no snapshot dim. The 14-day threshold is quoted from the server&#x27;s staleAfterDays instead of kept as a second client copy that can drift. Verified live: with no snapshot on disk this machine renders dim &#x27;arena: none&#x27;.</span></a>
-  <a class="pin open right" data-anchor="#app-shell" href="https://github.com/cybermelons/scrychat/issues/60" target="_blank" rel="noopener"><span class="pin-n">60</span><span class="pin-t">Replace the real UI with this target</span><span class="pin-p">This board tracks the goal; it is not the goal. This pin is the tracked item that retires the mockup. The board itself shipped in f78993d (tools/progress/).</span></a>
+  <a class="pin closed right" data-anchor="#app-shell" href="https://github.com/cybermelons/scrychat/issues/60" target="_blank" rel="noopener"><span class="pin-n">60</span><span class="pin-t">Replace the real UI with this target</span><span class="pin-p">The mockup shell now matches the artifact, which is the direction this pin actually needed. Measured 2026-10-11 control by control: of 35 anchored controls 28 already existed in apps/web/ui/src/** under a className, and only app-shell/top-bar/deck-chip/pane-settings were absent -- three of those four only because the mockup had invented a global top bar over three tab panes that nobody was going to build. The artifact is a responsive two-panel layout (App.tsx className=&quot;app&quot;), deck panel a slide-over below ~900px, settings a modal drawer behind the gear. So the mockup moved its header into the chat pane and Export onto the deck panel, and the artifact gained the 6 structural ids (app-shell, top-bar, deck-chip, chat-log, pane-deck, pane-settings). deck-chip was the one real build: it reads the existing selected + deckCardNames props, no new fetch. Shared ids 5 -&gt; 11; --check-parity 37 proven, 1 unproven (#57 only).</span></a>
   <a class="pin closed right" data-anchor="#tool-chips" href="https://github.com/cybermelons/scrychat/issues/66" target="_blank" rel="noopener"><span class="pin-n">66</span><span class="pin-t">Make the tool-result cap one constant</span><span class="pin-p">Closed by exporting TOOL_RESULT_MAX_CHARS (server.ts) and mirroring it as TOOL_RESULT_BUDGET_CHARS in packages/mcp/src/present-budget.ts, pinned by test/present-budget.test.ts (9 tests). The issue&#x27;s own premise was wrong: the number appears 12 times, of which 1 is the declaration, 3 are test assertions and 8 are comment prose -- no validator reads a second literal. The real defect was different and live: the per-field caps (title 40, text 320, html 1600) are all satisfiable by a payload that still overflows the 2048 WHOLE-RESULT budget, because nothing measured the serialized result. Measured 2026-10-11: all five quotas OFF + full curve + long pending = 2223 chars while the html slide sits at 1117 of its 1600 cap. Overflow was silent (truncated JSON -&gt; parseSlideSpec null -&gt; plain chip). deck_present now calls fitPresentSlides, dropping whole low-priority slides and never the first. Live decks measured over the real stdio server: grothama 1779, isshin 1618, both parse after a 2048 slice.</span></a>
   <a class="pin closed right" data-anchor="#group-chips" href="https://github.com/cybermelons/scrychat/issues/67" target="_blank" rel="noopener"><span class="pin-n">67</span><span class="pin-t">B-fmt-3 regressed: chips unpopulated</span><span class="pin-p">Closed: NOT a code regression. The category-chip populator resolves members from the local SQLite mirror, and getLocalDb() returns null for a mirror with zero `cards` rows by design (absent and present-but-empty both mean &#x27;fall back to live Scryfall&#x27;). This host&#x27;s data/scrychat.db is schema-only -- cards=0, tags=0, card_tags=0, empty meta -- so the resolver returns null for every phrase, every rule hits the members.length&lt;2 guard, and zero chips is CORRECT. Live /api/health confirms {exists:true, cardCount:0, usableAsMirror:false}. B-fmt-3 now reads /api/health first and SKIPs with that diagnosis plus the ingest remedy; a skip is not counted as passed and still exits 1. The 2026-07-11 pass vs 2026-10-11 fail was the data changing, not the code.</span></a>
   <a class="pin closed right" data-anchor="#app-shell" href="https://github.com/cybermelons/scrychat/issues/69" target="_blank" rel="noopener"><span class="pin-n">69</span><span class="pin-t">No pin-to-artifact parity gate</span><span class="pin-p">build.py check_parity reports each pin against the artifact SOURCE, not a DOM probe: a record carries proves=[{file,has}] and the literal must be in that file. Why a hint and not name-matching: the mockup declares 58 ids, apps/web/ui/src/** carries 10 id= attrs in 20 files (it names by className), and only 2 mockup ids appear as a className token, so a name-set diff would cry ~46 of 58 as missing. With hints authored: 36 proven, 2 unproven, 0 unhinted -- and the 2 unproven are exactly the 2 unbuilt features (#57, #60). Stays a REPORT (exit 0); test-parity.mjs proves it non-blind on 3 injected defects.</span></a>

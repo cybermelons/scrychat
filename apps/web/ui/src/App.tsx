@@ -24,7 +24,7 @@ export function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div className="app" id="app-shell">
       <DeckPanel
         selected={selected}
         setSelected={setSelected}

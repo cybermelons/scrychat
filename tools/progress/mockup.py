@@ -9,6 +9,27 @@ Two panes stacked in one grid cell (chat / deck) plus the settings drawer,
 because a pin may anchor to a control on a pane that is not in front. An off
 pane keeps its box (opacity:0, z-index:-1 — never display:none, which measures
 0x0 and stacks every label at the top of the column).
+
+The SHELL matches the artifact, deliberately (#60). An earlier draft drew a
+global top bar over three tab panes. The artifact is a responsive two-panel
+layout: DeckPanel beside ChatPanel (`App.tsx`, `className="app"`), the deck
+panel becoming a slide-over drawer below ~900px, and settings a modal drawer
+behind the gear in the chat header — not a third tab. Measured 2026-10-11:
+of 35 anchored controls, 28 already existed in `apps/web/ui/src/**` under a
+className, and only `app-shell`/`top-bar`/`deck-chip`/`pane-settings` were
+genuinely absent — three of those four only because the mockup had invented a
+layout nobody was going to build.
+
+So the header lives inside the chat pane (where `chat-panel-header` really
+is) and Export sits on the deck panel (where `DeckPanel` really puts it),
+rather than in a bar that does not exist. The tab heads remain as the board's
+own way to bring a hidden pane forward for measurement; they stand for the
+gear and the ☰ toggle, which is how the artifact reaches those surfaces.
+
+Keeping the mockup honest about the shell is the point of the exercise: a
+pin anchored to an invented container can never be closed, and a board that
+asks for a layout the project rejected spends its design review on a picture
+that describes nothing.
 """
 
 
@@ -16,27 +37,26 @@ def surface_html() -> str:
     return """
 <div id="app-shell">
 
-  <div id="top-bar">
-    <div class="tb-left">
-      <span id="app-title">scrychat</span>
-      <span class="chip" id="deck-chip">Teysa Karlov · 99</span>
-    </div>
-    <div class="tb-right">
-      <button id="export-btn">Export</button>
-      <button id="settings-btn">&#9881;</button>
-    </div>
-  </div>
 
   <div class="tab-heads">
     <button class="tab on" data-pane="pane-chat">Chat</button>
-    <button class="tab" data-pane="pane-deck">Deck</button>
-    <button class="tab" data-pane="pane-settings">Settings</button>
+    <button class="tab" data-pane="pane-deck">Deck &#9776;</button>
+    <button class="tab" data-pane="pane-settings">Settings &#9881;</button>
   </div>
 
   <div class="panes">
 
     <!-- ---------------- chat ---------------- -->
     <div class="pane" id="pane-chat">
+
+      <div id="top-bar">
+        <button id="deck-toggle" title="open deck panel">&#9776;</button>
+        <select id="chat-select"><option>New Chat</option></select>
+        <span class="chip" id="deck-chip">Teysa Karlov · 99</span>
+        <span class="tb-spacer"></span>
+        <span id="app-title">scrychat</span>
+        <button id="settings-btn" title="settings">&#9881;</button>
+      </div>
 
       <div id="chat-log">
 
@@ -118,6 +138,11 @@ def surface_html() -> str:
 
     <!-- ---------------- deck ---------------- -->
     <div class="pane off" id="pane-deck">
+
+      <div id="deck-head">
+        <span class="deck-name">Teysa Karlov</span>
+        <button id="export-btn">Export</button>
+      </div>
 
       <div id="quota-bars">
         <div class="qrow" id="quota-lands">

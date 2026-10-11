@@ -478,21 +478,33 @@
       "n": 60,
       "anchor": "#app-shell",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "Replace the real UI with this target",
-      "pin": "This board tracks the goal; it is not the goal. This pin is the tracked item that retires the mockup. The board itself shipped in f78993d (tools/progress/).",
+      "pin": "The mockup shell now matches the artifact, which is the direction this pin actually needed. Measured 2026-10-11 control by control: of 35 anchored controls 28 already existed in apps/web/ui/src/** under a className, and only app-shell/top-bar/deck-chip/pane-settings were absent -- three of those four only because the mockup had invented a global top bar over three tab panes that nobody was going to build. The artifact is a responsive two-panel layout (App.tsx className=\"app\"), deck panel a slide-over below ~900px, settings a modal drawer behind the gear. So the mockup moved its header into the chat pane and Export onto the deck panel, and the artifact gained the 6 structural ids (app-shell, top-bar, deck-chip, chat-log, pane-deck, pane-settings). deck-chip was the one real build: it reads the existing selected + deckCardNames props, no new fetch. Shared ids 5 -> 11; --check-parity 37 proven, 1 unproven (#57 only).",
       "proves": [
         {
           "file": "apps/web/ui/src/App.tsx",
-          "has": "top-bar"
+          "has": "id=\"app-shell\""
         },
         {
-          "file": "apps/web/ui/src/App.tsx",
-          "has": "tab-heads"
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "id=\"top-bar\""
         },
         {
-          "file": "apps/web/ui/src/App.tsx",
-          "has": "pane-settings"
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "id=\"deck-chip\""
+        },
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "id=\"chat-log\""
+        },
+        {
+          "file": "apps/web/ui/src/DeckPanel.tsx",
+          "has": "id=\"pane-deck\""
+        },
+        {
+          "file": "apps/web/ui/src/SettingsDrawer.tsx",
+          "has": "id=\"pane-settings\""
         }
       ]
     },

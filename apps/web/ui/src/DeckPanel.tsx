@@ -996,7 +996,7 @@ export function DeckPanel({
   return (
     <>
       {open && <div className="drawer-overlay" onClick={onClose} />}
-      <aside className={`deck-panel${open ? " drawer-open" : ""}`}>
+      <aside className={`deck-panel${open ? " drawer-open" : ""}`} id="pane-deck">
         <div className="deck-panel-header">
           <h1 className="app-title">scrychat</h1>
         <div className="deck-select-row">

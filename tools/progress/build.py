@@ -231,14 +231,25 @@ TEMPLATE = """<!DOCTYPE html>
   /* ---- the proposed surface ---- */
   #app-shell {{ background:#111; border:1px solid var(--line);
                 border-radius:12px; padding:16px; display:grid; gap:14px; }}
-  #top-bar {{ display:flex; align-items:center; justify-content:space-between;
-              gap:12px; flex-wrap:wrap;
-              border-bottom:1px solid var(--line); padding-bottom:12px; }}
-  .tb-left, .tb-right {{ display:flex; align-items:center; gap:8px; }}
-  #app-title {{ font-weight:600; font-size:1rem; letter-spacing:.01em; }}
+  /* The chat pane's header row. Mirrors `chat-panel-header`: the deck
+     toggle, the chat selector and the gear, with the deck chip alongside.
+     There is no global top bar in the artifact, so there is none here. */
+  #top-bar {{ display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+              border-bottom:1px solid var(--line); padding-bottom:10px; }}
+  .tb-spacer {{ flex:1 1 auto; }}
+  #chat-select {{ background:#191b24; color:var(--fg); font-size:.78rem;
+                  border:1px solid var(--line); border-radius:7px;
+                  padding:4px 7px; }}
+  #deck-toggle, #settings-btn {{ line-height:1; }}
+  #app-title {{ font-weight:600; font-size:.88rem; letter-spacing:.01em;
+                color:var(--dim); }}
+  /* Export sits on the deck panel, as DeckPanel puts it. */
+  #deck-head {{ display:flex; align-items:center; gap:10px;
+                justify-content:space-between; }}
+  .deck-name {{ font-weight:600; font-size:.9rem; }}
   .chip {{ font-size:.74rem; color:var(--dim); background:#191b24;
            border:1px solid var(--line); border-radius:99px; padding:3px 9px; }}
-  #export-btn, #settings-btn, #attach-btn, #stop-btn, #send-btn,
+  #export-btn, #settings-btn, #deck-toggle, #attach-btn, #stop-btn, #send-btn,
   .sbtn, .sug-acts button, .setting button {{
            padding:6px 11px; border-radius:8px; background:#191b24;
            color:var(--fg); border:1px solid var(--line); font-size:.82rem; }}

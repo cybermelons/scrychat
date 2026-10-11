@@ -1048,7 +1048,7 @@ export function ChatPanel({
 
   return (
     <main className="chat-panel">
-      <div className="chat-panel-header">
+      <div className="chat-panel-header" id="top-bar">
         <button
           type="button"
           className="btn btn-ghost btn-small deck-drawer-toggle"
@@ -1058,6 +1058,12 @@ export function ChatPanel({
         >
           ☰
         </button>
+        {selected && (
+          <span className="chip chip-muted" id="deck-chip" title="active deck">
+            {selected}
+            {deckCardNames.size > 0 && ` · ${deckCardNames.size}`}
+          </span>
+        )}
         <select
           className="chat-select"
           value={chatId ?? ""}
@@ -1201,6 +1207,7 @@ export function ChatPanel({
         <div className="chip chip-muted chat-header-error">no chats yet — start one below</div>
       )}
       <div
+        id="chat-log"
         className="chat-scroll"
         ref={scrollRef}
         onScroll={onChatScroll}

@@ -161,7 +161,7 @@ export function SettingsDrawer({
   return (
     <>
       <div className="drawer-overlay settings-drawer-overlay" onClick={onClose} />
-      <aside className="settings-drawer" role="dialog" aria-label="Settings">
+      <aside className="settings-drawer" id="pane-settings" role="dialog" aria-label="Settings">
         <div className="settings-drawer-header">
           <h2>Settings</h2>
           <button
