@@ -72,7 +72,7 @@
       "side": "left",
       "state": "open",
       "title": "Ground every card claim in a fetch",
-      "pin": "Every card name or effect a reply states must trace to a Scryfall fetch, shown as this chip. A claim with no chip behind it is the from-memory defect: #46 found 13 of them in one analysis, and #47 repeated it immediately after that audit. The chip is the proof, so \"chip present on every card claim\" is the test."
+      "pin": "Every card name a reply states must trace to a Scryfall fetch, shown as this chip. #46 found 13 from-memory claims in one analysis and #47 repeated it, so the test is \"chip present on every card claim\". The checker now exists: grounding-core.ts extracts the claimed names and the fetched names (tool-aware -- a deck name is not a card) and reports the residue, wired as eval B-fmt-7. REMAINING: B-fmt-7 has never been run, since Tier B needs live model calls. Run it, record the result, and raise the server's 2048-char tool-result cap if truncatedResults>0 makes it flag real fetches."
     },
     {
       "n": 18,
