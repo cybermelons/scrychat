@@ -273,6 +273,7 @@ def surface_html() -> str:
         <span class="hpill ok" id="health-mirror">mirror: cards + tags</span>
         <span class="hpill ok">skill: readable</span>
         <span class="hpill warn" id="health-arena">arena: 12d old</span>
+        <span class="hpill ok" id="health-hits">local hits: 94%</span>
       </div>
     </div>
 

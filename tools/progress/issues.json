@@ -581,6 +581,20 @@
           "has": "tool-chip"
         }
       ]
+    },
+    {
+      "n": 82,
+      "anchor": "#health-hits",
+      "side": "right",
+      "state": "open",
+      "title": "Local-hit share",
+      "pin": "#50 shipped the mirror STATE pill and its own pin recorded what it did not do: the local-hit share is measured nowhere. The pill answers 'could lookups stay local', this answers 'did they' -- a populated, usable mirror still reads ok while every lookup leaves the machine. Measured 2026-10-11: 8 local-vs-remote decision points over 5 modules, in TWO shapes, which is the design question. scryfall.ts:322 splits per NAME (unresolved -> local hits + needRemote, so the share is already computed and just never recorded); tags.ts:67 branches per CALL. So 'share' has no unit until one is chosen -- per-lookup is the one worth having. Remote funnels through one chokepoint, scryfallFetch (scryfall.ts:93, 4 call paths, COLLECTION_BATCH_SIZE 75). Three outcomes not two: cardCache is consulted before the DB (scryfall.ts:317), and folding a cache hit into 'local' would inflate the share.",
+      "proves": [
+        {
+          "file": "apps/web/src/health-pills.ts",
+          "has": "health-hits"
+        }
+      ]
     }
   ],
   "commit_base": "https://github.com/cybermelons/scrychat/commit/",
