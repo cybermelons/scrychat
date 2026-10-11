@@ -628,6 +628,29 @@ body {
   margin-top: 4px;
 }
 
+/* goldfish_compare result: one row per build, the slower dimmed. Follows a tool
+   chip like .sim-chart. When the delta is inside the noise floor neither row
+   is dimmed and .cmp-note says so. */
+#sim-compare {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 0.85rem;
+}
+
+.cmp-row {
+  color: var(--text);
+}
+
+.cmp-row.dim {
+  color: var(--text-dim);
+}
+
+.cmp-note {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
 /* role groups: single table, tbody per role -> shared column tracks across
    all groups (count | name | mana cost | remove) */
 .card-table {

@@ -202,3 +202,26 @@ export type Suggestion = {
   decidedAt?: string;
   note?: string;
 };
+
+/**
+ * Mirrors the result of the goldfish_compare MCP tool (packages/mcp/src/tools.ts;
+ * the UI cannot import from core or mcp, so the shape is restated here). Only the
+ * fields CompareTable reads are carried. Always validated by parseCompareSpec
+ * first, since it arrives as untrusted tool output. mulliganRate is a 0..1
+ * fraction; delta = builds[0].turnsToOnline - builds[1].turnsToOnline, so
+ * NEGATIVE means the first build is faster.
+ */
+export type CompareBuild = {
+  label: string;
+  turnsToOnline: number;
+  mulliganRate: number;
+  stalledGames: number;
+};
+export type CompareSpec = {
+  seed: number;
+  iterations: number;
+  maxTurns: number;
+  onlineThreshold: number;
+  builds: [CompareBuild, CompareBuild];
+  delta: number;
+};

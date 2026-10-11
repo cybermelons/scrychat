@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AppConfig, ChartSpec, ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
+import type { AppConfig, ChartSpec, CompareSpec, ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
 import { parseChartSpec } from "./chart-core";
+import { compareVerdict, parseCompareSpec } from "./compare-core";
 import { renderMarkdown } from "./markdown";
 import { SettingsDrawer } from "./SettingsDrawer";
 
@@ -83,6 +84,35 @@ function Chart({ spec }: { spec: ChartSpec }) {
   );
 }
 
+// Labels are React text children only (untrusted, see Chart). The shared
+// conditions are shown once because both builds faced them: that is what makes
+// the comparison honest. A delta inside the noise floor dims neither row.
+function CompareTable({ spec }: { spec: CompareSpec }) {
+  const { fasterIndex, magnitude } = compareVerdict(spec);
+  return (
+    <div id="sim-compare">
+      {spec.builds.map((b, i) => (
+        <span
+          className={`cmp-row${fasterIndex !== null && fasterIndex !== i ? " dim" : ""}`}
+          key={i}
+        >
+          {b.label} <b>T{b.turnsToOnline.toFixed(1)}</b>
+        </span>
+      ))}
+      {fasterIndex === null ? (
+        <span className="cmp-note">difference of {magnitude.toFixed(2)} turns is within simulation noise</span>
+      ) : (
+        <span className="cmp-note">
+          {spec.builds[fasterIndex].label} is {magnitude.toFixed(1)} turns faster
+        </span>
+      )}
+      <span className="cmp-note">
+        seed {spec.seed} · {spec.iterations} games · {spec.maxTurns} turns · online = {spec.onlineThreshold} spells
+      </span>
+    </div>
+  );
+}
+
 function AssistantBody({ msg }: { msg: ChatMessage }) {
   return (
     <>
@@ -104,6 +134,10 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
             {seg.name.replace(/^mcp__scrychat__/, "") === "goldfish_deck" && (() => {
               const spec = parseChartSpec(seg.result);
               return spec ? <Chart spec={spec} /> : null;
+            })()}
+            {seg.name.replace(/^mcp__scrychat__/, "") === "goldfish_compare" && (() => {
+              const spec = parseCompareSpec(seg.result);
+              return spec ? <CompareTable spec={spec} /> : null;
             })()}
           </div>
         )
