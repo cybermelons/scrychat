@@ -47,11 +47,28 @@ const GROUNDING_PATH = path.join(REPO_ROOT, "apps", "web", "dist", "grounding-co
 
 const CHAT_TIMEOUT_MS = 240_000;
 
-const results = []; // { id, ok, msg }
+const results = []; // { id, ok, msg, skipped? }
 
 function record(id, ok, msg) {
   results.push({ id, ok, msg });
   console.log(`${ok ? "OK" : "FAIL"}: ${id} ${msg}`);
+}
+
+/*
+ * A check whose PRECONDITION is absent is not a failure and not a pass: it is
+ * a check that did not run. Recording it as FAIL (what B-fmt-3 did from
+ * 2026-07-11 to 2026-10-11) sends the next reader to look for a code
+ * regression that is not there -- the category-chip populator resolves members
+ * from the local SQLite mirror, and on a host whose mirror is schema-only it
+ * has nothing to resolve and correctly leaves every chip alone.
+ *
+ * A skip must name the missing precondition and how to satisfy it, or it is
+ * just a quieter way to lose the signal. It is NOT counted as passed, so the
+ * suite still cannot report 7/7 on a box that cannot run all seven.
+ */
+function skip(id, msg) {
+  results.push({ id, ok: false, msg, skipped: true });
+  console.log(`SKIP: ${id} ${msg}`);
 }
 
 function sleep(ms) {
@@ -323,20 +340,47 @@ async function main() {
     }
 
     // --- B-fmt-3: role mention in prose → populated [[group:]] chip ---
+    //
+    // PRECONDITION: a populated local SQLite mirror. The chip populator
+    // (detectCategoryChipsInText in apps/web/src/group-chips-core.ts) resolves
+    // members via categoryTagMembersLocal against the mirror, and getLocalDb()
+    // returns null for a mirror with zero `cards` rows -- by design, since
+    // "absent" and "present but empty" both mean "fall back to live Scryfall"
+    // for its normal callers. The resolver then returns null for every phrase,
+    // every rule hits the `members.length < 2` guard, and no chip is injected.
+    //
+    // That is correct behaviour, not a regression, but it is indistinguishable
+    // from a broken populator by looking at the reply. So ask /api/health,
+    // which exists precisely to tell the two apart (`usableAsMirror` is the
+    // getLocalDb signal under an honest name), and skip rather than fail when
+    // the corpus is not there.
     try {
-      const { chatId } = await chat({
-        message:
-          "In one or two sentences: do I need more board wipes in this deck? Mention the board wipes category.",
-        activeDeck: deckName,
-      });
-      const { text } = await readPersisted(chatId);
-      const chips = text.match(GROUP_CHIP_RE) ?? [];
-      const ok = chips.length >= 1;
-      record(
-        "B-fmt-3",
-        ok,
-        `populatedChips=${chips.length} sample=${JSON.stringify(chips[0] ?? null)}`,
-      );
+      const health = await apiJson("GET", "/api/health");
+      const db = health.json?.db ?? {};
+      if (!db.usableAsMirror) {
+        skip(
+          "B-fmt-3",
+          `no populated local mirror: exists=${db.exists} cardCount=${db.cardCount} ` +
+            `usableAsMirror=${db.usableAsMirror}. The category-chip populator has no ` +
+            `corpus to resolve members from, so zero chips is correct. Run the card + ` +
+            `tagger ingest to enable this check.`,
+        );
+      } else {
+        const { chatId } = await chat({
+          message:
+            "In one or two sentences: do I need more board wipes in this deck? Mention the board wipes category.",
+          activeDeck: deckName,
+        });
+        const { text } = await readPersisted(chatId);
+        const chips = text.match(GROUP_CHIP_RE) ?? [];
+        const ok = chips.length >= 1;
+        record(
+          "B-fmt-3",
+          ok,
+          `populatedChips=${chips.length} sample=${JSON.stringify(chips[0] ?? null)} ` +
+            `(mirror cardCount=${db.cardCount})`,
+        );
+      }
     } catch (err) {
       record("B-fmt-3", false, `threw: ${err.message}`);
     }
@@ -477,7 +521,15 @@ async function main() {
   }
 
   const passed = results.filter((r) => r.ok).length;
-  console.log(`\nTIER B: ${passed}/7 PASSED`);
+  const skipped = results.filter((r) => r.skipped);
+  const failed = results.filter((r) => !r.ok && !r.skipped);
+  console.log(`\nTIER B: ${passed}/7 PASSED` +
+    (skipped.length ? `, ${skipped.length} SKIPPED (${skipped.map((r) => r.id).join(", ")})` : "") +
+    (failed.length ? `, ${failed.length} FAILED (${failed.map((r) => r.id).join(", ")})` : ""));
+  // A skip still blocks a clean exit: the suite has NOT verified 7 contracts,
+  // and a green run on a host that cannot check one of them is the outcome
+  // this whole change exists to prevent. The skip only changes the diagnosis
+  // printed, never the verdict.
   if (passed < results.length || results.length < 7) {
     process.exit(1);
   }

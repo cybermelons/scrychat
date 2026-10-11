@@ -90,8 +90,26 @@ FAIL: B-fmt-7 claims=5 grounded=3 ungrounded=["Cabal Coffers","Black Market Conn
             fetched=14 persistedToolCalls=3 sseToolUses=3 truncatedResults=1
 ```
 
-**B-fmt-7 is not yet a verdict.** `truncatedResults=1` is the ambiguity the check's own header warns about: the server cuts every tool result at `TOOL_RESULT_MAX_CHARS = 2048` (`apps/web/src/server.ts:154`), so a card the model legitimately saw can be sliced out of the recorded result and then read as ungrounded. With 14 names fetched and one result truncated, these two cannot be called hallucinations on this evidence.
+**B-fmt-7 is not yet a verdict.** `truncatedResults=1` is the ambiguity the check's own header warns about: the server cuts every tool result at `TOOL_RESULT_MAX_CHARS = 2048` (`apps/web/src/server.ts`), so a card the model legitimately saw can be sliced out of the recorded result and then read as ungrounded. With 14 names fetched and one result truncated, these two cannot be called hallucinations on this evidence.
 
-Raising the cap is NOT a one-line change and was deliberately not done here: 2048 appears as a bare literal in nine places - `slides-core.ts:7,17`, `chart-core.ts:19`, `compare-core.ts:7`, `slide-html-core.ts:33`, `grounding-core.ts:29`, `slides-core.test.ts:83-87`, `evals/run-tier-b.mjs:447` - and `packages/mcp/src/tools.ts:751` sizes `deck_present` output to fit it. Changing the constant alone leaves all of them lying. Wants its own issue: introduce one exported constant, make the validators and the producer read it, then re-run B-fmt-7 and see whether the two names survive.
+~~Raising the cap is NOT a one-line change: 2048 appears as a bare literal in nine places...~~ **This paragraph was wrong and is corrected below (#66, 2026-10-11).** A static count found 2048 in **12** places, of which **one** is the declaration, three are test assertions and **eight are comment prose**. No validator read a second literal, so there was no duplicated-constant bug to fix.
 
-**B-fmt-3 regressed** (`populatedChips=0`) - it passed in the 6/6 run above. Unrelated to #54; needs its own investigation.
+The real defect, found while checking that claim: the per-field caps (title 40, text 320, html 1600) are all satisfiable by a payload that still overflows, because the cap applies to the whole serialized result and nothing measured it. Measured with only reachable values, `deck_present` runs 1871 chars in the realistic case (177 spare) and **2223 — over — with all five quotas OFF, a full curve and a long pending line**, while the html slide sits at 1117 of its own 1600 cap in every case. Overflow was silent: truncated JSON, `parseSlideSpec` returns null with only a `console.debug`, slide strip degrades to a plain chip. Fixed in `a8c3aa9` (exported cap, mirrored as `TOOL_RESULT_BUDGET_CHARS` in `packages/mcp/src/present-budget.ts`, `fitPresentSlides` at the return site, 9 new tests).
+
+That fix covers only `deck_present`. `truncateResult` still runs at one chokepoint (`server.ts:661`) across every allowlisted tool, so B-fmt-7's ambiguity is unchanged and is now tracked as **#70**.
+
+~~**B-fmt-3 regressed** (`populatedChips=0`) - it passed in the 6/6 run above.~~ **Not a regression (#67, resolved 2026-10-11).** No code changed between the two runs in a way that affects this; the *data* did. The category-chip populator resolves members from the local SQLite mirror via `categoryTagMembersLocal`, and `getLocalDb()` returns **null for a mirror with zero `cards` rows** — deliberately, since "absent" and "present but empty" both mean "fall back to live Scryfall" for its normal callers. This host's mirror is schema-only: `data/scrychat.db` exists (120 KB, created 2026-10-09) with `cards=0`, `tags=0`, `card_tags=0` and an empty `meta`, i.e. an `openDb()` call wrote the schema and no ingest ever ran. Live `/api/health` confirms `{exists: true, cardCount: 0, usableAsMirror: false}`.
+
+So zero chips was the *correct* output, and the check was reporting FAIL for a missing precondition. B-fmt-3 now asks `/api/health` first and **SKIPs** with that diagnosis when `usableAsMirror` is false, naming the ingest as the remedy. A skip is not counted as passed and still exits nonzero — it changes the diagnosis printed, never the verdict.
+
+### Tier B run 2026-10-11 (second) — **5/7 PASSED, 1 SKIPPED (B-fmt-3), 1 FAILED (B-fmt-7)**, exit 1
+
+```
+SKIP: B-fmt-3 no populated local mirror: exists=true cardCount=0 usableAsMirror=false.
+      The category-chip populator has no corpus to resolve members from, so zero
+      chips is correct. Run the card + tagger ingest to enable this check.
+FAIL: B-fmt-7 claims=5 grounded=2 ungrounded=["Black Market Connections","Cabal Coffers","Phyrexian Tower"]
+      fetched=16 persistedToolCalls=3 sseToolUses=3 truncatedResults=1
+```
+
+B-fmt-7 remains the one real failure, tracked as #70. To restore B-fmt-3 to a running check on this host, run the card + tagger ingest (prior history shows a full ingest produced 217k `card_tags` rows).

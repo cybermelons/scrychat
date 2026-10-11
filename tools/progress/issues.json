@@ -294,9 +294,9 @@
       "n": 67,
       "anchor": "#group-chips",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "B-fmt-3 regressed: chips unpopulated",
-      "pin": "These chips should arrive populated from the server. B-fmt-3 passed in the recorded 6/6 Tier B run and now reports populatedChips=0 with sample=null -- none populated at all, so it reads as the fill path being gone rather than a format drift. Found while running B-fmt-7 for #47; not investigated."
+      "pin": "Closed: NOT a code regression. The category-chip populator resolves members from the local SQLite mirror, and getLocalDb() returns null for a mirror with zero `cards` rows by design (absent and present-but-empty both mean 'fall back to live Scryfall'). This host's data/scrychat.db is schema-only -- cards=0, tags=0, card_tags=0, empty meta -- so the resolver returns null for every phrase, every rule hits the members.length<2 guard, and zero chips is CORRECT. Live /api/health confirms {exists:true, cardCount:0, usableAsMirror:false}. B-fmt-3 now reads /api/health first and SKIPs with that diagnosis plus the ingest remedy; a skip is not counted as passed and still exits 1. The 2026-07-11 pass vs 2026-10-11 fail was the data changing, not the code."
     },
     {
       "n": 68,
