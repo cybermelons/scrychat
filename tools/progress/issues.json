@@ -262,17 +262,17 @@
       "n": 50,
       "anchor": "#health-mirror",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "Mirror row count and local-hit share",
-      "pin": "scrychat.db is empty, so every deck-report lookup leaves the machine. BACKEND DONE: GET /api/health now tells absent / present-but-empty / populated apart (cardCount 0 means empty, null means undeterminable) and adds usableAsMirror for whether lookups actually go local. getLocalDb() conflates absent with empty by design for its fallback callers, so health stats the file itself and counts via core readLocalDbCounts (read-only, fileMustExist, never creates). STILL OPEN: this pill does not render those numbers yet, and the local-hit share is not measured anywhere. Collection lookups batch 75 ids per POST /cards/collection; search does not batch at all."
+      "pin": "scrychat.db is empty and until now nothing said so. GET /api/health tells absent / present-but-empty / populated apart (cardCount 0 means empty, null undeterminable) plus usableAsMirror for whether lookups actually go local; getLocalDb() conflates absent with empty by design for its fallback callers, so health stats the file and counts via core readLocalDbCounts (read-only, fileMustExist, never creates). This pill now renders it: healthPills() in apps/web/src/health-pills.ts, drawn by ui/src/HealthRow.tsx. A populated mirror with usableAsMirror false reads warn, not ok, because lookups still leave the machine. Verified live: this machine renders warn 'mirror: empty'. The local-hit SHARE is still not measured anywhere - collection lookups batch 75 ids per POST /cards/collection and search does not batch at all - but that is a counter, not this pill."
     },
     {
       "n": 59,
       "anchor": "#health-arena",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "Stale-snapshot warning",
-      "pin": "An Arena snapshot ages silently and owned/missing goes quietly wrong. BACKEND DONE: GET /api/health now returns a collection block (freshness, ageDays, label, staleAfterDays=14) from the file's own importedAt, verified over HTTP. STILL OPEN: nothing renders it — /api/health has no UI consumer at all, so this pill and #health-mirror are two pills of one missing component."
+      "pin": "An Arena snapshot ages silently and owned/missing goes quietly wrong. GET /api/health returns a collection block (freshness, ageDays, label, staleAfterDays=14) computed from the file's own importedAt, never mtime, which any rewrite would reset. The pill now renders it via healthPills(): fresh ok, stale warn, a future date warn as clock skew, no snapshot dim. The 14-day threshold is quoted from the server's staleAfterDays instead of kept as a second client copy that can drift. Verified live: with no snapshot on disk this machine renders dim 'arena: none'."
     },
     {
       "n": 60,
