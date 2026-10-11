@@ -175,7 +175,7 @@
       "side": "right",
       "state": "closed",
       "title": "Quota bars",
-      "pin": "deckReport at decks.ts:648. Defaults: lands 36-38, ramp 10-12, draw 10-12, interaction 8-10, wipes 2-4.",
+      "pin": "deckReport at decks.ts:653. Defaults: lands 36-38, ramp 10-12, draw 10-12, interaction 8-10, wipes 2-4.",
       "commit": "62d124528a23144829779f659ed4baf94a9ff462"
     },
     {
@@ -183,7 +183,7 @@
       "side": "right",
       "state": "closed",
       "title": "Per-field quota override",
-      "pin": "resolveQuotaTargets at decks.ts:629. A deck overriding only lands keeps global values for the rest.",
+      "pin": "resolveQuotaTargets at decks.ts:634. A deck overriding only lands keeps global values for the rest.",
       "commit": "846881e8a07f2f84d354128824760d3f50b1c865"
     },
     {
