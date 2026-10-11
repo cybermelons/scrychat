@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { openDb } from "../src/db/connection.js";
 import {
   __resetLocalDbCacheForTests,
@@ -11,6 +12,7 @@ import {
   findCombosLocal,
   findAlternativesLocal,
   getLocalDb,
+  readLocalDbCounts,
   parseCiMask,
   categoryTagMembersLocal,
 } from "../src/local.js";
@@ -535,5 +537,50 @@ describe("mtime-based cache reset", () => {
     // Within the throttle window: getLocalDb() must not re-stat, so the
     // still-open injected handle is returned unchanged.
     expect(getLocalDb()).toBe(db);
+  });
+});
+
+describe("readLocalDbCounts", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "counts-"));
+  });
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  function mk(sql: string): string {
+    const p = path.join(dir, "x.db");
+    const d = new Database(p);
+    d.exec(sql);
+    d.close();
+    return p;
+  }
+
+  it("absent file -> present false, null counts, and does not create it", () => {
+    const p = path.join(dir, "nope.db");
+    expect(readLocalDbCounts(p)).toEqual({ present: false, cardCount: null, arenaPopulated: null });
+    expect(fs.existsSync(p)).toBe(false);
+  });
+
+  it("present but empty -> cardCount 0", () => {
+    const p = mk("CREATE TABLE cards (oracle_id TEXT, arena INTEGER)");
+    expect(readLocalDbCounts(p)).toEqual({ present: true, cardCount: 0, arenaPopulated: 0 });
+  });
+
+  it("populated -> counts rows and arena ids", () => {
+    const p = mk(
+      "CREATE TABLE cards (oracle_id TEXT, arena INTEGER); INSERT INTO cards VALUES ('a', 1), ('b', NULL)",
+    );
+    const r = readLocalDbCounts(p);
+    expect(r.present).toBe(true);
+    expect(r.cardCount).toBeGreaterThanOrEqual(1);
+    expect(r.cardCount).toBe(2);
+    expect(r.arenaPopulated).toBe(1);
+  });
+
+  it("no cards table -> present true, null counts", () => {
+    const p = mk("CREATE TABLE other (x INTEGER)");
+    expect(readLocalDbCounts(p)).toEqual({ present: true, cardCount: null, arenaPopulated: null });
   });
 });

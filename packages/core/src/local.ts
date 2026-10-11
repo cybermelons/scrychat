@@ -7,7 +7,7 @@
  */
 
 import fs from "node:fs";
-import type Database from "better-sqlite3";
+import Database from "better-sqlite3";
 import { openDb, DB_PATH } from "./db/connection.js";
 import type { Card } from "./scryfall.js";
 
@@ -126,6 +126,51 @@ export function getLocalDb(): DbInstance | null {
     cachedDbMtimeMs = undefined;
   }
   return cachedDb;
+}
+
+export interface LocalDbCounts {
+  /** true only if the file is present and openable */
+  present: boolean;
+  /** rows in `cards`; 0 for an empty mirror, null only when undeterminable (no file, or no `cards` table) */
+  cardCount: number | null;
+  /** rows in `cards` with a non-null `arena` id; null when undeterminable */
+  arenaPopulated: number | null;
+}
+
+/**
+ * Diagnostic row counts for the db at `dbPath`, without side effects. Unlike
+ * getLocalDb (which conflates "absent" with "present but empty" into null),
+ * this tells them apart. Opens its own read-only, non-creating handle on
+ * purpose: do NOT "simplify" it to openDb(), which mkdirs, execs the schema
+ * and ALTERs - it would mutate the very file being inspected. Never touches
+ * the getLocalDb() cache. The handle is closed before returning (called per
+ * HTTP request).
+ */
+export function readLocalDbCounts(dbPath: string): LocalDbCounts {
+  let db: DbInstance | undefined;
+  try {
+    db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  } catch {
+    return { present: false, cardCount: null, arenaPopulated: null };
+  }
+  try {
+    let cardCount: number | null = null;
+    let arenaPopulated: number | null = null;
+    try {
+      cardCount = (db.prepare("SELECT COUNT(*) AS n FROM cards").get() as { n: number })?.n ?? null;
+    } catch {
+      cardCount = null;
+    }
+    try {
+      arenaPopulated =
+        (db.prepare("SELECT COUNT(*) AS n FROM cards WHERE arena IS NOT NULL").get() as { n: number })?.n ?? null;
+    } catch {
+      arenaPopulated = null;
+    }
+    return { present: true, cardCount, arenaPopulated };
+  } finally {
+    db.close();
+  }
 }
 
 /** Test-only: reset the cached db handle/verdict so tests can inject a fixture db. */
