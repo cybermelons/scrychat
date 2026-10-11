@@ -2002,3 +2002,53 @@ body {
   border-radius: 4px;
   background: var(--bg-raised);
 }
+
+/* Attached-image strip above the composer. Thumbnails are object URLs for
+   files that exist only in memory for the next turn; ChatPanel revokes each
+   one on remove and on send. */
+.attach-strip {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px 0;
+  flex-wrap: wrap;
+}
+.attach-thumb {
+  position: relative;
+  display: inline-block;
+}
+.attach-thumb img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: block;
+}
+.attach-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  padding: 0;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-raised);
+  color: var(--fg);
+  cursor: pointer;
+}
+.chat-attach {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 7px;
+}
+.chat-attach:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

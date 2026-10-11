@@ -4,6 +4,9 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import type { Request, Response } from "express";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { validateImages } from "./image-core.js";
+import { imageTurnPrompt } from "./image-turn-prompt.js";
 import {
   getCard,
   listDecks,
@@ -101,7 +104,13 @@ const config = loadConfig();
 console.log(`scrychat config: linkifyPass=${config.linkifyPass}`);
 
 const app = express();
-app.use(express.json());
+// 30mb, not the 100kb default: an image turn carries up to
+// MAX_IMAGES_PER_TURN (4) x MAX_IMAGE_BYTES (5mb) of base64, and base64 costs
+// 4 bytes per 3, so the worst legitimate body is ~26.7mb. Measured 2026-10-11:
+// at the default limit a single 200kb photo 413s in the body parser, BEFORE
+// validateImages runs, so the per-image error messages are never reached.
+// Keep this above the image-core budget or the two disagree silently.
+app.use(express.json({ limit: "30mb" }));
 
 // ---- session management: sessionId -> SDK session id for resume ----
 const SESSION_MAP_MAX = 100;
@@ -413,8 +422,9 @@ async function haikuSpanVerdict(
   }
 }
 
+
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, sessionId, activeDeck, chatId: reqChatId } = req.body ?? {};
+  const { message, sessionId, activeDeck, chatId: reqChatId, images: rawImages } = req.body ?? {};
   if (typeof message !== "string" || message.length === 0) {
     res.status(400).json({ error: "message is required" });
     return;
@@ -423,6 +433,18 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid chatId" });
     return;
   }
+  // Images are validated before anything is persisted or streamed, so a bad
+  // upload is a plain 400 rather than a half-started turn. The bytes are never
+  // written to disk: they live in this request and in the message handed to
+  // the SDK, and are dropped when the turn ends (#54).
+  const imageCheck = validateImages(rawImages);
+  if (!imageCheck.ok) {
+    res.status(400).json({
+      error: imageCheck.index >= 0 ? `image ${imageCheck.index}: ${imageCheck.error}` : `images: ${imageCheck.error}`,
+    });
+    return;
+  }
+  const images = imageCheck.images;
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -501,9 +523,16 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   const toolSegmentByUseId = new Map<string, number>();
   let turnInterrupted = false;
 
+  // Text-only turns keep the plain-string prompt they have always used, so a
+  // regression here can only reach image turns. Only when the turn carries an
+  // image do we switch to the AsyncIterable form, which is the only way to
+  // send an image content block (`prompt: string | AsyncIterable<SDKUserMessage>`).
+  const sdkPrompt: string | AsyncIterable<SDKUserMessage> =
+    images.length === 0 ? prompt : imageTurnPrompt(prompt, images, resumeSdkSessionId ?? "");
+
   try {
     const q = query({
-      prompt,
+      prompt: sdkPrompt,
       options: {
         cwd: REPO_ROOT,
         env: SDK_ENV,

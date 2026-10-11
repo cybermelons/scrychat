@@ -3,6 +3,13 @@ import type { AppConfig, ChartSpec, CompareSpec, SlideSpec, ChatEvent, ChatFile,
 import { parseChartSpec } from "./chart-core";
 import { compareVerdict, parseCompareSpec } from "./compare-core";
 import { parseSlideSpec } from "./slides-core";
+import {
+  ATTACH_MAX_COUNT,
+  base64FromDataUrl,
+  checkFile,
+  toRequestImages,
+  type PendingImage,
+} from "./attach-core";
 import { renderMarkdown } from "./markdown";
 import { SettingsDrawer } from "./SettingsDrawer";
 
@@ -233,6 +240,11 @@ export function ChatPanel({
   const lastUserMessageRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Attached images for the NEXT turn only. Cleared after send -- the server
+  // never stores them and the transcript keeps no copy, so an image is
+  // in-memory for exactly one request.
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   // Stick-to-bottom only while the user is already near the bottom; set by
   // onScroll, read (not reacted to) by the [messages] auto-scroll effect
   // below so we don't force-scroll away from a message the user scrolled
@@ -462,11 +474,68 @@ export function ChatPanel({
     []
   );
 
+  const removePendingImage = useCallback((idx: number) => {
+    setPendingImages((prev) => {
+      const gone = prev[idx];
+      if (gone) URL.revokeObjectURL(gone.previewUrl);
+      return prev.filter((_, i) => i !== idx);
+    });
+  }, []);
+
+  const clearPendingImages = useCallback(() => {
+    setPendingImages((prev) => {
+      for (const p of prev) URL.revokeObjectURL(p.previewUrl);
+      return [];
+    });
+  }, []);
+
+  const onFilesPicked = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    // Read the current count from state inside the setter rather than closing
+    // over it: two picks in quick succession would otherwise both see the old
+    // length and together exceed ATTACH_MAX_COUNT.
+    const accepted: PendingImage[] = [];
+    let attached = pendingImages.length;
+    for (const file of Array.from(files)) {
+      const why = checkFile(file, attached);
+      if (why) {
+        setError(`${file.name}: ${why}`);
+        continue;
+      }
+      const dataUrl = await new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      });
+      const base64 = dataUrl === null ? null : base64FromDataUrl(dataUrl);
+      if (base64 === null) {
+        setError(`${file.name}: could not read file`);
+        continue;
+      }
+      accepted.push({
+        previewUrl: URL.createObjectURL(file),
+        mediaType: file.type,
+        base64,
+        bytes: file.size,
+        name: file.name,
+      });
+      attached += 1;
+    }
+    if (accepted.length > 0) setPendingImages((prev) => [...prev, ...accepted]);
+    // Clear the input so picking the same file twice still fires onChange.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [pendingImages.length]);
+
   const send = useCallback(async (override?: string) => {
     const message = (override ?? input).trim();
     if (!message || streaming) return;
+    // Snapshot before the await: the pick handler can add to pendingImages
+    // while the request is in flight, and those belong to the NEXT turn.
+    const turnImages = pendingImages;
     lastUserMessageRef.current = message;
     if (override === undefined) setInput("");
+    if (turnImages.length > 0) clearPendingImages();
     setError(null);
     setStreaming(true);
     setMessages((m) => [
@@ -482,12 +551,20 @@ export function ChatPanel({
         body: JSON.stringify({
           message,
           activeDeck: selected || undefined,
+          ...(turnImages.length > 0 ? { images: toRequestImages(turnImages) } : {}),
           ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
           ...(chatIdRef.current ? { chatId: chatIdRef.current } : {}),
         }),
       });
       if (!res.ok || !res.body) {
-        throw new Error(`HTTP ${res.status}`);
+        // Image rejections carry a precise {error} body ("image 0: too
+        // large"); a 413 from the body parser is an HTML page, so parse
+        // defensively and fall back to the status.
+        const detail = await res
+          .json()
+          .then((b: { error?: string }) => (typeof b.error === "string" ? b.error : null))
+          .catch(() => null);
+        throw new Error(detail ?? `HTTP ${res.status}`);
       }
 
       const reader = res.body.getReader();
@@ -592,7 +669,7 @@ export function ChatPanel({
       // has actually been removed from the DOM before we try to focus it.
       setTimeout(() => textareaRef.current?.focus(), 0);
     }
-  }, [input, streaming, updateLastAssistant, selected, refreshChats]);
+  }, [input, streaming, updateLastAssistant, selected, refreshChats, pendingImages, clearPendingImages]);
 
   const retry = useCallback(() => {
     const last = lastUserMessageRef.current;
@@ -1208,8 +1285,43 @@ export function ChatPanel({
           </div>
         )}
       </div>
+      {pendingImages.length > 0 && (
+        <div className="attach-strip">
+          {pendingImages.map((img, i) => (
+            <span className="attach-thumb" key={img.previewUrl}>
+              <img src={img.previewUrl} alt={img.name} />
+              <button
+                type="button"
+                className="attach-remove"
+                title={`remove ${img.name}`}
+                onClick={() => removePendingImage(i)}
+              >
+                &times;
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="chat-input-row">
         {selected && <span className="chip chip-context">context: {selected}</span>}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          multiple
+          hidden
+          onChange={(e) => void onFilesPicked(e.target.files)}
+        />
+        <button
+          id="attach-btn"
+          type="button"
+          className="chat-attach"
+          title="attach an image"
+          disabled={streaming || pendingImages.length >= ATTACH_MAX_COUNT}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          &#128247;
+        </button>
         <textarea
           ref={textareaRef}
           className="chat-input"
