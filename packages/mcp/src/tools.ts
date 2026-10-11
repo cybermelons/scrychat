@@ -795,6 +795,65 @@ export function registerTools(server: McpServer): void {
       });
     },
   );
+
+  server.registerTool(
+    "goldfish_compare",
+    {
+      title: "Compare two decks by goldfish",
+      description:
+        "Run the SAME goldfish simulation on two saved decks and return both summaries plus the delta in " +
+        "turnsToOnline (mean turn a game first casts onlineThreshold nonland spells; lower is faster). " +
+        "One seed, iterations and maxTurns are shared across BOTH decks so the comparison is like-for-like; " +
+        "differing conditions would make it dishonest. Use when the user asks which of two decks is faster " +
+        "or whether a rebuild improved consistency. Read-only.",
+      inputSchema: {
+        deckA: z.string().describe("First deck name"),
+        deckB: z.string().describe("Second deck name"),
+        iterations: z.number().int().min(1).max(5000).optional().describe("Simulated games per deck, 1-5000 (default 1000); shared by both decks"),
+        seed: z.number().int().optional().describe("RNG seed (default 0); shared by both decks so they face identical conditions"),
+        maxTurns: z.number().int().min(1).max(20).optional().describe("Turns to play per game, 1-20 (default 15); shared by both decks"),
+      },
+    },
+    async ({ deckA, deckB, iterations = 1000, seed = globalSeed ?? 0, maxTurns = 15 }) => {
+      return safe(async () => {
+        const run = async (deckName: string) => {
+          const deck = await getDeck(deckName, decksDir);
+          if (!deck) return { error: `Deck not found: ${deckName}` } as const;
+          await getCards(deck.cards.map((c) => c.name));
+          const { library, unresolved } = await resolveDeckLibrary(deck, resolveCard);
+          if (library.length === 0) {
+            return { error: `No cards in deck "${deckName}" could be resolved; nothing to simulate`, unresolved } as const;
+          }
+          return { r: goldfish(library, { iterations, seed, maxTurns }), unresolved } as const;
+        };
+        const a = await run(deckA);
+        if ("error" in a) return a;
+        const b = await run(deckB);
+        if ("error" in b) return b;
+        const build = (label: string, x: typeof a) => ({
+          label,
+          deckName: label,
+          turnsToOnline: x.r.turnsToOnline,
+          mulliganRate: x.r.mulliganRate,
+          stalledGames: x.r.stalledGames,
+        });
+        const builds = [build(deckA, a), build(deckB, b)];
+        return {
+          kind: "goldfish_compare",
+          seed: a.r.seed,
+          iterations: a.r.iterations,
+          maxTurns: a.r.maxTurns,
+          onlineThreshold: a.r.onlineThreshold,
+          builds,
+          // Sign convention: delta = deckA - deckB; negative = first deck (deckA) is faster.
+          // turnsToOnline inherits the simulator's greedy-sequencing ceiling (the ponytail:
+          // markers in core goldfish.ts), so a delta smaller than a fraction of a turn is noise.
+          delta: builds[0].turnsToOnline - builds[1].turnsToOnline,
+          unresolved: { deckA: a.unresolved, deckB: b.unresolved },
+        };
+      });
+    },
+  );
 }
 
 /** Exposed for tests/tools that need to clean up a throwaway deck. */

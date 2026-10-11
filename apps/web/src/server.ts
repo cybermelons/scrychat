@@ -532,6 +532,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
           "mcp__scrychat__deck_set_commander",
           "mcp__scrychat__deck_export",
           "mcp__scrychat__goldfish_deck",
+          "mcp__scrychat__goldfish_compare",
           // Suggestions propose a change for a human to accept or reject; they
           // do not edit the deck. deck_suggestion_decide does edit it, but only
           // on an explicit accept, so the chat turn can queue and the UI decides.

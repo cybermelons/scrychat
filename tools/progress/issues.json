@@ -40,7 +40,7 @@
       "side": "left",
       "state": "closed",
       "title": "Colour requirements",
-      "pin": "goldfish.ts:60 pips() reads manaCost; a cast needs cmc <= avail AND each colour's pips <= that colour's sources. Land drop takes a colour the hand demands more of than play supplies. Still optimistic: per-colour, not a matching; hybrid rides on cmc."
+      "pin": "goldfish.ts:64 pips() reads manaCost; a cast needs cmc <= avail AND each colour's pips <= that colour's sources. Land drop takes a colour the hand demands more of than play supplies. Still optimistic: per-colour, not a matching; hybrid rides on cmc."
     },
     {
       "n": 52,
@@ -56,7 +56,7 @@
       "side": "left",
       "state": "open",
       "title": "Compare two builds",
-      "pin": "The reason determinism was worth paying for. Same seed across two deck versions, diff the histograms side by side."
+      "pin": "The reason determinism was worth paying for. goldfish_compare takes two deck names and runs both on ONE shared seed/iterations/maxTurns, echoed once at top level so the shared conditions are checkable. Each build reports turnsToOnline (mean turn reaching ONLINE_THRESHOLD=3 nonland casts, never-online counts maxTurns+1); delta = A - B, negative means A is faster. Scalars, not histograms, per the approved target. Inherits the sim's greedy-sequencing ceiling, so sub-turn deltas are noise."
     },
     {
       "n": 9,
@@ -88,7 +88,7 @@
       "side": "left",
       "state": "closed",
       "title": "Focal card images",
-      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric appended to the system prompt at server.ts:559."
+      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append: at server.ts:559."
     },
     {
       "n": 20,
