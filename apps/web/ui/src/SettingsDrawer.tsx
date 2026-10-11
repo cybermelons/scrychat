@@ -1,3 +1,4 @@
+import { HealthRow } from "./HealthRow";
 import { useCallback, useEffect, useState } from "react";
 import type { AppConfig, ExportFormat, QuotaTargetKey, QuotaTargets } from "./types";
 
@@ -346,6 +347,8 @@ export function SettingsDrawer({
               </div>
               <p className="settings-hint">tags counted by quota checks</p>
             </section>
+
+            <HealthRow />
 
             <p className="settings-footnote">
               Model names, the linkify wordlist, and internal caps are intentionally not configurable.

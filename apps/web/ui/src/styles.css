@@ -1897,3 +1897,40 @@ body {
 .text-warn {
   color: #e0af68;
 }
+
+.text-dim {
+  color: var(--text-dim);
+}
+
+#health-row {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 12px;
+}
+
+.hpill {
+  font: 0.7rem/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-dim);
+}
+
+.hpill.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.hpill.warn {
+  border-color: #e0af68;
+  color: #e0af68;
+}
+
+.hpill.dim {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
