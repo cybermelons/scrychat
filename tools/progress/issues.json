@@ -54,9 +54,9 @@
       "n": 53,
       "anchor": "#sim-compare",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "Compare two builds",
-      "pin": "The reason determinism was worth paying for. goldfish_compare takes two deck names and runs both on ONE shared seed/iterations/maxTurns, echoed once at top level so the shared conditions are checkable. Each build reports turnsToOnline (mean turn reaching ONLINE_THRESHOLD=3 nonland casts, never-online counts maxTurns+1); delta = A - B, negative means A is faster. Scalars, not histograms, per the approved target. Inherits the sim's greedy-sequencing ceiling, so sub-turn deltas are noise."
+      "pin": "The reason determinism was worth paying for. goldfish_compare runs both decks on ONE shared seed/iterations/maxTurns, echoed once at top level so the shared conditions are checkable - that echo is now on screen, because 'both decks faced identical conditions' is the whole claim. turnsToOnline is the mean turn reaching ONLINE_THRESHOLD=3 nonland casts (never-online counts maxTurns+1); delta = A - B, negative means A is faster, and it is the one field legitimately negative. Rendered by CompareTable in ui/src/ChatPanel.tsx from parseCompareSpec in ui/src/compare-core.ts, the strict sibling of chart-core.ts: untrusted tool output, null falls back to the plain tool chip. A gap under DELTA_NOISE_FLOOR=0.25 turns renders as an explicit tie, not a dimmed row - every ponytail: marker in core goldfish.ts is OPTIMISTIC in one direction, so the bias does not average away and a sub-quarter-turn delta is not a result. Scalars, not histograms, per the approved target."
     },
     {
       "n": 9,
