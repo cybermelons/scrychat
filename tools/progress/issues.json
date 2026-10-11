@@ -70,9 +70,9 @@
       "n": 47,
       "anchor": "#chip-search",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "Ground every card claim in a fetch",
-      "pin": "Every card name a reply states must trace to a Scryfall fetch, shown as this chip. #46 found 13 from-memory claims in one analysis and #47 repeated it, so the test is \"chip present on every card claim\". The checker now exists: grounding-core.ts extracts the claimed names and the fetched names (tool-aware -- a deck name is not a card) and reports the residue, wired as eval B-fmt-7. REMAINING: B-fmt-7 has never been run, since Tier B needs live model calls. Run it, record the result, and raise the server's 2048-char tool-result cap if truncatedResults>0 makes it flag real fetches."
+      "pin": "Every card name a reply states must trace to a Scryfall fetch, shown as this chip. grounding-core.ts extracts claimed vs fetched names (tool-aware -- a deck name is not a card) and reports the residue, wired as eval B-fmt-7. RUN 2026-10-11: Tier B 5/7, 3 of 5 claims grounded, but truncatedResults=1 means the 2048-char tool-result cap can slice a real fetch out of the record, so the two flagged names are not provably hallucinations. The cap is a bare literal in 9 places -- #66 makes it one constant, then B-fmt-7 can return a verdict."
     },
     {
       "n": 18,
@@ -281,6 +281,14 @@
       "state": "open",
       "title": "Replace the real UI with this target",
       "pin": "This board tracks the goal; it is not the goal. This pin is the tracked item that retires the mockup. The board itself shipped in f78993d (tools/progress/)."
+    },
+    {
+      "n": 66,
+      "anchor": "#tool-chips",
+      "side": "right",
+      "state": "open",
+      "title": "Make the tool-result cap one constant",
+      "pin": "Every tool result is cut at TOOL_RESULT_MAX_CHARS=2048 (server.ts:154), which is what fills these chips. The number is also a bare literal in 9 other places -- 4 validators, a test asserting the boundary, and tools.ts:751, which sizes deck_present output to fit it -- so bumping the constant leaves them all lying. Found by the first B-fmt-7 run: a truncated result hides a real fetch and reads as a hallucination."
     }
   ],
   "commit_base": "https://github.com/cybermelons/scrychat/commit/",

@@ -80,4 +80,18 @@ each check plus a filesystem sweep in `finally`).
 `env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN node evals/run-tier-b.mjs` — **6/6 PASSED** (live subscription chat, self-started server, API-cleaned artifacts):
 B-fmt-1 fenced decklist verbatim (no card-refs in fences) · B-fmt-2 table name cells all linked · B-fmt-3 category chips populated server-side · B-fmt-4 embed rubric (1 focal embed / 0 list embeds) · B-fmt-5 mtga export front-face-only DFC names · B-fmt-6 Arena claims tool-grounded (get_card before answer).
 
-B-fmt-7 (NOT YET RUN; added for #47) every `[[Card]]` / `![[Card]]` / `[[group:..|..]]` claim in the reply must trace to a card name a tool call actually fetched (inputs per a card-field allowlist, plus names in search/alternatives/combos/deck results; deck names never count), and the reply must make >=1 claim. Uses `checkGrounding` from `apps/web/dist/grounding-core.js`. Tier B total is now 7 checks; no result recorded for it yet.
+B-fmt-7 (added for #47) every `[[Card]]` / `![[Card]]` / `[[group:..|..]]` claim in the reply must trace to a card name a tool call actually fetched (inputs per a card-field allowlist, plus names in search/alternatives/combos/deck results; deck names never count), and the reply must make >=1 claim. Uses `checkGrounding` from `apps/web/dist/grounding-core.js`. Tier B total is now 7 checks.
+
+### Tier B run 2026-10-11 - **5/7 PASSED** (first run of B-fmt-7)
+
+```
+FAIL: B-fmt-3 populatedChips=0 sample=null
+FAIL: B-fmt-7 claims=5 grounded=3 ungrounded=["Cabal Coffers","Black Market Connections"]
+            fetched=14 persistedToolCalls=3 sseToolUses=3 truncatedResults=1
+```
+
+**B-fmt-7 is not yet a verdict.** `truncatedResults=1` is the ambiguity the check's own header warns about: the server cuts every tool result at `TOOL_RESULT_MAX_CHARS = 2048` (`apps/web/src/server.ts:154`), so a card the model legitimately saw can be sliced out of the recorded result and then read as ungrounded. With 14 names fetched and one result truncated, these two cannot be called hallucinations on this evidence.
+
+Raising the cap is NOT a one-line change and was deliberately not done here: 2048 appears as a bare literal in nine places - `slides-core.ts:7,17`, `chart-core.ts:19`, `compare-core.ts:7`, `slide-html-core.ts:33`, `grounding-core.ts:29`, `slides-core.test.ts:83-87`, `evals/run-tier-b.mjs:447` - and `packages/mcp/src/tools.ts:751` sizes `deck_present` output to fit it. Changing the constant alone leaves all of them lying. Wants its own issue: introduce one exported constant, make the validators and the producer read it, then re-run B-fmt-7 and see whether the two names survive.
+
+**B-fmt-3 regressed** (`populatedChips=0`) - it passed in the 6/6 run above. Unrelated to #54; needs its own investigation.
