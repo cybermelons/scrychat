@@ -313,6 +313,14 @@
       "state": "open",
       "title": "No pin-to-artifact parity gate",
       "pin": "check_anchors proves a pin's anchor exists in THIS mockup; --audit proves the board matches the tracker. Neither opens the artifact. Mockup declares 58 ids, the real UI source has 8 (it keys off className), so a naive diff yields 52 false positives -- which is how #sug-actions stayed closed with its note control missing."
+    },
+    {
+      "anchor": "#tool-chips",
+      "side": "right",
+      "n": 70,
+      "state": "open",
+      "title": "Truncation blinds the grounding check",
+      "pin": "Split from #66, which fixed only deck_present. truncateResult runs at a single chokepoint (server.ts:661) and cuts EVERY allowlisted tool's result at 2048, so a 16-card fetch loses names past the cut. Tier B 2026-10-11 observed truncatedResults=1 with B-fmt-7 reporting 3 ungrounded names -- the eval's own message says >0 means an ungrounded name may be a real, unseen fetch, so the check cannot return a trustworthy verdict. Likely fix: stop feeding the model-context budget to an offline verifier, or truncate on a record boundary with an explicit {truncated:k} marker."
     }
   ],
   "commit_base": "https://github.com/cybermelons/scrychat/commit/",
