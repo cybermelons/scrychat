@@ -302,9 +302,9 @@
       "n": 68,
       "anchor": "#present-btn",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "No Present trigger",
-      "pin": "The slide strip renders deck_present output (#56, shipped) but nothing invokes it: reaching a presentation needs a chat turn the model chooses to answer with the tool. Renderer built, trigger absent."
+      "pin": "Done: a Present button in the composer row posts PRESENT_PROMPT through the existing send(override) path, and the SlideStrip renderer (#56) draws the result. Deliberately NOT in #slide-strip where this mockup draws it: SlideStrip exists only after deck_present has returned, so a trigger there is reachable only after the thing it starts. Disabled without an active deck, since the model learns the deck solely from the server's activeDeck context line (server.ts:501) and deck_present requires deck_name."
     },
     {
       "n": 69,

@@ -2074,3 +2074,23 @@ body {
   opacity: 0.4;
   cursor: default;
 }
+
+/* Sits beside .chat-attach in the composer row and matches it, except for
+   `color`: .chat-attach names var(--fg), which this stylesheet never defines
+   (2 uses, 0 definitions), so it inherits its colour by accident. The defined
+   token is --text. white-space keeps the label off a second line when the
+   composer narrows. */
+.chat-present {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+.chat-present:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

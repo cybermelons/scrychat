@@ -10,6 +10,7 @@ import {
   toRequestImages,
   type PendingImage,
 } from "./attach-core";
+import { PRESENT_PROMPT } from "./present-prompt-core";
 import { renderMarkdown } from "./markdown";
 import { SettingsDrawer } from "./SettingsDrawer";
 
@@ -1321,6 +1322,24 @@ export function ChatPanel({
           onClick={() => fileInputRef.current?.click()}
         >
           &#128247;
+        </button>
+        {/*
+          The mockup draws Present inside #slide-strip, but a trigger cannot
+          live there: SlideStrip only exists once deck_present has already
+          returned, so a button in it is reachable only after the thing it
+          starts. It goes in the composer instead, where the active deck is
+          already in scope -- and is disabled without one, since deck_present
+          takes a required deck_name.
+        */}
+        <button
+          id="present-btn"
+          type="button"
+          className="chat-present"
+          title={selected ? `present ${selected}` : "select a deck to present"}
+          disabled={streaming || !selected}
+          onClick={() => void send(PRESENT_PROMPT)}
+        >
+          &#128247;&#8288;Present
         </button>
         <textarea
           ref={textareaRef}
