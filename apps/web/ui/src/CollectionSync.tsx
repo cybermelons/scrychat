@@ -7,7 +7,7 @@ import {
   requestFolderPermission,
   syncFromHandle,
 } from "./arenaSync";
-import { snapshotAge, SNAPSHOT_STALE_DAYS } from "./snapshot-age.js";
+import { snapshotAge, SNAPSHOT_STALE_DAYS } from "../../src/snapshot-age.js";
 
 type CollectionInfo =
   | { exists: false }

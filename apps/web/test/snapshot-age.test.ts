@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { snapshotAge, SNAPSHOT_STALE_DAYS } from "../ui/src/snapshot-age.js";
+import { snapshotAge, SNAPSHOT_STALE_DAYS } from "../src/snapshot-age.js";
 
 const NOW = Date.parse("2026-10-10T12:00:00Z");
 const MIN = 60_000;
