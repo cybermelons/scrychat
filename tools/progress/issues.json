@@ -64,7 +64,7 @@
       "side": "left",
       "state": "closed",
       "title": "Tool chips stream live",
-      "pin": "tool_use at server.ts:626 opens the chip, tool-result at :649 fills it. Chat SSE, consumed by ChatPanel's reader loop."
+      "pin": "tool_use at server.ts:641 opens the chip, tool-result at :664 fills it. Chat SSE, consumed by ChatPanel's reader loop."
     },
     {
       "n": 47,
@@ -88,7 +88,7 @@
       "side": "left",
       "state": "closed",
       "title": "Focal card images",
-      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append at server.ts:587."
+      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append at server.ts:606."
     },
     {
       "n": 20,
@@ -286,9 +286,9 @@
       "n": 66,
       "anchor": "#tool-chips",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "Make the tool-result cap one constant",
-      "pin": "Every tool result is cut at TOOL_RESULT_MAX_CHARS=2048 (server.ts:154), which is what fills these chips. The number is also a bare literal in 9 other places -- 4 validators, a test asserting the boundary, and tools.ts:751, which sizes deck_present output to fit it -- so bumping the constant leaves them all lying. Found by the first B-fmt-7 run: a truncated result hides a real fetch and reads as a hallucination."
+      "pin": "Closed by exporting TOOL_RESULT_MAX_CHARS (server.ts) and mirroring it as TOOL_RESULT_BUDGET_CHARS in packages/mcp/src/present-budget.ts, pinned by test/present-budget.test.ts (9 tests). The issue's own premise was wrong: the number appears 12 times, of which 1 is the declaration, 3 are test assertions and 8 are comment prose -- no validator reads a second literal. The real defect was different and live: the per-field caps (title 40, text 320, html 1600) are all satisfiable by a payload that still overflows the 2048 WHOLE-RESULT budget, because nothing measured the serialized result. Measured 2026-10-11: all five quotas OFF + full curve + long pending = 2223 chars while the html slide sits at 1117 of its 1600 cap. Overflow was silent (truncated JSON -> parseSlideSpec null -> plain chip). deck_present now calls fitPresentSlides, dropping whole low-priority slides and never the first. Live decks measured over the real stdio server: grothama 1779, isshin 1618, both parse after a 2048 slice."
     },
     {
       "n": 67,
@@ -304,7 +304,7 @@
       "side": "left",
       "state": "closed",
       "title": "No Present trigger",
-      "pin": "Done: a Present button in the composer row posts PRESENT_PROMPT through the existing send(override) path, and the SlideStrip renderer (#56) draws the result. Deliberately NOT in #slide-strip where this mockup draws it: SlideStrip exists only after deck_present has returned, so a trigger there is reachable only after the thing it starts. Disabled without an active deck, since the model learns the deck solely from the server's activeDeck context line (server.ts:501) and deck_present requires deck_name."
+      "pin": "Done: a Present button in the composer row posts PRESENT_PROMPT through the existing send(override) path, and the SlideStrip renderer (#56) draws the result. Deliberately NOT in #slide-strip where this mockup draws it: SlideStrip exists only after deck_present has returned, so a trigger there is reachable only after the thing it starts. Disabled without an active deck, since the model learns the deck solely from the server's activeDeck context line (server.ts:486) and deck_present requires deck_name."
     },
     {
       "n": 69,

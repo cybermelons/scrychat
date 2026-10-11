@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { fitPresentSlides } from "./present-budget.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   searchCards,
@@ -841,7 +842,16 @@ export function registerTools(server: McpServer): void {
           slides.push({ title: "Pending", text: text || clip(line(pending[0]), 320) });
         }
 
-        return { kind: "slides", deck: deck.name, slides };
+        // The per-field caps above are not the binding limit: apps/web truncates
+        // the WHOLE serialized result at 2048 chars, and a truncated slides
+        // result is invalid JSON, which the UI drops to a plain chip without an
+        // error. Measured 2026-10-11: all five quotas OFF with a full curve and
+        // a long pending line reaches 2223 chars while every individual field,
+        // html included, is comfortably inside its own cap. So fit the payload
+        // here, dropping whole low-priority slides rather than shipping one the
+        // UI will silently discard entirely.
+        const fitted = fitPresentSlides(deck.name, slides);
+        return { kind: "slides", deck: deck.name, slides: fitted.slides };
       });
     },
   );

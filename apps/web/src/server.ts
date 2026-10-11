@@ -151,7 +151,22 @@ type ChatMsg = {
   at: string;
 };
 
-const TOOL_RESULT_MAX_CHARS = 2048;
+/*
+ * Longest tool result the UI will receive. Exported because it is a BUDGET the
+ * producer has to fit inside, not just a local slicing detail: a result over
+ * this is cut mid-string, so a JSON result fails JSON.parse in every *-core
+ * validator and the component silently falls back to a plain tool chip. No
+ * error is raised anywhere -- see truncateResult below.
+ *
+ * packages/mcp CANNOT import this: the dependency arrow runs the other way
+ * (@scrychat/mcp depends on @scrychat/core; apps/web does not depend on mcp,
+ * and mcp must not depend on the web app). So deck_present sizes its output
+ * against a MIRRORED copy of this number, the same arrangement as
+ * ui/src/attach-core.ts mirroring src/image-core.ts. The mirror is pinned by
+ * packages/mcp/test/present-budget.test.ts, which recomputes the producer's worst case
+ * and fails if it no longer fits -- drift here is otherwise invisible.
+ */
+export const TOOL_RESULT_MAX_CHARS = 2048;
 
 function truncateResult(s: string): string {
   return s.length > TOOL_RESULT_MAX_CHARS ? `${s.slice(0, TOOL_RESULT_MAX_CHARS)}…` : s;
