@@ -49,6 +49,7 @@ import {
   type CategoryResolver,
 } from "./group-chips-core.js";
 import { parseCollectionBody, buildImportResult } from "./collection-core.js";
+import { getDbHealth } from "./health-core.js";
 import { isValidDeckName } from "./deck-name-core.js";
 import { parseConfig, applyConfigPatch, DEFAULT_CONFIG, type ScrychatConfig } from "./config-core.js";
 
@@ -1641,50 +1642,20 @@ app.get("/api/health", (_req: Request, res: Response) => {
   }
 
   const dbPath = path.join(REPO_ROOT, "data/scrychat.db");
-  let dbExists = false;
-  let cardCount: number | null = null;
-  let arenaPopulated: number | null = null;
-  let ingestStamp: string | null = null;
-
-  try {
-    const db = getLocalDb();
-    dbExists = db !== null;
-    if (db) {
-      try {
-        const row = db.prepare("SELECT COUNT(*) AS n FROM cards").get() as { n: number };
-        cardCount = row?.n ?? null;
-      } catch {
-        cardCount = null;
-      }
-      try {
-        const row = db.prepare("SELECT COUNT(*) AS n FROM cards WHERE arena IS NOT NULL").get() as { n: number };
-        arenaPopulated = row?.n ?? null;
-      } catch {
-        arenaPopulated = null;
-      }
-    }
-  } catch {
-    dbExists = false;
-  }
-
-  try {
-    ingestStamp = fs.statSync(dbPath).mtime.toISOString();
-  } catch {
-    ingestStamp = null;
-  }
+  // NOT getLocalDb() for `exists`: getLocalDb conflates "file absent" with
+  // "file present, zero cards" by design (both mean "fall back to live
+  // Scryfall" for its normal callers). A diagnostic endpoint is the one caller
+  // that must tell them apart, so existence comes from stat and counts from a
+  // direct read-only open (see health-core.ts). `usableAsMirror` keeps the old
+  // getLocalDb signal under an honest name.
+  const dbHealth = getDbHealth(dbPath);
 
   res.json({
     ok: true,
     repoRoot: REPO_ROOT,
     skillLoaded,
     skillPath,
-    db: {
-      exists: dbExists,
-      path: dbPath,
-      cardCount,
-      arenaPopulated,
-      ingestStamp,
-    },
+    db: dbHealth,
   });
 });
 
