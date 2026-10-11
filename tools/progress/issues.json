@@ -64,7 +64,7 @@
       "side": "left",
       "state": "closed",
       "title": "Tool chips stream live",
-      "pin": "tool-use at server.ts:601 opens the chip, tool-result at :620 fills it. Chat SSE, consumed by ChatPanel."
+      "pin": "tool_use at server.ts:626 opens the chip, tool-result at :649 fills it. Chat SSE, consumed by ChatPanel's reader loop."
     },
     {
       "n": 47,
@@ -88,7 +88,7 @@
       "side": "left",
       "state": "closed",
       "title": "Focal card images",
-      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append: at server.ts:561."
+      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append at server.ts:587."
     },
     {
       "n": 20,
@@ -102,9 +102,9 @@
       "n": 54,
       "anchor": "#attach-btn",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "Photograph a binder page",
-      "pin": "Multimodal is one content block in the same messages array, so this is an upload input and a render path, not a new endpoint. Untrusted input: it reaches the model."
+      "pin": "Attach sends images as content blocks on the same turn, images first. validateImages sniffs magic bytes and rejects a declared type that disagrees, so SVG under a PNG label is refused; 4 per turn, 5mb each, never written to disk. express.json needs limit:30mb -- the 100kb default 413s a 200kb photo before validation runs."
     },
     {
       "n": 55,
@@ -136,7 +136,7 @@
       "side": "left",
       "state": "closed",
       "title": "Interrupt an in-flight reply",
-      "pin": "POST /api/chats/:id/stop. Emits done{interrupted:true} — one of three done sites, so a shape change touches all three."
+      "pin": "POST /api/chats/:id/stop. Emits done{interrupted:true} \u2014 one of three done sites, so a shape change touches all three."
     },
     {
       "anchor": "#suggestions-panel",
@@ -167,7 +167,7 @@
       "side": "right",
       "state": "closed",
       "title": "Why, per suggestion",
-      "pin": "The reasoning a human reviews. Required field — a suggestion with no why is a diff with no argument.",
+      "pin": "The reasoning a human reviews. Required field \u2014 a suggestion with no why is a diff with no argument.",
       "commit": "9da572407be75aa803564ac56193f3af9a8b61bc"
     },
     {
