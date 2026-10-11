@@ -64,7 +64,7 @@
       "side": "left",
       "state": "closed",
       "title": "Tool chips stream live",
-      "pin": "tool-use at server.ts:596 opens the chip, tool-result at :611 fills it. Chat SSE, consumed by ChatPanel."
+      "pin": "tool-use at server.ts:601 opens the chip, tool-result at :620 fills it. Chat SSE, consumed by ChatPanel."
     },
     {
       "n": 47,
@@ -88,7 +88,7 @@
       "side": "left",
       "state": "closed",
       "title": "Focal card images",
-      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append: at server.ts:560."
+      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append: at server.ts:561."
     },
     {
       "n": 20,

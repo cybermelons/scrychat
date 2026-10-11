@@ -8,7 +8,7 @@ reasoning behind them.
 
 - `packages/core` — Scryfall + Commander Spellbook clients, local tag index,
   functional-alternatives scoring, deck file CRUD. Decks are JSON under `decks/`.
-- `packages/mcp` — MCP stdio server, 23 tools over core.
+- `packages/mcp` — MCP stdio server, 24 tools over core.
 - `apps/web` — Express + Claude Agent SDK backend, React frontend, SSE between
   chat and deck panel. Tool permissions live in `apps/web/src/server.ts`.
 
@@ -100,13 +100,13 @@ execution on the host as the logged-in user.
 
 Current shape, and the reason for each part:
 
-- Allowed: 20 of the 23 `mcp__scrychat__*` tools, plus `Read` and `Grep`.
+- Allowed: 21 of the 24 `mcp__scrychat__*` tools, plus `Read` and `Grep`.
   The 3 that are registered but NOT allowlisted are `collection_stats`,
   `deck_rename_tag` and `deck_set_card_count`. Counted from
-  `apps/web/src/server.ts` and `packages/mcp/src/tools.ts` on 2026-10-10.
+  `apps/web/src/server.ts` and `packages/mcp/src/tools.ts` on 2026-10-11.
 - Denied: `Bash`, `Write`, `Edit`, `NotebookEdit`, `WebFetch`, `WebSearch`,
   `Task`, `KillShell`.
-- `deck_suggest` and `deck_suggestions` propose; they do not edit the deck.
+- `deck_suggest`, `deck_suggestions` and `deck_present` propose or read; they do not edit the deck.
   `deck_suggestion_decide` edits, but only on an explicit human accept. Keep
   that asymmetry — it is what lets a chat turn queue a change safely.
 

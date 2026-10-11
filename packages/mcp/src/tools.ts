@@ -49,7 +49,7 @@ import {
 } from "@scrychat/core";
 import type { NewSuggestion } from "@scrychat/core";
 import type { CardResolver, CardEntry, QuotaTargets } from "@scrychat/core";
-import type { Card } from "@scrychat/core";
+import type { Card, ChartSpec } from "@scrychat/core";
 
 const decksDir = path.resolve(process.cwd(), "decks");
 // Sibling of decks/, never inside it: listDecks reads every *.json under
@@ -723,6 +723,90 @@ export function registerTools(server: McpServer): void {
         const all = await listSuggestions(deck_name, suggestionsDir);
         const suggestions = status ? all.filter((s) => s.status === status) : all;
         return { deck: deck_name, count: suggestions.length, suggestions };
+      });
+    },
+  );
+
+  server.registerTool(
+    "deck_present",
+    {
+      title: "Present a deck as slides",
+      description:
+        "Builds a short slide deck about one saved deck: mana curve, quota check, the suggestion queue and the " +
+        "pending suggestions. Returns {kind:'slides', deck, slides:[{title, text?, chart?}]}; the UI renders it as " +
+        "a slide strip. Use when the user asks to present, walk through or summarise a deck or its suggestions. " +
+        "Read-only: it proposes nothing and edits nothing; use deck_suggest to queue changes.",
+      inputSchema: {
+        deck_name: z.string().describe("Deck name"),
+      },
+    },
+    async ({ deck_name }) => {
+      return safe(async () => {
+        const deck = await getDeck(deck_name, decksDir);
+        if (!deck) return { error: `Deck not found: ${deck_name}` };
+        await getCards(deck.cards.map((c) => c.name));
+        const report = await deckReport(deck_name, resolveCard, decksDir, globalQuotaTargets);
+        const suggestions = await listSuggestions(deck_name, suggestionsDir);
+
+        // The web app truncates a tool result at 2048 chars; a longer result never renders. Every
+        // field below is therefore clipped to the caps slides-core.ts enforces (title 40, text 320).
+        const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+        const slides: { title: string; text?: string; chart?: ChartSpec }[] = [];
+
+        slides.push({
+          title: "Curve",
+          text: `${report.total}/${report.targetTotal} cards`,
+          chart: {
+            type: "bar",
+            data: Object.entries(report.curve).map(([x, y]) => ({ x, y })),
+            x: "mana value",
+            y: "cards",
+            caption: "nonland cards",
+          },
+        });
+
+        slides.push({
+          title: "Quotas",
+          text: clip(
+            Object.entries(report.quotaCheck)
+              .map(([k, q]) => `${k} ${q.have} (want ${q.want}) ${q.ok ? "ok" : "OFF"}`)
+              .join("\n"),
+            320,
+          ),
+        });
+
+        if (suggestions.length > 0) {
+          const count = (s: string) => suggestions.filter((x) => x.status === s).length;
+          slides.push({
+            title: "Queue",
+            chart: {
+              type: "bar",
+              data: [
+                { x: "pending", y: count("pending") },
+                { x: "accepted", y: count("accepted") },
+                { x: "rejected", y: count("rejected") },
+              ],
+              x: "status",
+              y: "suggestions",
+            },
+          });
+        }
+
+        const pending = suggestions.filter((s) => s.status === "pending");
+        if (pending.length > 0) {
+          const line = (s: (typeof pending)[number]) =>
+            s.kind === "swap" ? `swap ${s.out} > ${s.in}` : s.kind === "add" ? `add ${s.in}` : `cut ${s.out}`;
+          let text = "";
+          for (const s of pending) {
+            const next = text ? `${text}\n${line(s)}` : line(s);
+            if (next.length > 320) break;
+            text = next;
+          }
+          // A single over-long line still gets a slide rather than none.
+          slides.push({ title: "Pending", text: text || clip(line(pending[0]), 320) });
+        }
+
+        return { kind: "slides", deck: deck.name, slides };
       });
     },
   );

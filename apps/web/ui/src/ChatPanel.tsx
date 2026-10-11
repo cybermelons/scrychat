@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AppConfig, ChartSpec, CompareSpec, ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
+import type { AppConfig, ChartSpec, CompareSpec, SlideSpec, ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
 import { parseChartSpec } from "./chart-core";
 import { compareVerdict, parseCompareSpec } from "./compare-core";
+import { parseSlideSpec } from "./slides-core";
 import { renderMarkdown } from "./markdown";
 import { SettingsDrawer } from "./SettingsDrawer";
 
@@ -113,6 +114,31 @@ function CompareTable({ spec }: { spec: CompareSpec }) {
   );
 }
 
+// Title, text and chart are React text children / the Chart component only. The
+// selected index is local state; slides are never reordered or mutated.
+function SlideStrip({ spec }: { spec: SlideSpec }) {
+  const [sel, setSel] = useState(0);
+  const slide = spec.slides[Math.min(sel, spec.slides.length - 1)];
+  return (
+    <div id="slide-strip">
+      {spec.slides.map((s, i) => (
+        <button
+          type="button"
+          className={`slide${s === slide ? " on" : ""}`}
+          key={i}
+          onClick={() => setSel(i)}
+        >
+          {s.title}
+        </button>
+      ))}
+      <div className="slide-body">
+        {slide.text && <div className="slide-text">{slide.text}</div>}
+        {slide.chart && <Chart spec={slide.chart} />}
+      </div>
+    </div>
+  );
+}
+
 function AssistantBody({ msg }: { msg: ChatMessage }) {
   return (
     <>
@@ -138,6 +164,10 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
             {seg.name.replace(/^mcp__scrychat__/, "") === "goldfish_compare" && (() => {
               const spec = parseCompareSpec(seg.result);
               return spec ? <CompareTable spec={spec} /> : null;
+            })()}
+            {seg.name.replace(/^mcp__scrychat__/, "") === "deck_present" && (() => {
+              const spec = parseSlideSpec(seg.result);
+              return spec ? <SlideStrip spec={spec} /> : null;
             })()}
           </div>
         )

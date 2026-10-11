@@ -139,6 +139,14 @@ export type ChartSpec = {
   caption?: string;
 };
 
+/**
+ * Mirrors the deck_present result in @scrychat/mcp (the UI cannot import it, so
+ * the shape is restated here). Rendered by SlideStrip in ChatPanel.tsx; always
+ * validated by parseSlideSpec first. A slide has text, a chart, or both.
+ */
+export type Slide = { title: string; text?: string; chart?: ChartSpec };
+export type SlideSpec = { slides: Slide[] };
+
 export type ChatEvent =
   | { type: "chat"; chatId: string }
   | { type: "text-delta"; text: string }

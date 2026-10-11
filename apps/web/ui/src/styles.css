@@ -651,6 +651,41 @@ body {
   color: var(--text-dim);
 }
 
+/* deck_present result: a tab per slide, the selected slide's text and chart below.
+   Follows a tool chip like .sim-chart. .slide.on marks the selected tab. */
+#slide-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.85rem;
+}
+
+.slide {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 2px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.slide.on {
+  color: var(--text);
+  border-color: var(--ok);
+}
+
+.slide-body {
+  flex-basis: 100%;
+}
+
+.slide-text {
+  color: var(--text);
+  white-space: pre-line;
+}
+
 /* role groups: single table, tbody per role -> shared column tracks across
    all groups (count | name | mana cost | remove) */
 .card-table {

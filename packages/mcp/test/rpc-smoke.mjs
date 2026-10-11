@@ -6,7 +6,7 @@
  * `decks/` directory it creates is isolated and easy to clean up), speaks
  * newline-delimited JSON-RPC over stdio, and asserts:
  *   1. initialize succeeds
- *   2. tools/list returns exactly 23 tools
+ *   2. tools/list returns exactly 24 tools, and their names match exactly
  *   3. tools/call search_cards {query:"otag:token-doubler"} -> total >= 10
  *   4. tools/call search_tags {query:"removal"} -> non-empty array
  *   5. tools/call deck_create + deck_add with an off-identity card -> a
@@ -134,7 +134,25 @@ async function main() {
     // 2. tools/list
     const listRes = await withTimeout(send("tools/list", {}), 10000, "tools/list");
     const tools = listRes.result?.tools ?? [];
-    assert(tools.length === 23, `tools/list returns 23 tools (got ${tools.length}: ${tools.map((t) => t.name).join(", ")})`);
+    assert(tools.length === 24, `tools/list returns 24 tools (got ${tools.length}: ${tools.map((t) => t.name).join(", ")})`);
+    // The count alone is NOT enough: renaming a tool keeps it at 24 and stays
+    // green, while apps/web/src/server.ts still allowlists the old name, so
+    // the tool is simply never callable and nothing fails. Assert the names.
+    const EXPECTED_TOOLS = [
+      "collection_stats", "deck_add", "deck_create", "deck_export", "deck_get",
+      "deck_import", "deck_list", "deck_present", "deck_remove", "deck_rename",
+      "deck_rename_tag", "deck_set_card_count", "deck_set_card_tags",
+      "deck_set_commander", "deck_suggest", "deck_suggestion_decide",
+      "deck_suggestions", "find_alternatives", "find_combos", "get_card",
+      "goldfish_compare", "goldfish_deck", "search_cards", "search_tags",
+    ];
+    const actualNames = tools.map((t) => t.name).sort();
+    const missing = EXPECTED_TOOLS.filter((n) => !actualNames.includes(n));
+    const extra = actualNames.filter((n) => !EXPECTED_TOOLS.includes(n));
+    assert(
+      missing.length === 0 && extra.length === 0,
+      `tools/list names match exactly (missing: [${missing}], unexpected: [${extra}])`,
+    );
 
     // 3. search_cards otag:token-doubler
     const searchRes = await withTimeout(
