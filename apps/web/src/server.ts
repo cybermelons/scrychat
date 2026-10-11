@@ -1,6 +1,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import os from "node:os";
 import express from "express";
 import type { Request, Response } from "express";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -1880,7 +1881,17 @@ app.get(/^\/(?!api\/).*/, (_req: Request, res: Response) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`scrychat web listening on http://localhost:${PORT}`);
+  // Every non-loopback IPv4 this host answers on. `app.listen(PORT)` with no
+  // host already binds all interfaces, so a reader on another machine can use
+  // any of these -- and printing `localhost` told them the opposite. Plain
+  // http must use the ADDRESS: a *.ts.net name is HSTS-preloaded, so http
+  // forces https and fails with ERR_SSL_PROTOCOL_ERROR.
+  const addrs = Object.values(os.networkInterfaces())
+    .flatMap((ifaces) => ifaces ?? [])
+    .filter((i) => i.family === "IPv4" && !i.internal)
+    .map((i) => i.address);
+  console.log(`scrychat web listening on http://localhost:${PORT} (this host)`);
+  for (const a of addrs) console.log(`  reachable at http://${a}:${PORT}`);
   console.log(`repo root: ${REPO_ROOT}`);
   console.log(`mcp server: ${MCP_SERVER_PATH}`);
 });

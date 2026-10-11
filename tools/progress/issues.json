@@ -588,6 +588,8 @@
     "44": "Data error in two generated deck pages, not a target control: regenerate them. The behaviour that caused it is tracked by #47.",
     "63": "Research notes on card-similarity approaches, and the conclusion is to build nothing yet: otag already encodes function, which an oracle-text embedding would duplicate worse. No control follows until that changes.",
     "64": "A competitive analysis of other AI deckbuilders. It argues what the product already is, so it pins to no new control; where it names a gap, that gap gets its own issue.",
-    "65": "A feature inventory of one competitor, filling the undisclosed cells in #64's table. Its output is a doc and a correction diff, so it changes no control here; anything it turns into product work gets its own issue."
+    "65": "A feature inventory of one competitor, filling the undisclosed cells in #64's table. Its output is a doc and a correction diff, so it changes no control here; anything it turns into product work gets its own issue.",
+    "71": "Identity, per-user decks and quota attribution, deferred on purpose so the tailnet deploy (#72) can ship link-shared with one shared namespace. No control follows yet: the decision on record is that decks/ and chats/ stay a single namespace and subscription quota is shared among tailnet devices. When it is picked up it brings its own controls (a guest mode, a deck owner) and gets pinned then.",
+    "72": "Serving the app on the tailnet so a second device can open it. Deployment is how the target is REACHED, not a control inside it: app.listen already binds all interfaces (server.ts:1882), so the work is a host decision, a doc and one corrected log line. Pinning it would need an invented container in the mockup, which is the #60 mistake. Its own done-bar is a second tailnet device completing a chat turn."
   }
 }
