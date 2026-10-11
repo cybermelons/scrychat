@@ -289,6 +289,14 @@
       "state": "open",
       "title": "Make the tool-result cap one constant",
       "pin": "Every tool result is cut at TOOL_RESULT_MAX_CHARS=2048 (server.ts:154), which is what fills these chips. The number is also a bare literal in 9 other places -- 4 validators, a test asserting the boundary, and tools.ts:751, which sizes deck_present output to fit it -- so bumping the constant leaves them all lying. Found by the first B-fmt-7 run: a truncated result hides a real fetch and reads as a hallucination."
+    },
+    {
+      "n": 67,
+      "anchor": "#group-chips",
+      "side": "right",
+      "state": "open",
+      "title": "B-fmt-3 regressed: chips unpopulated",
+      "pin": "These chips should arrive populated from the server. B-fmt-3 passed in the recorded 6/6 Tier B run and now reports populatedChips=0 with sample=null -- none populated at all, so it reads as the fill path being gone rather than a format drift. Found while running B-fmt-7 for #47; not investigated."
     }
   ],
   "commit_base": "https://github.com/cybermelons/scrychat/commit/",
