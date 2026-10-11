@@ -5,3 +5,4 @@ chats/
 .DS_Store
 evals/transcripts/
 collection.json
+board-*.png

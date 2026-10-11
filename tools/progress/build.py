@@ -29,6 +29,63 @@ MOCKUP = Path(__file__).resolve().parent / 'mockup.html'
 REPO = 'cybermelons/scrychat'
 
 
+def scope_css(style, root):
+    """Prefix every selector in <style> blocks with `root`.
+
+    Keeps @media/@supports wrappers intact and skips @keyframes bodies, whose
+    `from`/`to`/`0%` steps are not selectors and must not be prefixed.
+    """
+    def scope_selector(sel):
+        sel = sel.strip()
+        if not sel or sel.startswith('@'):
+            return sel
+        out = []
+        for part in sel.split(','):
+            part = part.strip()
+            if not part:
+                continue
+            if part.startswith(':root') or part.startswith('html'):
+                out.append(root + part.split(' ', 1)[1] if ' ' in part else root)
+            elif part.startswith(root):
+                out.append(part)
+            else:
+                out.append(root + ' ' + part)
+        return ', '.join(out)
+
+    def scope_block(css):
+        res, i, n = [], 0, len(css)
+        while i < n:
+            brace = css.find('{', i)
+            if brace == -1:
+                res.append(css[i:])
+                break
+            sel = css[i:brace]
+            # find the matching close brace
+            depth, j = 1, brace + 1
+            while j < n and depth:
+                if css[j] == '{':
+                    depth += 1
+                elif css[j] == '}':
+                    depth -= 1
+                j += 1
+            body = css[brace + 1:j - 1]
+            head = sel.strip()
+            if head.startswith('@keyframes') or head.startswith('@font-face'):
+                res.append(sel + '{' + body + '}')
+            elif head.startswith('@'):
+                # nested at-rule: scope the selectors inside it
+                res.append(sel + '{' + scope_block(body) + '}')
+            else:
+                res.append(scope_selector(sel) + '{' + body + '}')
+            i = j
+        return ''.join(res)
+
+    def one(m):
+        return m.group(1) + scope_block(m.group(2)) + m.group(3)
+
+    return re.sub(r'(<style\b[^>]*>)(.*?)(</style>)', one, style, flags=re.S)
+
+
 def target_html():
     """The target UI: the body of mockup.html, with its own <style> kept.
 
@@ -40,6 +97,12 @@ def target_html():
         r'<style\b[^>]*>.*?</style>', raw, re.S))
     m = re.search(r'<body\b[^>]*>(.*)</body>', raw, re.S)
     body = m.group(1) if m else raw
+    # The mockup has no <body>, so `body` is the whole file and still carries
+    # the <style> block extracted above. Emitted again inside .target-root it
+    # is a second, UNSCOPED copy of every mockup rule, which is what actually
+    # clipped the board's progress meter to 8px. Drop it; `style` has it.
+    body = re.sub(r'<style\b[^>]*>.*?</style>', '', body, flags=re.S)
+    body = re.sub(r'<link\b[^>]*rel="stylesheet"[^>]*>', '', body)
     # the mockup's own annotation UI is not part of the target
     body = re.sub(r'<button[^>]*class="toggle"[^>]*>.*?</button>', '', body, flags=re.S)
     body = re.sub(r'<div class="legend">.*?</div>\s*</div>', '', body, flags=re.S)
@@ -49,6 +112,13 @@ def target_html():
     style = style.replace('html,body{margin:0;height:100%}',
                           '.target-root{margin:0}')
     style = re.sub(r'(?m)^body\{', '.target-root{', style)
+    # The mockup's stylesheet is global once embedded, and it shares class
+    # names with the board's own chrome (.meter, .note, .chip, .bar, .dot,
+    # .ok, .warn, .bad). Measured: the mockup's `.meter{height:8px}` clipped
+    # the board's progress meter to an 8px strip with its text hidden by
+    # overflow:hidden. Confine every mockup rule to the target subtree so a
+    # shared name cannot reach board chrome.
+    style = scope_css(style, '.target-root')
     style = style.replace('.workspace{min-height:600px}',
                           '.target-root .workspace{min-height:900px}')
     style = style.replace('display:grid; height:100%;', 'display:grid; height:900px;')
