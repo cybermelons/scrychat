@@ -4,18 +4,31 @@
  *
  * WHY THIS EXISTS AS ITS OWN MODULE
  *
- * apps/web truncates every tool result at TOOL_RESULT_MAX_CHARS (2048) before
- * the UI sees it. A slides result over that is cut mid-string, so it is no
- * longer valid JSON, so parseSlideSpec returns null (it only console.debug's),
- * so the slide strip silently becomes a plain tool chip. Nothing throws and
- * nothing goes red: the failure mode is a missing feature, not an error.
+ * HISTORY, because the original reason here was WRONG and the correction is
+ * the useful part. This module was written for #66 on the premise that
+ * "apps/web truncates every tool result at 2048 before the UI sees it", so an
+ * oversized slides result would be cut mid-string, fail JSON.parse, and make
+ * parseSlideSpec return null -- the slide strip silently degrading to a plain
+ * chip. The truncation was real and the silent degradation was real, but the
+ * cap itself was a DISPLAY bound (it keeps a blob out of the chip's
+ * data-result attribute and the hover popover) misapplied at capture time.
+ * #70 moved it to the render path, so the STORED result is no longer capped
+ * and nothing forces a slides payload under 2048 any more.
  *
- * deck_present therefore has to know the budget. It cannot import it: the
- * dependency arrow runs away from the web app (@scrychat/mcp depends on
- * @scrychat/core; apps/web does not depend on @scrychat/mcp, and mcp must not
- * depend on the web app, because the same server also mounts in a Claude Code
- * terminal session). So the number below is a MIRROR of
- * apps/web/src/server.ts's TOOL_RESULT_MAX_CHARS, exactly as
+ * WHY THE FITTER STAYS ANYWAY
+ *
+ * The popover still renders a capped copy, so a payload far over 2048 is
+ * unreadable there; and slides are the one result type with a natural
+ * priority order (Curve -> Quotas -> Queue -> Pending), so dropping the tail
+ * is a real choice the producer can make well and a generic truncator cannot.
+ * What changed is the stakes: overflow now costs popover legibility, not the
+ * whole feature. Do not re-describe this as preventing a parse failure.
+ *
+ * The number below is a MIRROR of TOOL_RESULT_MAX_CHARS in
+ * apps/web/src/truncate-core.ts, because the dependency arrow runs away from
+ * the web app (@scrychat/mcp depends on @scrychat/core; apps/web does not
+ * depend on @scrychat/mcp, and mcp must not depend on the web app, because
+ * the same server also mounts in a Claude Code terminal session) -- exactly as
  * apps/web/ui/src/attach-core.ts mirrors apps/web/src/image-core.ts. The
  * mirror is pinned by test/present-budget.test.ts, which reads the other file
  * and fails if the two numbers diverge.
@@ -33,8 +46,8 @@
  */
 
 /**
- * MIRROR of TOOL_RESULT_MAX_CHARS in apps/web/src/server.ts. Do not edit one
- * without the other -- test/present-budget.test.ts fails on drift.
+ * MIRROR of TOOL_RESULT_MAX_CHARS in apps/web/src/truncate-core.ts. Do not
+ * edit one without the other -- test/present-budget.test.ts fails on drift.
  */
 export const TOOL_RESULT_BUDGET_CHARS = 2048;
 

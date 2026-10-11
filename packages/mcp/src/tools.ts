@@ -842,14 +842,16 @@ export function registerTools(server: McpServer): void {
           slides.push({ title: "Pending", text: text || clip(line(pending[0]), 320) });
         }
 
-        // The per-field caps above are not the binding limit: apps/web truncates
-        // the WHOLE serialized result at 2048 chars, and a truncated slides
-        // result is invalid JSON, which the UI drops to a plain chip without an
-        // error. Measured 2026-10-11: all five quotas OFF with a full curve and
-        // a long pending line reaches 2223 chars while every individual field,
-        // html included, is comfortably inside its own cap. So fit the payload
-        // here, dropping whole low-priority slides rather than shipping one the
-        // UI will silently discard entirely.
+        // The per-field caps above do not bound the WHOLE serialized result:
+        // measured 2026-10-11, all five quotas OFF with a full curve and a long
+        // pending line reaches 2223 chars while every individual field, html
+        // included, is comfortably inside its own cap. Slides are the one
+        // result type with a natural priority order (Curve -> Quotas -> Queue
+        // -> Pending), so the producer can shed the tail sensibly where a
+        // generic truncator cannot. NOTE: this no longer prevents a parse
+        // failure -- #70 stopped apps/web capping the stored result, so
+        // overflow now only costs legibility in the hover popover, which still
+        // renders a capped copy. See present-budget.ts.
         const fitted = fitPresentSlides(deck.name, slides);
         return { kind: "slides", deck: deck.name, slides: fitted.slides };
       });

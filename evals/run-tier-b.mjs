@@ -488,7 +488,7 @@ async function main() {
         `claims=${report.claims.length} grounded=${report.grounded.length} ` +
           `ungrounded=${JSON.stringify(report.ungrounded.map((c) => c.name))} fetched=${report.fetched.length} ` +
           `persistedToolCalls=${calls.length} sseToolUses=${sseToolUses} ` +
-          `truncatedResults=${report.truncatedResults} (results are cut at 2048 chars; >0 means an ungrounded name may be a real, unseen fetch)`,
+          `truncatedResults=${report.truncatedResults} (>0 means a result was cut by an older build, so an ungrounded name may be a real but unseen fetch; #70 stopped capping stored results, so new runs should read 0)`,
       );
     } catch (err) {
       record("B-fmt-7", false, `threw: ${err.message}`);

@@ -25,12 +25,23 @@
  *
  * Results are used as well as inputs: search_cards, find_alternatives and
  * find_combos return card names a reply may legitimately cite. Result names
- * are pulled by regex over the raw string, per tool, because the persisted
- * result is truncated by the server (2048 chars, trailing "…") and is often
- * not valid JSON. Names whose closing quote was cut off are never emitted.
- * CONTRACT: a name past the truncation point is invisible here, so a claim
- * can be reported ungrounded when the fetch was real; `truncatedResults`
- * counts such results so callers can say so instead of crying wolf blindly.
+ * are pulled by regex over the raw string, per tool, rather than by
+ * JSON.parse, because a result can still arrive lossily cut (see below) and a
+ * regex degrades gracefully where a parse throws. Names whose closing quote
+ * was cut off are never emitted.
+ *
+ * CONTRACT (revised by #70): the server used to cap every stored result at
+ * 2048 chars, cutting mid-record. On the real "Grothama Fight Draw" deck that
+ * left 29 of 76 card names visible here, so B-fmt-7 reported genuinely
+ * fetched cards as ungrounded on every run. That cap was a display bound
+ * misapplied at capture time; results are now stored whole and the cap lives
+ * in the UI. New results are therefore complete.
+ *
+ * `truncatedResults` stays, for two reasons: chats/ on disk still holds
+ * results truncated by the old build, and a future change could reintroduce a
+ * capture-time cut. A nonzero count means names may be missing, so a claim can
+ * read ungrounded when the fetch was real -- treat it as "cannot distinguish
+ * hallucination from unseen fetch", not as a pass or a fail.
  * A tool call whose result is an error grounds nothing (a failed get_card
  * of a hallucinated name must not ground that name).
  *
@@ -197,6 +208,15 @@ function bareTool(name: string): string {
   return i < 0 ? name : name.slice(i + 2);
 }
 
+/**
+ * True when a result was cut and so may be missing card names. Post-#70 the
+ * server stores results whole, so this only fires on records written by an
+ * older build -- or on a regression that reintroduces a capture-time cut.
+ */
+export function isLossyTruncated(result: string): boolean {
+  return result.endsWith("…");
+}
+
 function collect(calls: ToolCall[]): { names: Set<string>; truncatedResults: number } {
   const names = new Set<string>();
   let truncatedResults = 0;
@@ -205,7 +225,10 @@ function collect(calls: ToolCall[]): { names: Set<string>; truncatedResults: num
     if (!spec) continue;
     const hasResult = typeof call.result === "string";
     if (hasResult && isErrorResult(call.result as string)) continue;
-    if (hasResult && (call.result as string).endsWith("…")) truncatedResults++;
+    // A cut result hides names (#70). Post-fix these are only records from
+    // an older build, but they must still be reported as unverifiable rather
+    // than scored as complete.
+    if (hasResult && isLossyTruncated(call.result as string)) truncatedResults++;
     const useInput = spec.inputs && !(spec.canonical && hasResult);
     const fromInput = useInput ? spec.inputs!(asObj(call.input)) : [];
     const fromResult = hasResult && spec.results ? spec.results(call.result as string) : [];

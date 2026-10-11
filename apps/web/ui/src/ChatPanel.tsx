@@ -38,12 +38,36 @@ function segmentsForMessage(m: { text: string; tools?: { name: string; input: un
   return segs;
 }
 
+/*
+ * MIRROR of TOOL_RESULT_MAX_CHARS in ../../src/truncate-core.ts (ui/ cannot
+ * import from src/: tsconfig.build.json sets rootDir=src), the same
+ * arrangement as attach-core.ts mirroring image-core.ts.
+ *
+ * #70: this cap used to be applied server-side when the result was captured,
+ * which cut the STORED json mid-record and so silently disabled parseSlideSpec
+ * / parseChartSpec and hid card names from the grounding check. Results now
+ * arrive whole and the cap applies here, at the only place the raw result is
+ * shown to a human. Keep it on this side of the boundary.
+ */
+const POPOVER_MAX_CHARS = 2048;
+
+/** Bound the per-chip DOM attribute; the popover re-formats what it gets. */
+function truncateForAttr(result: string): string {
+  return result.length > POPOVER_MAX_CHARS
+    ? `${result.slice(0, POPOVER_MAX_CHARS)}…`
+    : result;
+}
+
 function prettyResult(result: string): string {
+  let text: string;
   try {
-    return JSON.stringify(JSON.parse(result), null, 2);
+    text = JSON.stringify(JSON.parse(result), null, 2);
   } catch {
-    return result;
+    text = result;
   }
+  // Cap AFTER formatting: pretty-printing expands the string, so capping the
+  // raw json first would still hand the <pre> an oversized block.
+  return text.length > POPOVER_MAX_CHARS ? `${text.slice(0, POPOVER_MAX_CHARS)}…` : text;
 }
 
 // Tool chip result status: pulse while awaiting (result undefined), else
@@ -188,7 +212,10 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
           <div className="tool-chip-row" key={i}>
             <span
               className={`chip chip-tool chip-tool-${toolResultStatus(seg.result)}`}
-              data-result={seg.result ?? ""}
+              // Capped: this is a DOM attribute on every chip and its only
+              // reader is the hover popover (a human). The components below
+              // read seg.result directly, so they still get the whole thing.
+              data-result={seg.result ? truncateForAttr(seg.result) : ""}
             >
               ⚙ {toolChipLabel(seg.name, seg.input)}
             </span>

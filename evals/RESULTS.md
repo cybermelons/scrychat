@@ -113,3 +113,55 @@ FAIL: B-fmt-7 claims=5 grounded=2 ungrounded=["Black Market Connections","Cabal 
 ```
 
 B-fmt-7 remains the one real failure, tracked as #70. To restore B-fmt-3 to a running check on this host, run the card + tagger ingest (prior history shows a full ingest produced 217k `card_tags` rows).
+
+### Tier B run 2026-10-11 (third, after #70) — **6/7 PASSED, 1 SKIPPED (B-fmt-3)**, exit 1
+
+```
+OK:   B-fmt-7 claims=6 grounded=6 ungrounded=[] fetched=33
+      persistedToolCalls=3 sseToolUses=3 truncatedResults=0
+SKIP: B-fmt-3 no populated local mirror: exists=true cardCount=0 usableAsMirror=false.
+```
+
+**B-fmt-7 passes for the first time, and the earlier ungrounded names were not
+hallucinations.** `fetched` went 16 → 33 and `truncatedResults` 1 → 0 with no
+change to the model, the prompt or the check's logic — only to what the server
+stores.
+
+The diagnosis in the two runs above was right that truncation was the cause and
+wrong about what the cap was *for*. `TOOL_RESULT_MAX_CHARS` arrived in `a4420e4`
+("Rich chat rendering") alongside the tool chip and its hover popover: it is a
+**display** bound, sized to keep a blob out of `data-result` and the `<pre>`
+popover. It was never a model-context bound — the loop in `server.ts` is a
+read-only observer of the Agent SDK stream, and the model has already received
+the full result by the time that code runs — and never a storage bound either
+(all of `chats/` is 33 KB across 8 chats and 10 tool results).
+
+Applying a display bound at capture time is what broke two unrelated consumers.
+Measured on the real `grothama-fight-draw` deck:
+
+```
+deck_get full result      5458 chars → 76 names, valid JSON
+sliced at 2048            2049 chars → 29 names, INVALID JSON  (62% of the deck lost)
+```
+
+All 7 truncated results on disk are `deck_get`, every one cut mid-name
+(`...,{"name":"Ete…`). So `parseSlideSpec`/`parseChartSpec` silently returned
+null, and the grounding check could not see the back two thirds of any deck.
+
+**A record-boundary truncator was tried first and rejected on measurement**, not
+on argument: dropping whole trailing records keeps the JSON valid but preserved
+**28** names where the raw slice preserved **29** — the `__omitted` key and the
+closing braces for each emptied tag cost exactly the bytes the slice spent on
+names. B-fmt-7 would still have failed. Reshaping `deck_get` does not help
+either: `byTag` 5412 chars, a flat list 4421, bare names 1348 — only a shape
+that discards tags and counts fits under 2048, and the deck panel needs them.
+A 75-card deck and a 2048-char cap are incompatible.
+
+Fix: the cap moved to where it belongs. Results are stored and streamed whole;
+the cap applies in `ChatPanel.tsx` when rendering the popover and the
+`data-result` attribute, where dropping the tail costs nothing a human needs.
+`truncatedResults` stays in `grounding-core.ts` because `chats/` still holds
+records cut by the old build.
+
+Exit is still 1, correctly: B-fmt-3 skips for want of a populated mirror. To
+turn it back into a running check on this host, run the card + tagger ingest.

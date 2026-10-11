@@ -91,24 +91,38 @@ function buildSlides(opts: {
 }
 
 describe("the budget mirrors the web app", () => {
-  it("equals TOOL_RESULT_MAX_CHARS in apps/web/src/server.ts", () => {
-    const server = read("../../../apps/web/src/server.ts");
-    const m = server.match(
-      /export const TOOL_RESULT_MAX_CHARS\s*=\s*(\d+)\s*;/,
-    );
+  // #70 moved this constant: it lives in apps/web/src/truncate-core.ts now
+  // (server.ts re-exports it) and it is a DISPLAY cap on the hover popover,
+  // not a cap on the stored result. These two tests caught the move rather
+  // than letting the mirror rot -- the reason the second one exists.
+  it("equals TOOL_RESULT_MAX_CHARS in apps/web/src/truncate-core.ts", () => {
+    const core = read("../../../apps/web/src/truncate-core.ts");
+    const m = core.match(/export const TOOL_RESULT_MAX_CHARS\s*=\s*(\d+)\s*;/);
     // If this is null the constant was renamed or un-exported -- the mirror
     // cannot be checked at all, which is itself the failure.
-    expect(m, "TOOL_RESULT_MAX_CHARS not found/exported in server.ts").not.toBeNull();
+    expect(m, "TOOL_RESULT_MAX_CHARS not found/exported in truncate-core.ts").not.toBeNull();
     expect(Number(m![1])).toBe(TOOL_RESULT_BUDGET_CHARS);
   });
 
-  it("is the number the web app actually slices at", () => {
-    const server = read("../../../apps/web/src/server.ts");
-    // The constant is only a budget if truncateResult uses it; a renamed-but-
-    // unused constant would keep the test above green.
-    expect(server).toMatch(/TOOL_RESULT_MAX_CHARS/);
-    const uses = server.match(/TOOL_RESULT_MAX_CHARS/g) ?? [];
+  it("is the number the display path actually slices at", () => {
+    const core = read("../../../apps/web/src/truncate-core.ts");
+    // The constant is only a cap if truncateForDisplay uses it; a
+    // renamed-but-unused constant would keep the test above green.
+    const uses = core.match(/TOOL_RESULT_MAX_CHARS/g) ?? [];
     expect(uses.length).toBeGreaterThan(1);
+  });
+
+  it("the stored result is NOT capped (the #70 fix)", () => {
+    // The defect was a display bound applied at capture time. If a future
+    // change reintroduces truncation in the SSE/persist path, deck_present's
+    // slides and the grounding check both go silently blind again, so pin the
+    // absence here rather than trusting a comment.
+    const server = read("../../../apps/web/src/server.ts");
+    const captureLine = server
+      .split("\n")
+      .find((l) => l.includes("const result = ") && l.includes("stringifyToolResultContent"));
+    expect(captureLine, "tool_result capture line not found in server.ts").toBeTruthy();
+    expect(captureLine).not.toMatch(/truncate|slice/i);
   });
 });
 

@@ -152,25 +152,17 @@ type ChatMsg = {
 };
 
 /*
- * Longest tool result the UI will receive. Exported because it is a BUDGET the
- * producer has to fit inside, not just a local slicing detail: a result over
- * this is cut mid-string, so a JSON result fails JSON.parse in every *-core
- * validator and the component silently falls back to a plain tool chip. No
- * error is raised anywhere -- see truncateResult below.
+ * Re-exported for packages/mcp's mirror test, which reads this app to check
+ * the number deck_present sizes against. It is a DISPLAY cap, owned and
+ * explained by truncate-core.ts: it bounds what the hover popover renders,
+ * NOT what is stored or streamed, and never bounded the model's context (the
+ * SDK hands the model the untruncated result before this app observes it).
  *
- * packages/mcp CANNOT import this: the dependency arrow runs the other way
- * (@scrychat/mcp depends on @scrychat/core; apps/web does not depend on mcp,
- * and mcp must not depend on the web app). So deck_present sizes its output
- * against a MIRRORED copy of this number, the same arrangement as
- * ui/src/attach-core.ts mirroring src/image-core.ts. The mirror is pinned by
- * packages/mcp/test/present-budget.test.ts, which recomputes the producer's worst case
- * and fails if it no longer fits -- drift here is otherwise invisible.
+ * #70: do not reapply this when capturing a tool_result. Cutting the stored
+ * string mid-record made it invalid JSON, which silently disabled every
+ * parse*Spec component and hid card names from the grounding check.
  */
-export const TOOL_RESULT_MAX_CHARS = 2048;
-
-function truncateResult(s: string): string {
-  return s.length > TOOL_RESULT_MAX_CHARS ? `${s.slice(0, TOOL_RESULT_MAX_CHARS)}…` : s;
-}
+export { TOOL_RESULT_MAX_CHARS } from "./truncate-core.js";
 
 // Extract a plain-text rendering of an SDK tool_result content block's `content`,
 // which may be a string or an array of {type:"text", text} blocks.
@@ -658,7 +650,15 @@ app.post("/api/chat", async (req: Request, res: Response) => {
               if (!toolUseId) continue;
               const idx = toolSegmentByUseId.get(toolUseId);
               if (idx === undefined) continue;
-              const result = truncateResult(stringifyToolResultContent((block as any).content));
+              // #70: store and stream the result WHOLE. The 2048-char cap
+              // that used to be applied here is a display bound (it keeps a
+              // blob out of data-result and the hover popover) and is now
+              // applied at render time instead. Cutting at capture made the
+              // stored JSON invalid, which silently disabled every
+              // parse*Spec component and hid card names from the grounding
+              // check -- measured on the real deck, 29 of 76 names survived.
+              // See truncate-core.ts.
+              const result = stringifyToolResultContent((block as any).content);
               const seg = segments[idx];
               if (seg && seg.type === "tool") seg.result = result;
               sseWrite(res, { type: "tool-result", toolIndex: idx, result });
