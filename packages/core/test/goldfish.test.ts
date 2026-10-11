@@ -190,7 +190,8 @@ describe("resolveDeckLibrary", () => {
 describe("goldfishChart", () => {
   const result = (over: Partial<GoldfishResult> = {}): GoldfishResult => ({
     iterations: 1000, seed: 0, maxTurns: 3, mulliganRate: 0.12, turnToCast: {},
-    manaAvailable: [0, 1, 2, 3], stalledGames: 3, castByTurn: [0, 0.5, 1.5, 2.5], ...over,
+    manaAvailable: [0, 1, 2, 3], stalledGames: 3, castByTurn: [0, 0.5, 1.5, 2.5],
+    turnsToOnline: 2.5, onlineThreshold: 3, ...over,
   });
 
   it("drops the unused index 0", () => {

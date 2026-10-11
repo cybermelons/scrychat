@@ -7,7 +7,7 @@
  * and the renderer. No DOM, no React — ChatPanel owns the rendering.
  */
 
-import type { ChartSpec } from "./types";
+import type { ChartSpec } from "./types.js";
 
 /** Longest `data` array the renderer will draw. Keeps one bad spec from
  *  emitting thousands of DOM nodes. */
