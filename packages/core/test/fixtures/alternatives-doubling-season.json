@@ -1,0 +1,761 @@
+{
+ "note": "Captured from api.scryfall.com. Trimmed to the fields mapCard reads. Regenerate only if findAlternatives' request sequence changes.",
+ "expected": {
+  "card": "Doubling Season",
+  "roles": [
+   {
+    "slug": "token-doubler",
+    "label": "token doubler",
+    "members": [
+     {
+      "name": "Exalted Sunborn",
+      "manaCost": "{3}{W}{W}",
+      "cmc": 5,
+      "typeLine": "Creature — Angel Wizard",
+      "oracleText": "Flying, lifelink\nIf one or more tokens would be created under your control, twice that many of those tokens are created instead.\nWarp {1}{W} (You may cast this card from your hand for its warp cost. Exile this creature at the beginning of the next end step, then you may cast it from exile on a later turn.)",
+      "colorIdentity": [
+       "W"
+      ],
+      "usd": 17.86,
+      "edhrecRank": 1316,
+      "image": "https://cards.scryfall.io/normal/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.jpg?1783905778",
+      "uri": "https://api.scryfall.com/cards/e6702f47-cb5c-46fc-a611-f2194ec5c851",
+      "legalCommander": true,
+      "arena": false,
+      "brawlLegal": true,
+      "standardBrawlLegal": true,
+      "historicLegal": true,
+      "timelessLegal": true,
+      "producedMana": null,
+      "oracleId": "43febbcd-ecbe-4edb-ad90-7fc6dc381d05",
+      "arenaId": null
+     },
+     {
+      "name": "Parallel Evolution",
+      "manaCost": "{3}{G}{G}",
+      "cmc": 5,
+      "typeLine": "Sorcery",
+      "oracleText": "For each creature token on the battlefield, its controller creates a token that's a copy of that creature.\nFlashback {4}{G}{G}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+      "colorIdentity": [
+       "G"
+      ],
+      "usd": 5.68,
+      "edhrecRank": 11975,
+      "image": "https://cards.scryfall.io/normal/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.jpg?1783929661",
+      "uri": "https://api.scryfall.com/cards/d298cb23-e025-4284-865e-0e55e115e69f",
+      "legalCommander": true,
+      "arena": false,
+      "brawlLegal": false,
+      "standardBrawlLegal": false,
+      "historicLegal": false,
+      "timelessLegal": false,
+      "producedMana": null,
+      "oracleId": "963cfdbe-775c-4267-a617-66f10e9d7f4f",
+      "arenaId": null
+     },
+     {
+      "name": "Primal Vigor",
+      "manaCost": "{4}{G}",
+      "cmc": 5,
+      "typeLine": "Enchantment",
+      "oracleText": "If one or more tokens would be created, twice that many of those tokens are created instead.\nIf one or more +1/+1 counters would be put on a creature, twice that many +1/+1 counters are put on that creature instead.",
+      "colorIdentity": [
+       "G"
+      ],
+      "usd": 6.42,
+      "edhrecRank": 1225,
+      "image": "https://cards.scryfall.io/normal/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.jpg?1783903309",
+      "uri": "https://api.scryfall.com/cards/38d16f3a-a20f-4e98-8085-e4e09bc525d6",
+      "legalCommander": true,
+      "arena": true,
+      "brawlLegal": true,
+      "standardBrawlLegal": false,
+      "historicLegal": true,
+      "timelessLegal": true,
+      "producedMana": null,
+      "oracleId": "c665544f-557b-4631-a1dc-39571470ca2e",
+      "arenaId": 105245
+     },
+     {
+      "name": "Renewed Solidarity",
+      "manaCost": "{2}{W}",
+      "cmc": 3,
+      "typeLine": "Enchantment",
+      "oracleText": "As this enchantment enters, choose a creature type.\nCreatures you control of the chosen type get +1/+0.\nAt the beginning of your end step, for each token you control of the chosen type that entered this turn, create a token that's a copy of it.",
+      "colorIdentity": [
+       "W"
+      ],
+      "usd": 4.66,
+      "edhrecRank": 1706,
+      "image": "https://cards.scryfall.io/normal/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.jpg?1783907752",
+      "uri": "https://api.scryfall.com/cards/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47",
+      "legalCommander": true,
+      "arena": false,
+      "brawlLegal": false,
+      "standardBrawlLegal": false,
+      "historicLegal": false,
+      "timelessLegal": false,
+      "producedMana": null,
+      "oracleId": "bea3ff6e-7649-4e51-b2ad-763f9ac2d4b8",
+      "arenaId": null
+     },
+     {
+      "name": "Rhys the Redeemed",
+      "manaCost": "{G/W}",
+      "cmc": 1,
+      "typeLine": "Legendary Creature — Elf Warrior",
+      "oracleText": "{2}{G/W}, {T}: Create a 1/1 green and white Elf Warrior creature token.\n{4}{G/W}{G/W}, {T}: For each creature token you control, create a token that's a copy of that creature.",
+      "colorIdentity": [
+       "G",
+       "W"
+      ],
+      "usd": 0.61,
+      "edhrecRank": 3379,
+      "image": "https://cards.scryfall.io/normal/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.jpg?1788990214",
+      "uri": "https://api.scryfall.com/cards/af107542-ebf3-4a35-a313-b8803d8eda0c",
+      "legalCommander": true,
+      "arena": false,
+      "brawlLegal": true,
+      "standardBrawlLegal": false,
+      "historicLegal": true,
+      "timelessLegal": true,
+      "producedMana": null,
+      "oracleId": "f7252190-ad24-4ba3-a644-2790dd1d680d",
+      "arenaId": null
+     },
+     {
+      "name": "Second Harvest",
+      "manaCost": "{2}{G}{G}",
+      "cmc": 4,
+      "typeLine": "Instant",
+      "oracleText": "For each token you control, create a token that's a copy of that permanent.",
+      "colorIdentity": [
+       "G"
+      ],
+      "usd": 3.93,
+      "edhrecRank": 560,
+      "image": "https://cards.scryfall.io/normal/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.jpg?1783908002",
+      "uri": "https://api.scryfall.com/cards/a1ed6d4f-9c1b-4007-899a-e2209996dd0d",
+      "legalCommander": true,
+      "arena": false,
+      "brawlLegal": true,
+      "standardBrawlLegal": false,
+      "historicLegal": true,
+      "timelessLegal": true,
+      "producedMana": null,
+      "oracleId": "61a6341e-0d36-44b6-8026-9c87c8ef61cb",
+      "arenaId": null
+     }
+    ]
+   }
+  ]
+ },
+ "responses": [
+  {
+   "url": "https://api.scryfall.com/cards/named?fuzzy=Doubling+Season",
+   "status": 200,
+   "body": {
+    "name": "Doubling Season",
+    "mana_cost": "{4}{G}",
+    "cmc": 5,
+    "type_line": "Enchantment",
+    "oracle_text": "If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.\nIf an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead.",
+    "color_identity": [
+     "G"
+    ],
+    "prices": {
+     "usd": "33.57",
+     "usd_foil": "35.32",
+     "usd_etched": null,
+     "eur": "21.09",
+     "eur_foil": "23.01",
+     "tix": "0.02"
+    },
+    "edhrec_rank": 189,
+    "image_uris": {
+     "small": "https://cards.scryfall.io/small/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+     "normal": "https://cards.scryfall.io/normal/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+     "large": "https://cards.scryfall.io/large/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+     "png": "https://cards.scryfall.io/png/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.png?1783909062",
+     "art_crop": "https://cards.scryfall.io/art_crop/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+     "border_crop": "https://cards.scryfall.io/border_crop/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+     "thumb": "https://cards.scryfall.io/thumb/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.webp?1783909062",
+     "grid": "https://cards.scryfall.io/grid/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.webp?1783909062",
+     "display": "https://cards.scryfall.io/display/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.webp?1783909062",
+     "art": "https://cards.scryfall.io/art/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.webp?1783909062",
+     "crop": "https://cards.scryfall.io/crop/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.webp?1783909062"
+    },
+    "uri": "https://api.scryfall.com/cards/f2c4f80e-84a0-463b-82c3-5c6503809351",
+    "legalities": {
+     "standard": "legal",
+     "future": "legal",
+     "historic": "legal",
+     "timeless": "legal",
+     "gladiator": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "pauper": "not_legal",
+     "vintage": "legal",
+     "penny": "legal",
+     "commander": "legal",
+     "oathbreaker": "legal",
+     "standardbrawl": "legal",
+     "brawl": "legal",
+     "competitivebrawl": "legal",
+     "alchemy": "legal",
+     "paupercommander": "not_legal",
+     "duel": "legal",
+     "oldschool": "not_legal",
+     "premodern": "not_legal",
+     "predh": "legal",
+     "tlr": "not_legal"
+    },
+    "games": [
+     "paper",
+     "arena",
+     "mtgo"
+    ],
+    "oracle_id": "01546b7d-a233-4176-8843-d732074dc5b6",
+    "arena_id": 93929
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Amana-storage+%21%22Doubling+Season%22",
+   "status": 404,
+   "body": {
+    "object": "error",
+    "code": "not_found"
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Atoken-versions-of-cards+%21%22Doubling+Season%22",
+   "status": 404,
+   "body": {
+    "object": "error",
+    "code": "not_found"
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Atokenlink+%21%22Doubling+Season%22",
+   "status": 404,
+   "body": {
+    "object": "error",
+    "code": "not_found"
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Arepeatable-token-generator+%21%22Doubling+Season%22",
+   "status": 404,
+   "body": {
+    "object": "error",
+    "code": "not_found"
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Acreates-oracle-copy+%21%22Doubling+Season%22",
+   "status": 404,
+   "body": {
+    "object": "error",
+    "code": "not_found"
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Akrarks-other-thumb-effect+%21%22Doubling+Season%22",
+   "status": 404,
+   "body": {
+    "object": "error",
+    "code": "not_found"
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Apillage-effect+%21%22Doubling+Season%22",
+   "status": 404,
+   "body": {
+    "object": "error",
+    "code": "not_found"
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Avigor-effect+%21%22Doubling+Season%22",
+   "status": 404,
+   "body": {
+    "object": "error",
+    "code": "not_found"
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Atoken-doubler+%21%22Doubling+Season%22",
+   "status": 200,
+   "body": {
+    "object": "list",
+    "total_cards": 1,
+    "has_more": false,
+    "data": [
+     {
+      "name": "Doubling Season",
+      "mana_cost": "{4}{G}",
+      "cmc": 5,
+      "type_line": "Enchantment",
+      "oracle_text": "If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.\nIf an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead.",
+      "color_identity": [
+       "G"
+      ],
+      "prices": {
+       "usd": "33.57",
+       "usd_foil": "35.32",
+       "usd_etched": null,
+       "eur": "21.09",
+       "eur_foil": "23.01",
+       "tix": "0.02"
+      },
+      "edhrec_rank": 189,
+      "image_uris": {
+       "small": "https://cards.scryfall.io/small/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+       "normal": "https://cards.scryfall.io/normal/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+       "large": "https://cards.scryfall.io/large/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+       "png": "https://cards.scryfall.io/png/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.png?1783909062",
+       "art_crop": "https://cards.scryfall.io/art_crop/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+       "border_crop": "https://cards.scryfall.io/border_crop/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+       "thumb": "https://cards.scryfall.io/thumb/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.webp?1783909062",
+       "grid": "https://cards.scryfall.io/grid/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.webp?1783909062",
+       "display": "https://cards.scryfall.io/display/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.webp?1783909062",
+       "art": "https://cards.scryfall.io/art/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.webp?1783909062",
+       "crop": "https://cards.scryfall.io/crop/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.webp?1783909062"
+      },
+      "uri": "https://api.scryfall.com/cards/f2c4f80e-84a0-463b-82c3-5c6503809351",
+      "legalities": {
+       "standard": "legal",
+       "future": "legal",
+       "historic": "legal",
+       "timeless": "legal",
+       "gladiator": "legal",
+       "pioneer": "legal",
+       "modern": "legal",
+       "legacy": "legal",
+       "pauper": "not_legal",
+       "vintage": "legal",
+       "penny": "legal",
+       "commander": "legal",
+       "oathbreaker": "legal",
+       "standardbrawl": "legal",
+       "brawl": "legal",
+       "competitivebrawl": "legal",
+       "alchemy": "legal",
+       "paupercommander": "not_legal",
+       "duel": "legal",
+       "oldschool": "not_legal",
+       "premodern": "not_legal",
+       "predh": "legal",
+       "tlr": "not_legal"
+      },
+      "games": [
+       "paper",
+       "arena",
+       "mtgo"
+      ],
+      "oracle_id": "01546b7d-a233-4176-8843-d732074dc5b6",
+      "arena_id": 93929
+     }
+    ]
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Azoo+%21%22Doubling+Season%22",
+   "status": 404,
+   "body": {
+    "object": "error",
+    "code": "not_found"
+   }
+  },
+  {
+   "url": "https://api.scryfall.com/cards/search?q=otag%3Atoken-doubler+legal%3Acommander+-%21%22Doubling+Season%22+id%3C%3Dgw+usd%3C20+prefer%3Ausd-low",
+   "status": 200,
+   "body": {
+    "object": "list",
+    "total_cards": 6,
+    "has_more": false,
+    "data": [
+     {
+      "name": "Exalted Sunborn",
+      "mana_cost": "{3}{W}{W}",
+      "cmc": 5,
+      "type_line": "Creature — Angel Wizard",
+      "oracle_text": "Flying, lifelink\nIf one or more tokens would be created under your control, twice that many of those tokens are created instead.\nWarp {1}{W} (You may cast this card from your hand for its warp cost. Exile this creature at the beginning of the next end step, then you may cast it from exile on a later turn.)",
+      "color_identity": [
+       "W"
+      ],
+      "prices": {
+       "usd": "17.86",
+       "usd_foil": "19.50",
+       "usd_etched": null,
+       "eur": "15.65",
+       "eur_foil": "15.81",
+       "tix": null
+      },
+      "edhrec_rank": 1316,
+      "image_uris": {
+       "small": "https://cards.scryfall.io/small/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.jpg?1783905778",
+       "normal": "https://cards.scryfall.io/normal/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.jpg?1783905778",
+       "large": "https://cards.scryfall.io/large/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.jpg?1783905778",
+       "png": "https://cards.scryfall.io/png/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.png?1783905778",
+       "art_crop": "https://cards.scryfall.io/art_crop/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.jpg?1783905778",
+       "border_crop": "https://cards.scryfall.io/border_crop/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.jpg?1783905778",
+       "thumb": "https://cards.scryfall.io/thumb/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.webp?1783905778",
+       "grid": "https://cards.scryfall.io/grid/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.webp?1783905778",
+       "display": "https://cards.scryfall.io/display/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.webp?1783905778",
+       "art": "https://cards.scryfall.io/art/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.webp?1783905778",
+       "crop": "https://cards.scryfall.io/crop/front/e/6/e6702f47-cb5c-46fc-a611-f2194ec5c851.webp?1783905778"
+      },
+      "uri": "https://api.scryfall.com/cards/e6702f47-cb5c-46fc-a611-f2194ec5c851",
+      "legalities": {
+       "standard": "legal",
+       "future": "legal",
+       "historic": "legal",
+       "timeless": "legal",
+       "gladiator": "legal",
+       "pioneer": "legal",
+       "modern": "legal",
+       "legacy": "legal",
+       "pauper": "not_legal",
+       "vintage": "legal",
+       "penny": "not_legal",
+       "commander": "legal",
+       "oathbreaker": "legal",
+       "standardbrawl": "legal",
+       "brawl": "legal",
+       "competitivebrawl": "legal",
+       "alchemy": "legal",
+       "paupercommander": "not_legal",
+       "duel": "legal",
+       "oldschool": "not_legal",
+       "premodern": "not_legal",
+       "predh": "not_legal",
+       "tlr": "not_legal"
+      },
+      "games": [
+       "paper"
+      ],
+      "oracle_id": "43febbcd-ecbe-4edb-ad90-7fc6dc381d05"
+     },
+     {
+      "name": "Parallel Evolution",
+      "mana_cost": "{3}{G}{G}",
+      "cmc": 5,
+      "type_line": "Sorcery",
+      "oracle_text": "For each creature token on the battlefield, its controller creates a token that's a copy of that creature.\nFlashback {4}{G}{G}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+      "color_identity": [
+       "G"
+      ],
+      "prices": {
+       "usd": "5.68",
+       "usd_foil": null,
+       "usd_etched": null,
+       "eur": "2.64",
+       "eur_foil": null,
+       "tix": null
+      },
+      "edhrec_rank": 11975,
+      "image_uris": {
+       "small": "https://cards.scryfall.io/small/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.jpg?1783929661",
+       "normal": "https://cards.scryfall.io/normal/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.jpg?1783929661",
+       "large": "https://cards.scryfall.io/large/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.jpg?1783929661",
+       "png": "https://cards.scryfall.io/png/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.png?1783929661",
+       "art_crop": "https://cards.scryfall.io/art_crop/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.jpg?1783929661",
+       "border_crop": "https://cards.scryfall.io/border_crop/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.jpg?1783929661",
+       "thumb": "https://cards.scryfall.io/thumb/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.webp?1783929661",
+       "grid": "https://cards.scryfall.io/grid/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.webp?1783929661",
+       "display": "https://cards.scryfall.io/display/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.webp?1783929661",
+       "art": "https://cards.scryfall.io/art/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.webp?1783929661",
+       "crop": "https://cards.scryfall.io/crop/front/d/2/d298cb23-e025-4284-865e-0e55e115e69f.webp?1783929661"
+      },
+      "uri": "https://api.scryfall.com/cards/d298cb23-e025-4284-865e-0e55e115e69f",
+      "legalities": {
+       "standard": "not_legal",
+       "future": "not_legal",
+       "historic": "not_legal",
+       "timeless": "not_legal",
+       "gladiator": "not_legal",
+       "pioneer": "not_legal",
+       "modern": "not_legal",
+       "legacy": "legal",
+       "pauper": "not_legal",
+       "vintage": "legal",
+       "penny": "not_legal",
+       "commander": "legal",
+       "oathbreaker": "legal",
+       "standardbrawl": "not_legal",
+       "brawl": "not_legal",
+       "competitivebrawl": "not_legal",
+       "alchemy": "not_legal",
+       "paupercommander": "not_legal",
+       "duel": "legal",
+       "oldschool": "not_legal",
+       "premodern": "legal",
+       "predh": "legal",
+       "tlr": "not_legal"
+      },
+      "games": [
+       "paper"
+      ],
+      "oracle_id": "963cfdbe-775c-4267-a617-66f10e9d7f4f"
+     },
+     {
+      "name": "Primal Vigor",
+      "mana_cost": "{4}{G}",
+      "cmc": 5,
+      "type_line": "Enchantment",
+      "oracle_text": "If one or more tokens would be created, twice that many of those tokens are created instead.\nIf one or more +1/+1 counters would be put on a creature, twice that many +1/+1 counters are put on that creature instead.",
+      "color_identity": [
+       "G"
+      ],
+      "prices": {
+       "usd": "6.42",
+       "usd_foil": "6.66",
+       "usd_etched": null,
+       "eur": "3.12",
+       "eur_foil": "3.82",
+       "tix": "0.08"
+      },
+      "edhrec_rank": 1225,
+      "image_uris": {
+       "small": "https://cards.scryfall.io/small/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.jpg?1783903309",
+       "normal": "https://cards.scryfall.io/normal/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.jpg?1783903309",
+       "large": "https://cards.scryfall.io/large/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.jpg?1783903309",
+       "png": "https://cards.scryfall.io/png/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.png?1783903309",
+       "art_crop": "https://cards.scryfall.io/art_crop/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.jpg?1783903309",
+       "border_crop": "https://cards.scryfall.io/border_crop/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.jpg?1783903309",
+       "thumb": "https://cards.scryfall.io/thumb/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.webp?1783903309",
+       "grid": "https://cards.scryfall.io/grid/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.webp?1783903309",
+       "display": "https://cards.scryfall.io/display/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.webp?1783903309",
+       "art": "https://cards.scryfall.io/art/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.webp?1783903309",
+       "crop": "https://cards.scryfall.io/crop/front/3/8/38d16f3a-a20f-4e98-8085-e4e09bc525d6.webp?1783903309"
+      },
+      "uri": "https://api.scryfall.com/cards/38d16f3a-a20f-4e98-8085-e4e09bc525d6",
+      "legalities": {
+       "standard": "not_legal",
+       "future": "not_legal",
+       "historic": "legal",
+       "timeless": "legal",
+       "gladiator": "legal",
+       "pioneer": "not_legal",
+       "modern": "not_legal",
+       "legacy": "legal",
+       "pauper": "not_legal",
+       "vintage": "legal",
+       "penny": "legal",
+       "commander": "legal",
+       "oathbreaker": "legal",
+       "standardbrawl": "not_legal",
+       "brawl": "legal",
+       "competitivebrawl": "legal",
+       "alchemy": "not_legal",
+       "paupercommander": "not_legal",
+       "duel": "legal",
+       "oldschool": "not_legal",
+       "premodern": "not_legal",
+       "predh": "not_legal",
+       "tlr": "not_legal"
+      },
+      "games": [
+       "paper",
+       "mtgo",
+       "arena"
+      ],
+      "oracle_id": "c665544f-557b-4631-a1dc-39571470ca2e",
+      "arena_id": 105245
+     },
+     {
+      "name": "Renewed Solidarity",
+      "mana_cost": "{2}{W}",
+      "cmc": 3,
+      "type_line": "Enchantment",
+      "oracle_text": "As this enchantment enters, choose a creature type.\nCreatures you control of the chosen type get +1/+0.\nAt the beginning of your end step, for each token you control of the chosen type that entered this turn, create a token that's a copy of it.",
+      "color_identity": [
+       "W"
+      ],
+      "prices": {
+       "usd": "4.66",
+       "usd_foil": null,
+       "usd_etched": null,
+       "eur": "5.95",
+       "eur_foil": null,
+       "tix": "6.27"
+      },
+      "edhrec_rank": 1706,
+      "image_uris": {
+       "small": "https://cards.scryfall.io/small/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.jpg?1783907752",
+       "normal": "https://cards.scryfall.io/normal/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.jpg?1783907752",
+       "large": "https://cards.scryfall.io/large/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.jpg?1783907752",
+       "png": "https://cards.scryfall.io/png/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.png?1783907752",
+       "art_crop": "https://cards.scryfall.io/art_crop/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.jpg?1783907752",
+       "border_crop": "https://cards.scryfall.io/border_crop/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.jpg?1783907752",
+       "thumb": "https://cards.scryfall.io/thumb/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.webp?1783907752",
+       "grid": "https://cards.scryfall.io/grid/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.webp?1783907752",
+       "display": "https://cards.scryfall.io/display/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.webp?1783907752",
+       "art": "https://cards.scryfall.io/art/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.webp?1783907752",
+       "crop": "https://cards.scryfall.io/crop/front/9/a/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47.webp?1783907752"
+      },
+      "uri": "https://api.scryfall.com/cards/9a72b230-dbb0-4d38-ba7a-fb0bd03b6c47",
+      "legalities": {
+       "standard": "not_legal",
+       "future": "not_legal",
+       "historic": "not_legal",
+       "timeless": "not_legal",
+       "gladiator": "not_legal",
+       "pioneer": "not_legal",
+       "modern": "not_legal",
+       "legacy": "legal",
+       "pauper": "not_legal",
+       "vintage": "legal",
+       "penny": "not_legal",
+       "commander": "legal",
+       "oathbreaker": "legal",
+       "standardbrawl": "not_legal",
+       "brawl": "not_legal",
+       "competitivebrawl": "not_legal",
+       "alchemy": "not_legal",
+       "paupercommander": "not_legal",
+       "duel": "legal",
+       "oldschool": "not_legal",
+       "premodern": "not_legal",
+       "predh": "not_legal",
+       "tlr": "legal"
+      },
+      "games": [
+       "paper",
+       "mtgo"
+      ],
+      "oracle_id": "bea3ff6e-7649-4e51-b2ad-763f9ac2d4b8"
+     },
+     {
+      "name": "Rhys the Redeemed",
+      "mana_cost": "{G/W}",
+      "cmc": 1,
+      "type_line": "Legendary Creature — Elf Warrior",
+      "oracle_text": "{2}{G/W}, {T}: Create a 1/1 green and white Elf Warrior creature token.\n{4}{G/W}{G/W}, {T}: For each creature token you control, create a token that's a copy of that creature.",
+      "color_identity": [
+       "G",
+       "W"
+      ],
+      "prices": {
+       "usd": "0.61",
+       "usd_foil": null,
+       "usd_etched": null,
+       "eur": null,
+       "eur_foil": null,
+       "tix": null
+      },
+      "edhrec_rank": 3379,
+      "image_uris": {
+       "small": "https://cards.scryfall.io/small/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.jpg?1788990214",
+       "normal": "https://cards.scryfall.io/normal/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.jpg?1788990214",
+       "large": "https://cards.scryfall.io/large/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.jpg?1788990214",
+       "png": "https://cards.scryfall.io/png/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.png?1788990214",
+       "art_crop": "https://cards.scryfall.io/art_crop/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.jpg?1788990214",
+       "border_crop": "https://cards.scryfall.io/border_crop/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.jpg?1788990214",
+       "thumb": "https://cards.scryfall.io/thumb/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.webp?1788990214",
+       "grid": "https://cards.scryfall.io/grid/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.webp?1788990214",
+       "display": "https://cards.scryfall.io/display/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.webp?1788990214",
+       "art": "https://cards.scryfall.io/art/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.webp?1788990214",
+       "crop": "https://cards.scryfall.io/crop/front/a/f/af107542-ebf3-4a35-a313-b8803d8eda0c.webp?1788990214"
+      },
+      "uri": "https://api.scryfall.com/cards/af107542-ebf3-4a35-a313-b8803d8eda0c",
+      "legalities": {
+       "standard": "not_legal",
+       "future": "not_legal",
+       "historic": "legal",
+       "timeless": "legal",
+       "gladiator": "legal",
+       "pioneer": "not_legal",
+       "modern": "legal",
+       "legacy": "legal",
+       "pauper": "not_legal",
+       "vintage": "legal",
+       "penny": "legal",
+       "commander": "legal",
+       "oathbreaker": "legal",
+       "standardbrawl": "not_legal",
+       "brawl": "legal",
+       "competitivebrawl": "legal",
+       "alchemy": "not_legal",
+       "paupercommander": "not_legal",
+       "duel": "legal",
+       "oldschool": "not_legal",
+       "premodern": "not_legal",
+       "predh": "legal",
+       "tlr": "legal"
+      },
+      "games": [
+       "paper"
+      ],
+      "oracle_id": "f7252190-ad24-4ba3-a644-2790dd1d680d"
+     },
+     {
+      "name": "Second Harvest",
+      "mana_cost": "{2}{G}{G}",
+      "cmc": 4,
+      "type_line": "Instant",
+      "oracle_text": "For each token you control, create a token that's a copy of that permanent.",
+      "color_identity": [
+       "G"
+      ],
+      "prices": {
+       "usd": "3.93",
+       "usd_foil": "3.76",
+       "usd_etched": null,
+       "eur": "2.20",
+       "eur_foil": "1.86",
+       "tix": "0.29"
+      },
+      "edhrec_rank": 560,
+      "image_uris": {
+       "small": "https://cards.scryfall.io/small/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.jpg?1783908002",
+       "normal": "https://cards.scryfall.io/normal/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.jpg?1783908002",
+       "large": "https://cards.scryfall.io/large/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.jpg?1783908002",
+       "png": "https://cards.scryfall.io/png/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.png?1783908002",
+       "art_crop": "https://cards.scryfall.io/art_crop/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.jpg?1783908002",
+       "border_crop": "https://cards.scryfall.io/border_crop/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.jpg?1783908002",
+       "thumb": "https://cards.scryfall.io/thumb/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.webp?1783908002",
+       "grid": "https://cards.scryfall.io/grid/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.webp?1783908002",
+       "display": "https://cards.scryfall.io/display/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.webp?1783908002",
+       "art": "https://cards.scryfall.io/art/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.webp?1783908002",
+       "crop": "https://cards.scryfall.io/crop/front/a/1/a1ed6d4f-9c1b-4007-899a-e2209996dd0d.webp?1783908002"
+      },
+      "uri": "https://api.scryfall.com/cards/a1ed6d4f-9c1b-4007-899a-e2209996dd0d",
+      "legalities": {
+       "standard": "not_legal",
+       "future": "not_legal",
+       "historic": "legal",
+       "timeless": "legal",
+       "gladiator": "legal",
+       "pioneer": "legal",
+       "modern": "legal",
+       "legacy": "legal",
+       "pauper": "not_legal",
+       "vintage": "legal",
+       "penny": "legal",
+       "commander": "legal",
+       "oathbreaker": "legal",
+       "standardbrawl": "not_legal",
+       "brawl": "legal",
+       "competitivebrawl": "legal",
+       "alchemy": "not_legal",
+       "paupercommander": "not_legal",
+       "duel": "legal",
+       "oldschool": "not_legal",
+       "premodern": "not_legal",
+       "predh": "not_legal",
+       "tlr": "not_legal"
+      },
+      "games": [
+       "paper",
+       "mtgo"
+      ],
+      "oracle_id": "61a6341e-0d36-44b6-8026-9c87c8ef61cb"
+     }
+    ]
+   }
+  }
+ ]
+}
