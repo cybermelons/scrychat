@@ -64,7 +64,7 @@
       "side": "left",
       "state": "closed",
       "title": "Tool chips stream live",
-      "pin": "tool_use at server.ts:641 opens the chip, tool-result at :664 fills it. Chat SSE, consumed by ChatPanel's reader loop."
+      "pin": "tool_use at server.ts:635 opens the chip, tool-result at :663 fills it. Chat SSE, consumed by ChatPanel's reader loop."
     },
     {
       "n": 47,
@@ -88,7 +88,7 @@
       "side": "left",
       "state": "closed",
       "title": "Focal card images",
-      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append at server.ts:606."
+      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append at server.ts:598."
     },
     {
       "n": 20,
@@ -136,7 +136,7 @@
       "side": "left",
       "state": "closed",
       "title": "Interrupt an in-flight reply",
-      "pin": "POST /api/chats/:id/stop. Emits done{interrupted:true} \u2014 one of three done sites, so a shape change touches all three."
+      "pin": "POST /api/chats/:id/stop. Emits done{interrupted:true} — one of three done sites, so a shape change touches all three."
     },
     {
       "anchor": "#suggestions-panel",
@@ -167,7 +167,7 @@
       "side": "right",
       "state": "closed",
       "title": "Why, per suggestion",
-      "pin": "The reasoning a human reviews. Required field \u2014 a suggestion with no why is a diff with no argument.",
+      "pin": "The reasoning a human reviews. Required field — a suggestion with no why is a diff with no argument.",
       "commit": "9da572407be75aa803564ac56193f3af9a8b61bc"
     },
     {
@@ -318,9 +318,9 @@
       "anchor": "#tool-chips",
       "side": "right",
       "n": 70,
-      "state": "open",
+      "state": "closed",
       "title": "Truncation blinds the grounding check",
-      "pin": "Split from #66, which fixed only deck_present. truncateResult runs at a single chokepoint (server.ts:661) and cuts EVERY allowlisted tool's result at 2048, so a 16-card fetch loses names past the cut. Tier B 2026-10-11 observed truncatedResults=1 with B-fmt-7 reporting 3 ungrounded names -- the eval's own message says >0 means an ungrounded name may be a real, unseen fetch, so the check cannot return a trustworthy verdict. Likely fix: stop feeding the model-context budget to an offline verifier, or truncate on a record boundary with an explicit {truncated:k} marker."
+      "pin": "CLOSED 79807a6. TOOL_RESULT_MAX_CHARS was a DISPLAY bound (a4420e4, for the chip's data-result and the hover popover) applied at capture time. Not a model-context bound -- the server loop only observes the SDK stream, which has already handed the model the full result -- and not a storage bound (all of chats/ is 33 KB). Measured: deck_get 5458 chars/76 names, sliced at 2048 -> 29 names and INVALID JSON, so parseSlideSpec returned null and the grounding check lost 62% of every deck. A record-boundary truncator was built and REJECTED on measurement (28 names vs the slice's 29: the __omitted key and the braces closing each emptied tag cost the bytes the slice spent on names), and no deck_get shape fits under 2048 while keeping tags and counts (byTag 5412, flat 4421, names-only 1348). Fix: store/stream whole, cap in ChatPanel.tsx at render. B-fmt-7 went from 3 ungrounded/fetched=16/truncatedResults=1 to grounded=6/ungrounded=[]/fetched=33/truncatedResults=0."
     }
   ],
   "commit_base": "https://github.com/cybermelons/scrychat/commit/",
