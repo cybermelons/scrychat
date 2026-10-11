@@ -110,9 +110,9 @@
       "n": 55,
       "anchor": "#slide-strip",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "Suggestions as a presentation",
-      "pin": "Generated, not fixed: a deck suggestion has no single correct visual form. Chart specs plus slide text, rendered by the surface."
+      "pin": "Generated, not fixed: a deck suggestion has no single correct visual form. deck_present returns {kind:'slides', slides:[{title, text?, chart?}]} built from the deck's real curve, quotas and suggestion queue; slides-core.ts validates it and reuses parseChartSpec per slide. These tabs are the render. Clipped at the source so the result fits the 2048-char tool-result cap: worst case 1225 chars."
     },
     {
       "n": 56,
