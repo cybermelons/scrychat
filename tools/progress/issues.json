@@ -24,7 +24,13 @@
       "state": "closed",
       "title": "Deterministic goldfish sim",
       "pin": "packages/core/src/goldfish.ts. mulberry32 + Fisher-Yates, no Math.random. Same deck + seed is byte-identical, which is what makes two decks comparable. 5 tests pass.",
-      "commit": "155e1a232e9f924743002eb82a04f488ea4fe176"
+      "commit": "155e1a232e9f924743002eb82a04f488ea4fe176",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "tool-chip"
+        }
+      ]
     },
     {
       "anchor": "#sim-seed",
@@ -32,7 +38,13 @@
       "state": "closed",
       "title": "Seed and iterations in the result",
       "pin": "GoldfishResult carries seed, iterations and maxTurns, so a result is self-describing and a reader can reproduce it.",
-      "commit": "155e1a232e9f924743002eb82a04f488ea4fe176"
+      "commit": "155e1a232e9f924743002eb82a04f488ea4fe176",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/SettingsDrawer.tsx",
+          "has": "id=\"settings-goldfish-seed\""
+        }
+      ]
     },
     {
       "n": 51,
@@ -40,7 +52,13 @@
       "side": "left",
       "state": "closed",
       "title": "Colour requirements",
-      "pin": "goldfish.ts:64 pips() reads manaCost; a cast needs cmc <= avail AND each colour's pips <= that colour's sources. Land drop takes a colour the hand demands more of than play supplies. Still optimistic: per-colour, not a matching; hybrid rides on cmc."
+      "pin": "goldfish.ts:64 pips() reads manaCost; a cast needs cmc <= avail AND each colour's pips <= that colour's sources. Land drop takes a colour the hand demands more of than play supplies. Still optimistic: per-colour, not a matching; hybrid rides on cmc.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "tool-chip"
+        }
+      ]
     },
     {
       "n": 52,
@@ -48,7 +66,13 @@
       "side": "left",
       "state": "closed",
       "title": "Render the sim as a chart spec",
-      "pin": "Goldfish results render as a bar chart. goldfish_deck returns a ChartSpec from goldfishChart; parseChartSpec validates it and Chart draws it in ChatPanel.tsx."
+      "pin": "Goldfish results render as a bar chart. goldfish_deck returns a ChartSpec from goldfishChart; parseChartSpec validates it and Chart draws it in ChatPanel.tsx.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/chart-core.ts",
+          "has": "parseChartSpec"
+        }
+      ]
     },
     {
       "n": 53,
@@ -56,7 +80,17 @@
       "side": "left",
       "state": "closed",
       "title": "Compare two builds",
-      "pin": "The reason determinism was worth paying for. goldfish_compare runs both decks on ONE shared seed/iterations/maxTurns, echoed once at top level so the shared conditions are checkable - that echo is now on screen, because 'both decks faced identical conditions' is the whole claim. turnsToOnline is the mean turn reaching ONLINE_THRESHOLD=3 nonland casts (never-online counts maxTurns+1); delta = A - B, negative means A is faster, and it is the one field legitimately negative. Rendered by CompareTable in ui/src/ChatPanel.tsx from parseCompareSpec in ui/src/compare-core.ts, the strict sibling of chart-core.ts: untrusted tool output, null falls back to the plain tool chip. A gap under DELTA_NOISE_FLOOR=0.25 turns renders as an explicit tie, not a dimmed row - every ponytail: marker in core goldfish.ts is OPTIMISTIC in one direction, so the bias does not average away and a sub-quarter-turn delta is not a result. Scalars, not histograms, per the approved target."
+      "pin": "The reason determinism was worth paying for. goldfish_compare runs both decks on ONE shared seed/iterations/maxTurns, echoed once at top level so the shared conditions are checkable - that echo is now on screen, because 'both decks faced identical conditions' is the whole claim. turnsToOnline is the mean turn reaching ONLINE_THRESHOLD=3 nonland casts (never-online counts maxTurns+1); delta = A - B, negative means A is faster, and it is the one field legitimately negative. Rendered by CompareTable in ui/src/ChatPanel.tsx from parseCompareSpec in ui/src/compare-core.ts, the strict sibling of chart-core.ts: untrusted tool output, null falls back to the plain tool chip. A gap under DELTA_NOISE_FLOOR=0.25 turns renders as an explicit tie, not a dimmed row - every ponytail: marker in core goldfish.ts is OPTIMISTIC in one direction, so the bias does not average away and a sub-quarter-turn delta is not a result. Scalars, not histograms, per the approved target.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "id=\"sim-compare\""
+        },
+        {
+          "file": "apps/web/ui/src/compare-core.ts",
+          "has": "export"
+        }
+      ]
     },
     {
       "n": 9,
@@ -64,7 +98,13 @@
       "side": "left",
       "state": "closed",
       "title": "Tool chips stream live",
-      "pin": "tool_use at server.ts:635 opens the chip, tool-result at :663 fills it. Chat SSE, consumed by ChatPanel's reader loop."
+      "pin": "tool_use at server.ts:635 opens the chip, tool-result at :663 fills it. Chat SSE, consumed by ChatPanel's reader loop.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "tool-chip"
+        }
+      ]
     },
     {
       "n": 47,
@@ -72,7 +112,13 @@
       "side": "left",
       "state": "closed",
       "title": "Ground every card claim in a fetch",
-      "pin": "Every card name a reply states must trace to a Scryfall fetch, shown as this chip. grounding-core.ts extracts claimed vs fetched names (tool-aware -- a deck name is not a card) and reports the residue, wired as eval B-fmt-7. RUN 2026-10-11: Tier B 5/7, 3 of 5 claims grounded, but truncatedResults=1 means the 2048-char tool-result cap can slice a real fetch out of the record, so the two flagged names are not provably hallucinations. The cap is a bare literal in 9 places -- #66 makes it one constant, then B-fmt-7 can return a verdict."
+      "pin": "Every card name a reply states must trace to a Scryfall fetch, shown as this chip. grounding-core.ts extracts claimed vs fetched names (tool-aware -- a deck name is not a card) and reports the residue, wired as eval B-fmt-7. RUN 2026-10-11: Tier B 5/7, 3 of 5 claims grounded, but truncatedResults=1 means the 2048-char tool-result cap can slice a real fetch out of the record, so the two flagged names are not provably hallucinations. The cap is a bare literal in 9 places -- #66 makes it one constant, then B-fmt-7 can return a verdict.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "tool-chip"
+        }
+      ]
     },
     {
       "n": 18,
@@ -80,7 +126,13 @@
       "side": "left",
       "state": "closed",
       "title": "Card hover links",
-      "pin": "[[Card]] from linkify-core.ts. Deterministic pass against the local name index; Haiku only for the ambiguous residue (Opt, Fog)."
+      "pin": "[[Card]] from linkify-core.ts. Deterministic pass against the local name index; Haiku only for the ambiguous residue (Opt, Fog).",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/CardName.tsx",
+          "has": "export function CardName"
+        }
+      ]
     },
     {
       "n": 26,
@@ -88,7 +140,13 @@
       "side": "left",
       "state": "closed",
       "title": "Focal card images",
-      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append at server.ts:598."
+      "pin": "![[Card]] embeds, capped 2-3 per reply, never inside a table or list. Rubric is the systemPrompt append at server.ts:598.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "tool-chip"
+        }
+      ]
     },
     {
       "n": 20,
@@ -96,7 +154,13 @@
       "side": "left",
       "state": "closed",
       "title": "Group chips",
-      "pin": "[[group:...]] from group-chips-core.ts. Categories stay chips so an enumerable list does not become 11 card images."
+      "pin": "[[group:...]] from group-chips-core.ts. Categories stay chips so an enumerable list does not become 11 card images.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/markdown.ts",
+          "has": "group"
+        }
+      ]
     },
     {
       "n": 54,
@@ -104,7 +168,13 @@
       "side": "left",
       "state": "closed",
       "title": "Photograph a binder page",
-      "pin": "Attach sends images as content blocks on the same turn, images first. validateImages sniffs magic bytes and rejects a declared type that disagrees, so SVG under a PNG label is refused; 4 per turn, 5mb each, never written to disk. express.json needs limit:30mb -- the 100kb default 413s a 200kb photo before validation runs."
+      "pin": "Attach sends images as content blocks on the same turn, images first. validateImages sniffs magic bytes and rejects a declared type that disagrees, so SVG under a PNG label is refused; 4 per turn, 5mb each, never written to disk. express.json needs limit:30mb -- the 100kb default 413s a 200kb photo before validation runs.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "id=\"attach-btn\""
+        }
+      ]
     },
     {
       "n": 55,
@@ -112,7 +182,17 @@
       "side": "left",
       "state": "closed",
       "title": "Suggestions as a presentation",
-      "pin": "Generated, not fixed: a deck suggestion has no single correct visual form. deck_present returns {kind:'slides', slides:[{title, text?, chart?}]} built from the deck's real curve, quotas and suggestion queue; slides-core.ts validates it and reuses parseChartSpec per slide. These tabs are the render. Clipped at the source so the result fits the 2048-char tool-result cap: worst case 1225 chars."
+      "pin": "Generated, not fixed: a deck suggestion has no single correct visual form. deck_present returns {kind:'slides', slides:[{title, text?, chart?}]} built from the deck's real curve, quotas and suggestion queue; slides-core.ts validates it and reuses parseChartSpec per slide. These tabs are the render. Clipped at the source so the result fits the 2048-char tool-result cap: worst case 1225 chars.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "id=\"slide-strip\""
+        },
+        {
+          "file": "apps/web/ui/src/slides-core.ts",
+          "has": "parseSlideSpec"
+        }
+      ]
     },
     {
       "n": 56,
@@ -120,7 +200,13 @@
       "side": "left",
       "state": "closed",
       "title": "Model-authored slide components",
-      "pin": "Done: a slide may carry `html`, rendered via srcdoc into an iframe with sandbox=\"\" -- empty, not allow-scripts, verified in the production bundle. checkSlideHtml covers what the sandbox does not: outbound subresource requests and meta-refresh. An allowlist, not a sanitizer: suspect markup is rejected whole."
+      "pin": "Done: a slide may carry `html`, rendered via srcdoc into an iframe with sandbox=\"\" -- empty, not allow-scripts, verified in the production bundle. checkSlideHtml covers what the sandbox does not: outbound subresource requests and meta-refresh. An allowlist, not a sanitizer: suspect markup is rejected whole.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "id=\"present-btn\""
+        }
+      ]
     },
     {
       "anchor": "#composer-input",
@@ -128,7 +214,13 @@
       "state": "closed",
       "title": "Chat loop on the Agent SDK",
       "pin": "Subscription auth, no per-token billing, full Claude Code tool surface subtracted from rather than built up. Do not replace with a hand-rolled loop.",
-      "commit": "62d124528a23144829779f659ed4baf94a9ff462"
+      "commit": "62d124528a23144829779f659ed4baf94a9ff462",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "textarea"
+        }
+      ]
     },
     {
       "n": 24,
@@ -136,7 +228,13 @@
       "side": "left",
       "state": "closed",
       "title": "Interrupt an in-flight reply",
-      "pin": "POST /api/chats/:id/stop. Emits done{interrupted:true} — one of three done sites, so a shape change touches all three."
+      "pin": "POST /api/chats/:id/stop. Emits done{interrupted:true} — one of three done sites, so a shape change touches all three.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "Stop"
+        }
+      ]
     },
     {
       "anchor": "#suggestions-panel",
@@ -144,7 +242,13 @@
       "state": "closed",
       "title": "Suggestions surface",
       "pin": "Suggestions.tsx (apps/web/ui/src) inside the deck manager, desktop and phone. suggestions/<slug>.json via atomicWrite.",
-      "commit": "0e17b665ce1560b3e3a8846d2686dd2f2532b4b2"
+      "commit": "0e17b665ce1560b3e3a8846d2686dd2f2532b4b2",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/Suggestions.tsx",
+          "has": "suggestion-head"
+        }
+      ]
     },
     {
       "anchor": "#sug-fence",
@@ -152,7 +256,13 @@
       "state": "closed",
       "title": "Propose-only fence",
       "pin": "deck_suggest never mutates. Only decideSuggestion edits, on an explicit accept. This is what lets a chat turn queue a change under permissionMode dontAsk.",
-      "commit": "9da572407be75aa803564ac56193f3af9a8b61bc"
+      "commit": "9da572407be75aa803564ac56193f3af9a8b61bc",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/suggestion-decide-core.ts",
+          "has": "decideBody"
+        }
+      ]
     },
     {
       "anchor": "#sug-actions",
@@ -160,7 +270,13 @@
       "state": "closed",
       "title": "Accept / reject / note",
       "pin": "Done: decideSuggestion (suggestions.ts:149) records verdict, decidedAt and an optional note; the Note... disclosure in Suggestions.tsx is what lets a human write one, and the body shape is pinned by suggestion-decide-core. Caught by a source-to-source read of this mockup on 2026-10-11: the backend, the MCP tool and the route all took a note while the UI sent a literal body \"{}\", so this pin had been closed on the backend alone -- the control it names did not exist.",
-      "commit": "c282f3df89f54ed664d8e82abf7a2bc6e75a26a1"
+      "commit": "c282f3df89f54ed664d8e82abf7a2bc6e75a26a1",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/Suggestions.tsx",
+          "has": "setNoteOpen"
+        }
+      ]
     },
     {
       "anchor": "#sug-why",
@@ -168,7 +284,13 @@
       "state": "closed",
       "title": "Why, per suggestion",
       "pin": "The reasoning a human reviews. Required field — a suggestion with no why is a diff with no argument.",
-      "commit": "9da572407be75aa803564ac56193f3af9a8b61bc"
+      "commit": "9da572407be75aa803564ac56193f3af9a8b61bc",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/Suggestions.tsx",
+          "has": "suggestion-why"
+        }
+      ]
     },
     {
       "anchor": "#quota-bars",
@@ -176,7 +298,13 @@
       "state": "closed",
       "title": "Quota bars",
       "pin": "deckReport at decks.ts:653. Defaults: lands 36-38, ramp 10-12, draw 10-12, interaction 8-10, wipes 2-4.",
-      "commit": "62d124528a23144829779f659ed4baf94a9ff462"
+      "commit": "62d124528a23144829779f659ed4baf94a9ff462",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/DeckPanel.tsx",
+          "has": "quota-label"
+        }
+      ]
     },
     {
       "anchor": "#quota-ramp",
@@ -184,7 +312,13 @@
       "state": "closed",
       "title": "Per-field quota override",
       "pin": "resolveQuotaTargets at decks.ts:634. A deck overriding only lands keeps global values for the rest.",
-      "commit": "846881e8a07f2f84d354128824760d3f50b1c865"
+      "commit": "846881e8a07f2f84d354128824760d3f50b1c865",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/SettingsDrawer.tsx",
+          "has": "quotaTargets"
+        }
+      ]
     },
     {
       "n": 15,
@@ -192,7 +326,13 @@
       "side": "right",
       "state": "closed",
       "title": "Tags are an array",
-      "pin": "CardEntry.tags[], not one role. A card appears under every group it serves; the panel groups by tag."
+      "pin": "CardEntry.tags[], not one role. A card appears under every group it serves; the panel groups by tag.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/DeckPanel.tsx",
+          "has": "tag-chip"
+        }
+      ]
     },
     {
       "n": 17,
@@ -200,7 +340,13 @@
       "side": "right",
       "state": "closed",
       "title": "Tag editor",
-      "pin": "Add, remove and rename per card; a rename propagates to every card carrying that tag."
+      "pin": "Add, remove and rename per card; a rename propagates to every card carrying that tag.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/DeckPanel.tsx",
+          "has": "tag-chip"
+        }
+      ]
     },
     {
       "n": 32,
@@ -208,7 +354,13 @@
       "side": "right",
       "state": "closed",
       "title": "Owned / missing from Arena",
-      "pin": "getOwnedIndex at collection.ts:95. Arena only; paper is out of scope. Snapshot stays local in collection.json."
+      "pin": "getOwnedIndex at collection.ts:95. Arena only; paper is out of scope. Snapshot stays local in collection.json.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/DeckPanel.tsx",
+          "has": "missing"
+        }
+      ]
     },
     {
       "anchor": "#curve-strip",
@@ -216,7 +368,13 @@
       "state": "closed",
       "title": "Mana curve",
       "pin": "DeckReport.curve. Updates live as the deck panel changes.",
-      "commit": "62d124528a23144829779f659ed4baf94a9ff462"
+      "commit": "62d124528a23144829779f659ed4baf94a9ff462",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/DeckPanel.tsx",
+          "has": "curve-col"
+        }
+      ]
     },
     {
       "n": 41,
@@ -224,7 +382,13 @@
       "side": "right",
       "state": "closed",
       "title": "Export, three formats",
-      "pin": "MTGA trims Front // Back to the front face; Arena's importer rejects the full name. Fenced by export-fence.test.ts."
+      "pin": "MTGA trims Front // Back to the front face; Arena's importer rejects the full name. Fenced by export-fence.test.ts.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/SettingsDrawer.tsx",
+          "has": "id=\"settings-export-format\""
+        }
+      ]
     },
     {
       "n": 57,
@@ -232,7 +396,13 @@
       "side": "right",
       "state": "open",
       "title": "Hosted code execution",
-      "pin": "The discovery feature: answers questions no pre-written tool covers. Runs in Anthropic's sandbox, not on this host, so it cannot reach decks/ or data/. NOT Bash."
+      "pin": "The discovery feature: answers questions no pre-written tool covers. Runs in Anthropic's sandbox, not on this host, so it cannot reach decks/ or data/. NOT Bash.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/SettingsDrawer.tsx",
+          "has": "codeExec"
+        }
+      ]
     },
     {
       "n": 58,
@@ -240,7 +410,13 @@
       "side": "right",
       "state": "closed",
       "title": "Expose the seed in settings",
-      "pin": "A fixed seed keeps two runs comparable, so the determinism contract is now visible instead of implicit. Shipped as a number input plus Randomize, not a slider: a seed is an identifier, not a magnitude. The value rides the config file into the sim, because the server injects no tool arguments."
+      "pin": "A fixed seed keeps two runs comparable, so the determinism contract is now visible instead of implicit. Shipped as a number input plus Randomize, not a slider: a seed is an identifier, not a magnitude. The value rides the config file into the sim, because the server injects no tool arguments.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/SettingsDrawer.tsx",
+          "has": "id=\"settings-goldfish-seed\""
+        }
+      ]
     },
     {
       "n": 37,
@@ -248,7 +424,13 @@
       "side": "right",
       "state": "closed",
       "title": "linkifyPass toggle",
-      "pin": "scrychat.config.json, PATCH /api/config. Keep the two-stage gate: removing it costs an extra model call on every reply."
+      "pin": "scrychat.config.json, PATCH /api/config. Keep the two-stage gate: removing it costs an extra model call on every reply.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/SettingsDrawer.tsx",
+          "has": "aria-label=\"Card-name linkify pass\""
+        }
+      ]
     },
     {
       "anchor": "#health-mirror",
@@ -256,7 +438,13 @@
       "state": "closed",
       "title": "Health endpoint",
       "pin": "GET /api/health reports skill readability and whether the mirror has cards and Arena data. Check it before re-diagnosing 'not finding cards'.",
-      "commit": "6f8de38aa6cfbebe1220b2f896158863d16a9f88"
+      "commit": "6f8de38aa6cfbebe1220b2f896158863d16a9f88",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/HealthRow.tsx",
+          "has": "id=\"health-row\""
+        }
+      ]
     },
     {
       "n": 50,
@@ -264,7 +452,13 @@
       "side": "right",
       "state": "closed",
       "title": "Mirror row count and local-hit share",
-      "pin": "scrychat.db is empty and until now nothing said so. GET /api/health tells absent / present-but-empty / populated apart (cardCount 0 means empty, null undeterminable) plus usableAsMirror for whether lookups actually go local; getLocalDb() conflates absent with empty by design for its fallback callers, so health stats the file and counts via core readLocalDbCounts (read-only, fileMustExist, never creates). This pill now renders it: healthPills() in apps/web/src/health-pills.ts, drawn by ui/src/HealthRow.tsx. A populated mirror with usableAsMirror false reads warn, not ok, because lookups still leave the machine. Verified live: this machine renders warn 'mirror: empty'. The local-hit SHARE is still not measured anywhere - collection lookups batch 75 ids per POST /cards/collection and search does not batch at all - but that is a counter, not this pill."
+      "pin": "scrychat.db is empty and until now nothing said so. GET /api/health tells absent / present-but-empty / populated apart (cardCount 0 means empty, null undeterminable) plus usableAsMirror for whether lookups actually go local; getLocalDb() conflates absent with empty by design for its fallback callers, so health stats the file and counts via core readLocalDbCounts (read-only, fileMustExist, never creates). This pill now renders it: healthPills() in apps/web/src/health-pills.ts, drawn by ui/src/HealthRow.tsx. A populated mirror with usableAsMirror false reads warn, not ok, because lookups still leave the machine. Verified live: this machine renders warn 'mirror: empty'. The local-hit SHARE is still not measured anywhere - collection lookups batch 75 ids per POST /cards/collection and search does not batch at all - but that is a counter, not this pill.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/HealthRow.tsx",
+          "has": "id=\"health-row\""
+        }
+      ]
     },
     {
       "n": 59,
@@ -272,7 +466,13 @@
       "side": "right",
       "state": "closed",
       "title": "Stale-snapshot warning",
-      "pin": "An Arena snapshot ages silently and owned/missing goes quietly wrong. GET /api/health returns a collection block (freshness, ageDays, label, staleAfterDays=14) computed from the file's own importedAt, never mtime, which any rewrite would reset. The pill now renders it via healthPills(): fresh ok, stale warn, a future date warn as clock skew, no snapshot dim. The 14-day threshold is quoted from the server's staleAfterDays instead of kept as a second client copy that can drift. Verified live: with no snapshot on disk this machine renders dim 'arena: none'."
+      "pin": "An Arena snapshot ages silently and owned/missing goes quietly wrong. GET /api/health returns a collection block (freshness, ageDays, label, staleAfterDays=14) computed from the file's own importedAt, never mtime, which any rewrite would reset. The pill now renders it via healthPills(): fresh ok, stale warn, a future date warn as clock skew, no snapshot dim. The 14-day threshold is quoted from the server's staleAfterDays instead of kept as a second client copy that can drift. Verified live: with no snapshot on disk this machine renders dim 'arena: none'.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/CollectionSync.tsx",
+          "has": "arena"
+        }
+      ]
     },
     {
       "n": 60,
@@ -280,7 +480,21 @@
       "side": "right",
       "state": "open",
       "title": "Replace the real UI with this target",
-      "pin": "This board tracks the goal; it is not the goal. This pin is the tracked item that retires the mockup. The board itself shipped in f78993d (tools/progress/)."
+      "pin": "This board tracks the goal; it is not the goal. This pin is the tracked item that retires the mockup. The board itself shipped in f78993d (tools/progress/).",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/App.tsx",
+          "has": "top-bar"
+        },
+        {
+          "file": "apps/web/ui/src/App.tsx",
+          "has": "tab-heads"
+        },
+        {
+          "file": "apps/web/ui/src/App.tsx",
+          "has": "pane-settings"
+        }
+      ]
     },
     {
       "n": 66,
@@ -288,7 +502,13 @@
       "side": "right",
       "state": "closed",
       "title": "Make the tool-result cap one constant",
-      "pin": "Closed by exporting TOOL_RESULT_MAX_CHARS (server.ts) and mirroring it as TOOL_RESULT_BUDGET_CHARS in packages/mcp/src/present-budget.ts, pinned by test/present-budget.test.ts (9 tests). The issue's own premise was wrong: the number appears 12 times, of which 1 is the declaration, 3 are test assertions and 8 are comment prose -- no validator reads a second literal. The real defect was different and live: the per-field caps (title 40, text 320, html 1600) are all satisfiable by a payload that still overflows the 2048 WHOLE-RESULT budget, because nothing measured the serialized result. Measured 2026-10-11: all five quotas OFF + full curve + long pending = 2223 chars while the html slide sits at 1117 of its 1600 cap. Overflow was silent (truncated JSON -> parseSlideSpec null -> plain chip). deck_present now calls fitPresentSlides, dropping whole low-priority slides and never the first. Live decks measured over the real stdio server: grothama 1779, isshin 1618, both parse after a 2048 slice."
+      "pin": "Closed by exporting TOOL_RESULT_MAX_CHARS (server.ts) and mirroring it as TOOL_RESULT_BUDGET_CHARS in packages/mcp/src/present-budget.ts, pinned by test/present-budget.test.ts (9 tests). The issue's own premise was wrong: the number appears 12 times, of which 1 is the declaration, 3 are test assertions and 8 are comment prose -- no validator reads a second literal. The real defect was different and live: the per-field caps (title 40, text 320, html 1600) are all satisfiable by a payload that still overflows the 2048 WHOLE-RESULT budget, because nothing measured the serialized result. Measured 2026-10-11: all five quotas OFF + full curve + long pending = 2223 chars while the html slide sits at 1117 of its 1600 cap. Overflow was silent (truncated JSON -> parseSlideSpec null -> plain chip). deck_present now calls fitPresentSlides, dropping whole low-priority slides and never the first. Live decks measured over the real stdio server: grothama 1779, isshin 1618, both parse after a 2048 slice.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "tool-chip"
+        }
+      ]
     },
     {
       "n": 67,
@@ -296,7 +516,13 @@
       "side": "right",
       "state": "closed",
       "title": "B-fmt-3 regressed: chips unpopulated",
-      "pin": "Closed: NOT a code regression. The category-chip populator resolves members from the local SQLite mirror, and getLocalDb() returns null for a mirror with zero `cards` rows by design (absent and present-but-empty both mean 'fall back to live Scryfall'). This host's data/scrychat.db is schema-only -- cards=0, tags=0, card_tags=0, empty meta -- so the resolver returns null for every phrase, every rule hits the members.length<2 guard, and zero chips is CORRECT. Live /api/health confirms {exists:true, cardCount:0, usableAsMirror:false}. B-fmt-3 now reads /api/health first and SKIPs with that diagnosis plus the ingest remedy; a skip is not counted as passed and still exits 1. The 2026-07-11 pass vs 2026-10-11 fail was the data changing, not the code."
+      "pin": "Closed: NOT a code regression. The category-chip populator resolves members from the local SQLite mirror, and getLocalDb() returns null for a mirror with zero `cards` rows by design (absent and present-but-empty both mean 'fall back to live Scryfall'). This host's data/scrychat.db is schema-only -- cards=0, tags=0, card_tags=0, empty meta -- so the resolver returns null for every phrase, every rule hits the members.length<2 guard, and zero chips is CORRECT. Live /api/health confirms {exists:true, cardCount:0, usableAsMirror:false}. B-fmt-3 now reads /api/health first and SKIPs with that diagnosis plus the ingest remedy; a skip is not counted as passed and still exits 1. The 2026-07-11 pass vs 2026-10-11 fail was the data changing, not the code.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/markdown.ts",
+          "has": "group"
+        }
+      ]
     },
     {
       "n": 68,
@@ -304,15 +530,31 @@
       "side": "left",
       "state": "closed",
       "title": "No Present trigger",
-      "pin": "Done: a Present button in the composer row posts PRESENT_PROMPT through the existing send(override) path, and the SlideStrip renderer (#56) draws the result. Deliberately NOT in #slide-strip where this mockup draws it: SlideStrip exists only after deck_present has returned, so a trigger there is reachable only after the thing it starts. Disabled without an active deck, since the model learns the deck solely from the server's activeDeck context line (server.ts:486) and deck_present requires deck_name."
+      "pin": "Done: a Present button in the composer row posts PRESENT_PROMPT through the existing send(override) path, and the SlideStrip renderer (#56) draws the result. Deliberately NOT in #slide-strip where this mockup draws it: SlideStrip exists only after deck_present has returned, so a trigger there is reachable only after the thing it starts. Disabled without an active deck, since the model learns the deck solely from the server's activeDeck context line (server.ts:486) and deck_present requires deck_name.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "id=\"present-btn\""
+        }
+      ]
     },
     {
       "n": 69,
       "anchor": "#app-shell",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "No pin-to-artifact parity gate",
-      "pin": "check_anchors proves a pin's anchor exists in THIS mockup; --audit proves the board matches the tracker. Neither opens the artifact. Mockup declares 58 ids, the real UI source has 8 (it keys off className), so a naive diff yields 52 false positives -- which is how #sug-actions stayed closed with its note control missing."
+      "pin": "build.py check_parity reports each pin against the artifact SOURCE, not a DOM probe: a record carries proves=[{file,has}] and the literal must be in that file. Why a hint and not name-matching: the mockup declares 58 ids, apps/web/ui/src/** carries 10 id= attrs in 20 files (it names by className), and only 2 mockup ids appear as a className token, so a name-set diff would cry ~46 of 58 as missing. With hints authored: 36 proven, 2 unproven, 0 unhinted -- and the 2 unproven are exactly the 2 unbuilt features (#57, #60). Stays a REPORT (exit 0); test-parity.mjs proves it non-blind on 3 injected defects.",
+      "proves": [
+        {
+          "file": "tools/progress/build.py",
+          "has": "def check_parity"
+        },
+        {
+          "file": "tools/progress/issues.json",
+          "has": "\"proves\""
+        }
+      ]
     },
     {
       "anchor": "#tool-chips",
@@ -320,7 +562,13 @@
       "n": 70,
       "state": "closed",
       "title": "Truncation blinds the grounding check",
-      "pin": "CLOSED 79807a6. TOOL_RESULT_MAX_CHARS was a DISPLAY bound (a4420e4, for the chip's data-result and the hover popover) applied at capture time. Not a model-context bound -- the server loop only observes the SDK stream, which has already handed the model the full result -- and not a storage bound (all of chats/ is 33 KB). Measured: deck_get 5458 chars/76 names, sliced at 2048 -> 29 names and INVALID JSON, so parseSlideSpec returned null and the grounding check lost 62% of every deck. A record-boundary truncator was built and REJECTED on measurement (28 names vs the slice's 29: the __omitted key and the braces closing each emptied tag cost the bytes the slice spent on names), and no deck_get shape fits under 2048 while keeping tags and counts (byTag 5412, flat 4421, names-only 1348). Fix: store/stream whole, cap in ChatPanel.tsx at render. B-fmt-7 went from 3 ungrounded/fetched=16/truncatedResults=1 to grounded=6/ungrounded=[]/fetched=33/truncatedResults=0."
+      "pin": "CLOSED 79807a6. TOOL_RESULT_MAX_CHARS was a DISPLAY bound (a4420e4, for the chip's data-result and the hover popover) applied at capture time. Not a model-context bound -- the server loop only observes the SDK stream, which has already handed the model the full result -- and not a storage bound (all of chats/ is 33 KB). Measured: deck_get 5458 chars/76 names, sliced at 2048 -> 29 names and INVALID JSON, so parseSlideSpec returned null and the grounding check lost 62% of every deck. A record-boundary truncator was built and REJECTED on measurement (28 names vs the slice's 29: the __omitted key and the braces closing each emptied tag cost the bytes the slice spent on names), and no deck_get shape fits under 2048 while keeping tags and counts (byTag 5412, flat 4421, names-only 1348). Fix: store/stream whole, cap in ChatPanel.tsx at render. B-fmt-7 went from 3 ungrounded/fetched=16/truncatedResults=1 to grounded=6/ungrounded=[]/fetched=33/truncatedResults=0.",
+      "proves": [
+        {
+          "file": "apps/web/ui/src/ChatPanel.tsx",
+          "has": "tool-chip"
+        }
+      ]
     }
   ],
   "commit_base": "https://github.com/cybermelons/scrychat/commit/",

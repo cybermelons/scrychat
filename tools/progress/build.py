@@ -5,6 +5,7 @@ control it has to produce.
     python3 tools/progress/build.py            # writes docs/progress/index.html
     python3 tools/progress/build.py --check    # exit 1 if the page is stale
     python3 tools/progress/build.py --audit    # compare against the tracker
+    python3 tools/progress/build.py --check-parity   # pins vs the artifact
 
 The board is not a screenshot. mockup.py builds the proposed surface as real
 markup, and each pin measures its own anchor in the browser, so a control that
@@ -887,6 +888,112 @@ def check_cites(data):
     return 0
 
 
+def check_parity(data):
+    """Report pinned controls with no counterpart in the artifact source.
+
+    This is the pairing nothing else covers. `check_anchors` proves the
+    anchor exists in the MOCKUP; `--audit` proves the board agrees with the
+    TRACKER and never opens the artifact at all. So a pin can be closed
+    against a backend symbol while the control it anchors to was never
+    built. That is not hypothetical: #60's `#sug-actions` was closed citing
+    `decideSuggestion` in core while the UI had no control to author a note.
+
+    Why this needs a per-record hint rather than matching names. Measured
+    2026-10-11: the mockup declares 58 ids; `apps/web/ui/src/**` carries 10
+    `id=` attributes in 20 files, because the real UI identifies elements by
+    `className`. Only 2 mockup ids appear as a className token. A name-set
+    diff would therefore report ~46 of 58 anchors "missing", nearly all of
+    it a naming-convention difference rather than absent scope -- and a
+    check that cries 46 gets ignored, which is the same as no check.
+
+    So the record states its own evidence: `proves` is a list of
+    {"file": <repo-relative path or glob>, "has": <literal substring>}.
+    Each entry must be found in the artifact source for the pin to count as
+    proven. A literal is used, not a regex and not an identifier scan,
+    because `check_cites` already demonstrated the weakness of accepting any
+    matching identifier: it greened on a repointed line twice.
+
+    Three outcomes, and the third is the point:
+
+      PROVEN    every `proves` entry resolves in the artifact source.
+      UNPROVEN  a hint is present and its literal is NOT there. A finding.
+      NO-HINT   the record carries no `proves`. Counted and listed, never
+                silently passed -- an unhinted record is the state that let
+                a pin close against a backend, so hiding it would rebuild
+                the hole this check exists to close.
+
+    Deliberately a REPORT: it returns 0 even with findings, because the hint
+    data does not exist for every record yet and a gate that fails the whole
+    loop on missing annotation would be turned off within a tick. The
+    numbers are the deliverable. Promote it to exit 1 once NO-HINT reaches
+    0, and not before -- a gate whose precondition is unmet is a fail-open
+    dependency wearing a gate's clothes.
+    """
+    import glob as _glob
+
+    cache = {}
+
+    def source_of(pattern):
+        """Concatenated text of every tracked file matching `pattern`."""
+        if pattern in cache:
+            return cache[pattern]
+        hits = sorted(_glob.glob(os.path.join(ROOT, pattern), recursive=True))
+        text = []
+        for h in hits:
+            if os.path.isfile(h):
+                try:
+                    text.append(open(h, encoding='utf-8').read())
+                except (UnicodeDecodeError, OSError):
+                    pass
+        cache[pattern] = (len(hits), '\n'.join(text))
+        return cache[pattern]
+
+    proven, unproven, nohint = [], [], []
+    for i in data['issues']:
+        who = (f"#{i['n']}" if i.get('n')
+               else (i.get('commit', '')[:7] or i['title']))
+        hints = i.get('proves') or []
+        if not hints:
+            nohint.append((who, i['anchor'], i['state'], i['title']))
+            continue
+        misses = []
+        for h in hints:
+            pattern, literal = h.get('file', ''), h.get('has', '')
+            if not pattern or not literal:
+                misses.append((pattern or '<no file>',
+                               'malformed proves entry: needs file and has'))
+                continue
+            n_files, text = source_of(pattern)
+            if n_files == 0:
+                misses.append((pattern, 'no file matches that path'))
+            elif literal not in text:
+                misses.append((pattern, f'{literal!r} is not in '
+                                        f'{n_files} matching file(s)'))
+        if misses:
+            unproven.append((who, i['anchor'], misses))
+        else:
+            proven.append((who, i['anchor']))
+
+    for who, anchor, misses in unproven:
+        for pattern, why in misses:
+            print(f'UNPROVEN {anchor:<20} {who}: {pattern}: {why}')
+    for who, anchor, state, title in nohint:
+        print(f'NO-HINT  {anchor:<20} {who} ({state}): {title}')
+
+    total = len(data['issues'])
+    print(f'\n{len(proven)} proven, {len(unproven)} unproven, '
+          f'{len(nohint)} with no `proves` hint, of {total} pins.')
+    if unproven:
+        print('An UNPROVEN pin names evidence that is not in the artifact: '
+              'either build the control, or correct the hint.')
+    if nohint:
+        print('A NO-HINT pin cannot be checked against the artifact at all. '
+              'Add `proves`: [{"file": <path or glob>, "has": <literal>}].')
+    print('This is a report, not a gate: exit 0 either way until NO-HINT '
+          'reaches 0. See the docstring for why.')
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--check', action='store_true',
@@ -897,9 +1004,15 @@ def main():
                     help='exit 1 if a commit pin is not on a remote branch')
     ap.add_argument('--check-cites', action='store_true',
                     help='exit 1 if a file:line citation no longer matches')
+    ap.add_argument('--check-parity', action='store_true',
+                    help='report pins whose control is absent from the '
+                         'artifact source (report only, always exit 0)')
+    # Read the records from somewhere else. Only for the parity test, which
+    # breaks a hint on purpose and must never do that to the real file.
+    ap.add_argument('--data', default=DATA, help=argparse.SUPPRESS)
     args = ap.parse_args()
 
-    with open(DATA) as fh:
+    with open(args.data) as fh:
         data = json.load(fh)
 
     if args.audit:
@@ -910,6 +1023,9 @@ def main():
 
     if args.check_cites:
         return check_cites(data)
+
+    if args.check_parity:
+        return check_parity(data)
 
     page = render(data)
 
