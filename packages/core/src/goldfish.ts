@@ -25,6 +25,10 @@ export type GoldfishResult = {
   stalledGames: number;
   /** index = turn (1-based, [0] unused), mean nonland cards cast cumulatively */
   castByTurn: number[];
+  /** mean turn a game first had ONLINE_THRESHOLD nonland spells cast; games that never got there count as maxTurns + 1 */
+  turnsToOnline: number;
+  /** cumulative nonland casts that counts as "online" (the bar turnsToOnline measures) */
+  onlineThreshold: number;
 };
 
 // mulberry32: small seeded PRNG, returns [0,1).
@@ -63,6 +67,15 @@ const pips = (c: ResolvedCard): Record<string, number> => {
   return out;
 };
 
+/** Cumulative nonland spells that counts as a deck being "online".
+ *
+ *  Absolute, not deck-relative, so two different decks are comparable: a
+ *  deck-relative bar (e.g. "half the curve") moves with the deck and would
+ *  make a faster deck score worse. 3 is low enough that nearly every
+ *  Commander deck reaches it within maxTurns, and high enough that it
+ *  measures the curve rather than a single opener. */
+export const ONLINE_THRESHOLD = 3;
+
 export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): GoldfishResult {
   const iterations = opts.iterations ?? 1000;
   const seed = opts.seed ?? 0;
@@ -75,6 +88,7 @@ export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): Gol
   const firstCast: Record<string, number[]> = {};
   let mulligans = 0;
   let stalled = 0;
+  let onlineSum = 0;
 
   for (let g = 0; g < iterations; g++) {
     let library = [...cards];
@@ -93,6 +107,7 @@ export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): Gol
     const src: Record<string, number> = {}; // coloured sources, by producedMana colour
     const addSrc = (c: ResolvedCard) => { for (const m of c.producedMana ?? []) src[m] = (src[m] ?? 0) + 1; };
     let cast = 0;
+    let onlineTurn = 0;
     const seen = new Set<string>();
 
     for (let turn = 1; turn <= maxTurns; turn++) {
@@ -143,8 +158,10 @@ export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): Gol
         if (!seen.has(k)) { seen.add(k); (firstCast[k] ??= []).push(turn); }
       }
       castSum[turn]! += cast;
+      if (onlineTurn === 0 && cast >= ONLINE_THRESHOLD) onlineTurn = turn;
     }
     if (hand.some((c) => !isLand(c))) stalled++;
+    onlineSum += onlineTurn === 0 ? maxTurns + 1 : onlineTurn;
   }
 
   const n = Math.max(iterations, 1);
@@ -159,6 +176,8 @@ export function goldfish(cards: ResolvedCard[], opts: GoldfishOptions = {}): Gol
     manaAvailable: manaSum.map((x) => round(x / n)),
     stalledGames: stalled,
     castByTurn: castSum.map((x) => round(x / n)),
+    turnsToOnline: onlineSum / n,
+    onlineThreshold: ONLINE_THRESHOLD,
   };
 }
 
