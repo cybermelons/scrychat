@@ -20,7 +20,7 @@
       "anchor": "#sidebar",
       "side": "left",
       "state": "open",
-      "title": "73. Add element ids to every pinnable region",
+      "title": "v2 mockup: add element ids to every pinnable region",
       "pin": "DONE in mockup.html: ids went 4 -> 32. This board could not be built before it - a pin naming a missing id fails check_anchors(). Close once the ids land in the repo's own copy of the target."
     },
     {
@@ -28,7 +28,7 @@
       "anchor": "#tab-cards",
       "side": "right",
       "state": "open",
-      "title": "74. Build the Cards and History tab panes",
+      "title": "v2 mockup: build the Cards and History tab panes",
       "pin": "Tabs are inert labels: grep for 'class=\"pane|data-tab|role=\"tab' returns 0. Only Chat has content. At rest the Cards tab shows deck RECOMMENDATIONS, not search results (ui/04-chat-tabs.md). Panes must stack in one grid cell and stay measurable when inactive - display:none measures 0x0 and stacks every label at the top of the column."
     },
     {
@@ -36,7 +36,7 @@
       "anchor": "#tab-history",
       "side": "right",
       "state": "open",
-      "title": "74. Build the Cards and History tab panes",
+      "title": "v2 mockup: build the Cards and History tab panes",
       "pin": "History side. Empty on the captured 1-card deck, so either mock the populated shape and tag it INFERRED, or mock the empty state and say which."
     },
     {
@@ -44,7 +44,7 @@
       "anchor": "#tb-playtest",
       "side": "left",
       "state": "open",
-      "title": "75. Playtest overlay",
+      "title": "v2 mockup: playtest overlay",
       "pin": "Button with nothing behind it. Captured in full (ui/05-playtest.md): full-viewport, top bar, battlefield, hand, four piles, no URL change. Populated hand and battlefield are UNVERIFIED - a 1-card deck has none. kbd hints A N D V S are STATED, never pressed."
     },
     {
@@ -52,7 +52,7 @@
       "anchor": "#composer",
       "side": "right",
       "state": "open",
-      "title": "76. Credit-blocked inventory areas",
+      "title": "UI inventory: credit-blocked areas (chat modes, paid tier, ranking)",
       "pin": "BLOCKED ON BUDGET, not effort. Chat modes, paid tier, ranking, retrieval path, multi-turn: all behind the credit wall. Free tier is ~1 message/week, a chat turn costs 35, the account sat at 15/50. ~$7 for a mid-tier month settles the first five. Retrieval mechanism and ranking formula stay unknowable from outside at any price."
     },
     {
@@ -60,7 +60,7 @@
       "anchor": "#nav-search",
       "side": "left",
       "state": "open",
-      "title": "77. Finish the free captures missed on the first sweep",
+      "title": "UI inventory: finish the free captures missed on the first sweep",
       "pin": "Costs nothing - DOM state changes and a populated deck, not chat turns. Card search results (no query was ever typed), multi-column card list, populated History, playtest menus, hover/focus/disabled states, light mode, keyboard nav. Extend ui/tabs.mjs and tabs2.mjs."
     },
     {
@@ -68,7 +68,7 @@
       "anchor": "#msgs",
       "side": "right",
       "state": "open",
-      "title": "78. linkify: parse [[Card]] only, drop the prose scan",
+      "title": "linkify: parse [[Card]] only, drop the prose scan and the haiku pass",
       "pin": "Verified against HEAD 8079479: AMBIGUOUS_WORDLIST is 113 words (linkify-core.ts:329) and includes all five basic lands plus counterspell, shock, opt, murder, exile. So the haiku pass fires constantly in a deckbuilding chat. The agent already knows its own intent; the scan reconstructs it from text with strictly less information. SKILL.md:190-193 already mandates brackets everywhere, table cells included."
     },
     {
@@ -76,7 +76,7 @@
       "anchor": "#strategy",
       "side": "left",
       "state": "open",
-      "title": "79. Promote function-first deckbuilding into UI + API schema",
+      "title": "Promote function-first deckbuilding from prompt text into UI + API schema",
       "pin": "The one axis where farseek is ahead of us (comparison/00-summary.md). They made named functional roles plus typed bracket/budget the SHAPE OF THE REQUEST; we reach the same skeleton through a skill prompt. A prompt constraint is advisory and a miss is invisible - a deck quietly short on removal still looks fine. Schema-level, a violation is a test failure."
     },
     {
@@ -84,7 +84,7 @@
       "anchor": "#deckcol",
       "side": "left",
       "state": "open",
-      "title": "80. Three-column shell and the 76 design tokens",
+      "title": "v2 layout: three-column shell and the 76 design tokens",
       "pin": "Measured geometry: 260/825/1/354 at 1440, 48/645/1/330 at 820, single column + bottom bar at 390. 76 tokens in ui/00-tokens.md. CORRECTION the mockup gets wrong: card rows are display:flex, not grid (ui/06-computed-styles.md) - build v2 as flex. Token values and geometry only; their class names are build-hashed so the compiled CSS is both useless and a provenance problem."
     },
     {
@@ -92,7 +92,7 @@
       "anchor": "#chatcol",
       "side": "right",
       "state": "open",
-      "title": "80. Three-column shell and the 76 design tokens",
+      "title": "v2 layout: three-column shell and the 76 design tokens",
       "pin": "The third column is the whole thesis: dock the AI permanently beside the deck and make everything it suggests actionable in place. The build-and-tune loop then runs with no navigation."
     },
     {
@@ -100,7 +100,7 @@
       "anchor": "#nav-collection",
       "side": "left",
       "state": "open",
-      "title": "81. Oracle: collection/printing analysis and originality scoring",
+      "title": "Oracle: collection/printing analysis and originality scoring",
       "pin": "Moved here from farseek-teardown gitea #3, where it did not belong - it is a scrychat feature request, not a teardown finding. Originality scoring is the natural extension of our 'no popularity prior' stance. Their ranking formula is server-side and uncopyable; only the idea transfers, implemented with our published formula. Output shape is STATED, not MEASURED - a real-deck Oracle reading was gated on account age and never ran."
     }
   ]
