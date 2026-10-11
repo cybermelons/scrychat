@@ -49,7 +49,7 @@ import {
   type CategoryResolver,
 } from "./group-chips-core.js";
 import { parseCollectionBody, buildImportResult } from "./collection-core.js";
-import { getDbHealth } from "./health-core.js";
+import { getCollectionHealth, getDbHealth } from "./health-core.js";
 import { isValidDeckName } from "./deck-name-core.js";
 import { parseConfig, applyConfigPatch, DEFAULT_CONFIG, type ScrychatConfig } from "./config-core.js";
 
@@ -1656,6 +1656,7 @@ app.get("/api/health", (_req: Request, res: Response) => {
     skillLoaded,
     skillPath,
     db: dbHealth,
+    collection: getCollectionHealth(COLLECTION_PATH),
   });
 });
 

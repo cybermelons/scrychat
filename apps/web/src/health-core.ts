@@ -11,7 +11,12 @@
  * sqlite or the real db file.
  */
 import fs from "node:fs";
-import { getLocalDb, readLocalDbCounts } from "@scrychat/core";
+import { collectionStats, getLocalDb, readLocalDbCounts } from "@scrychat/core";
+import {
+  SNAPSHOT_STALE_DAYS,
+  snapshotAge,
+  type SnapshotFreshness,
+} from "./snapshot-age.js";
 
 export interface DbHealth {
   exists: boolean;
@@ -65,4 +70,64 @@ export function getDbHealth(dbPath: string, deps: DbHealthDeps = {}): DbHealth {
   }
 
   return { exists, path: dbPath, cardCount, arenaPopulated, ingestStamp, usableAsMirror };
+}
+
+/**
+ * Freshness of the Arena collection snapshot, for the health pill.
+ *
+ * Age is computed from the snapshot's own `importedAt`, never file mtime: mtime
+ * changes on any rewrite and would call a re-saved stale snapshot fresh.
+ * `staleAfterDays` is echoed so the client renders the threshold the server
+ * used instead of hardcoding a second copy that can drift.
+ */
+export interface CollectionHealth {
+  exists: boolean;
+  path: string;
+  importedAt: string | null;
+  /** fresh | stale | future | unknown, from snapshotAge() */
+  freshness: SnapshotFreshness;
+  ageDays: number | null;
+  label: string;
+  staleAfterDays: number;
+  uniqueOwned: number | null;
+}
+
+export interface CollectionHealthDeps {
+  /** reads snapshot stats; defaults to core's collectionStats */
+  readStats?: (p: string) => { exists: boolean; importedAt?: string; uniqueOwned?: number };
+  /** clock; defaults to Date.now so tests need no fake timers */
+  now?: () => number;
+}
+
+export function getCollectionHealth(
+  collectionPath: string,
+  deps: CollectionHealthDeps = {},
+): CollectionHealth {
+  const readStats = deps.readStats ?? collectionStats;
+  const now = deps.now ?? Date.now;
+  const stats = readStats(collectionPath);
+  if (!stats.exists) {
+    return {
+      exists: false,
+      path: collectionPath,
+      importedAt: null,
+      freshness: "unknown",
+      ageDays: null,
+      label: "unknown",
+      staleAfterDays: SNAPSHOT_STALE_DAYS,
+      uniqueOwned: null,
+    };
+  }
+  const importedAt = stats.importedAt ?? null;
+  const age = snapshotAge(importedAt, now());
+  return {
+    exists: true,
+    path: collectionPath,
+    importedAt,
+    freshness: age.freshness,
+    ageDays: age.ageDays,
+    label: age.label,
+    staleAfterDays: SNAPSHOT_STALE_DAYS,
+    uniqueOwned: stats.uniqueOwned ?? null,
+  };
 }
