@@ -1933,6 +1933,28 @@ body {
   color: var(--text-dim);
 }
 
+/* Reveals above the verdict row, because the note must be written before
+   Accept/Reject is pressed -- core refuses a second decision, so there is no
+   after. box-sizing keeps the 100% width inside the card's padding. */
+.suggestion-note-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 6px;
+  font: inherit;
+  font-size: 0.8rem;
+  /* --bg-raised, not a browser default: this stylesheet has no base
+     `textarea` rule, so an unstyled textarea renders white-on-dark inside
+     the panel. Only vars defined in :root are used here (there is no
+     --bg-input or --bg-elev; a var() fallback to a missing name silently
+     yields transparent). */
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  resize: vertical;
+}
+
 .suggestion-actions {
   display: flex;
   gap: 6px;

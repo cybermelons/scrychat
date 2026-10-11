@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Suggestion } from "./types";
 import { CardName } from "./CardName";
+import { decideBody } from "./suggestion-decide-core";
 
 const KIND_LABEL: Record<Suggestion["kind"], string> = {
   add: "Add",
@@ -66,7 +67,7 @@ export function Suggestions({
   }, [deckName, load]);
 
   const decide = useCallback(
-    async (id: string, verdict: "accept" | "reject") => {
+    async (id: string, verdict: "accept" | "reject", note?: string) => {
       setBusyId(id);
       setError(null);
       try {
@@ -75,7 +76,13 @@ export function Suggestions({
           {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: "{}",
+            // The note rides along with the verdict rather than going to a
+            // route of its own: core's decideSuggestion is the only writer
+            // that may set it, and it refuses a second decision on the same
+            // suggestion, so there is no later moment at which a note could
+            // still be attached. Body shape lives in suggestion-decide-core
+            // so a test can pin it without a DOM.
+            body: decideBody(note),
           }
         );
         const body = await res.json().catch(() => ({}));
@@ -188,8 +195,16 @@ function SuggestionCard({
 }: {
   s: Suggestion;
   busy: boolean;
-  onDecide?: (id: string, verdict: "accept" | "reject") => void;
+  onDecide?: (id: string, verdict: "accept" | "reject", note?: string) => void;
 }) {
+  // A note is written BEFORE the verdict, not after: decideSuggestion refuses
+  // a second decision on the same suggestion, so once Accept or Reject lands
+  // there is no way to add the reason. Hence a disclosure here rather than an
+  // edit control on the decided card.
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const trimmed = note.trim();
+
   return (
     <article className={`suggestion suggestion-${s.status}`}>
       <div className="suggestion-head">
@@ -222,24 +237,46 @@ function SuggestionCard({
       {s.note && <p className="suggestion-note">note: {s.note}</p>}
 
       {onDecide && s.status === "pending" && (
-        <div className="suggestion-actions">
-          <button
-            type="button"
-            className="btn btn-primary btn-small"
-            onClick={() => onDecide(s.id, "accept")}
-            disabled={busy}
-          >
-            {busy ? "…" : "Accept"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-small"
-            onClick={() => onDecide(s.id, "reject")}
-            disabled={busy}
-          >
-            Reject
-          </button>
-        </div>
+        <>
+          {noteOpen && (
+            <textarea
+              className="suggestion-note-input"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="why — recorded with the verdict"
+              rows={2}
+              disabled={busy}
+              aria-label="Note to record with this verdict"
+            />
+          )}
+          <div className="suggestion-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-small"
+              onClick={() => onDecide(s.id, "accept", trimmed || undefined)}
+              disabled={busy}
+            >
+              {busy ? "…" : "Accept"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-small"
+              onClick={() => onDecide(s.id, "reject", trimmed || undefined)}
+              disabled={busy}
+            >
+              Reject
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-small suggestion-note-btn"
+              onClick={() => setNoteOpen((v) => !v)}
+              disabled={busy}
+              aria-expanded={noteOpen}
+            >
+              {trimmed ? "Note ✓" : "Note…"}
+            </button>
+          </div>
+        </>
       )}
     </article>
   );
