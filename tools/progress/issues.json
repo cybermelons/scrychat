@@ -118,9 +118,9 @@
       "n": 56,
       "anchor": "#present-btn",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "Model-authored slide components",
-      "pin": "Only for slides a chart spec cannot express. Render inside an iframe with no parent access, never into the main document."
+      "pin": "Done: a slide may carry `html`, rendered via srcdoc into an iframe with sandbox=\"\" -- empty, not allow-scripts, verified in the production bundle. checkSlideHtml covers what the sandbox does not: outbound subresource requests and meta-refresh. An allowlist, not a sanitizer: suspect markup is rejected whole."
     },
     {
       "anchor": "#composer-input",
