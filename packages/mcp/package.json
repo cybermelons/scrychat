@@ -6,7 +6,7 @@
   "bin": "dist/index.js",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc -p .",
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
