@@ -272,7 +272,7 @@
       "side": "right",
       "state": "open",
       "title": "Stale-snapshot warning",
-      "pin": "An Arena snapshot ages silently and owned/missing goes quietly wrong. Health knows the mtime; nothing surfaces it yet."
+      "pin": "An Arena snapshot ages silently and owned/missing goes quietly wrong. BACKEND DONE: snapshotAge() classifies fresh/stale/future from the file's own importedAt (not mtime), threshold SNAPSHOT_STALE_DAYS=14, and CollectionSync flags a stale snapshot. STILL OPEN: this health pill does not render it; /api/health exposes only the db mtime, never the snapshot's age."
     },
     {
       "n": 60,
