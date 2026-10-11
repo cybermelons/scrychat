@@ -7,21 +7,26 @@ import {
   requestFolderPermission,
   syncFromHandle,
 } from "./arenaSync";
+import { snapshotAge, SNAPSHOT_STALE_DAYS } from "./snapshot-age.js";
 
 type CollectionInfo =
   | { exists: false }
   | { exists: true; importedAt: string; source: string; uniqueOwned: number; totalCards: number; unmatchedCount: number };
 
-function relativeTime(iso: string): string {
-  const ms = Date.now() - Date.parse(iso);
-  if (!Number.isFinite(ms) || ms < 0) return "just now";
-  const mins = Math.floor(ms / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+function ImportedLine({ info }: { info: Extract<CollectionInfo, { exists: true }> }) {
+  const age = snapshotAge(info.importedAt);
+  return (
+    <span>
+      Arena: {info.uniqueOwned} cards · imported{" "}
+      {age.freshness === "future" ? <span className="text-warn">{age.label}</span> : age.label}
+      {age.freshness === "stale" && (
+        <span className="text-warn" title={`Older than ${SNAPSHOT_STALE_DAYS} days`}>
+          {" "}
+          · stale
+        </span>
+      )}
+    </span>
+  );
 }
 
 export function CollectionSync({ onImported }: { onImported?: () => void }) {
@@ -170,9 +175,7 @@ export function CollectionSync({ onImported }: { onImported?: () => void }) {
     <div className="collection-sync">
       <div className="collection-status">
         {info?.exists ? (
-          <span>
-            Arena: {info.uniqueOwned} cards · imported {relativeTime(info.importedAt)}
-          </span>
+          <ImportedLine info={info} />
         ) : (
           <span className="text-dim">No collection imported</span>
         )}

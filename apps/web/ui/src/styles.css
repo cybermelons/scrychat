@@ -1893,3 +1893,7 @@ body {
     min-height: 44px;
   }
 }
+
+.text-warn {
+  color: #e0af68;
+}
