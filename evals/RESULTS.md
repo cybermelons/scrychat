@@ -79,3 +79,5 @@ each check plus a filesystem sweep in `finally`).
 
 `env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN node evals/run-tier-b.mjs` — **6/6 PASSED** (live subscription chat, self-started server, API-cleaned artifacts):
 B-fmt-1 fenced decklist verbatim (no card-refs in fences) · B-fmt-2 table name cells all linked · B-fmt-3 category chips populated server-side · B-fmt-4 embed rubric (1 focal embed / 0 list embeds) · B-fmt-5 mtga export front-face-only DFC names · B-fmt-6 Arena claims tool-grounded (get_card before answer).
+
+B-fmt-7 (NOT YET RUN; added for #47) every `[[Card]]` / `![[Card]]` / `[[group:..|..]]` claim in the reply must trace to a card name a tool call actually fetched (inputs per a card-field allowlist, plus names in search/alternatives/combos/deck results; deck names never count), and the reply must make >=1 claim. Uses `checkGrounding` from `apps/web/dist/grounding-core.js`. Tier B total is now 7 checks; no result recorded for it yet.

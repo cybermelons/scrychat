@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Tier B behavioral formatting-contract eval harness for scrychat
- * (issue #42; see evals/golden.md, B-fmt-1..6).
+ * (issue #42; see evals/golden.md, B-fmt-1..6; B-fmt-7 is the #47 grounding check).
  *
  * Plain Node, no deps. Starts the built web server itself
  * (apps/web/dist/server.js) on a random free port with a stripped env (no
@@ -23,22 +23,27 @@
  * sweep over decks/tmp-tier-b-*.json ONLY. Never touches user decks/chats.
  *
  * `--contract` flag accepted for gate symmetry with the issue text; the
- * default run already IS the contract subset (all six checks are cheap).
+ * default run already IS the contract subset (all seven checks are cheap).
+ *
+ * B-fmt-7 imports checkGrounding from the BUILT apps/web/dist/grounding-core.js
+ * (run `pnpm --filter @scrychat/web build` first); same dist-import approach
+ * as run-suggestions-e2e.mjs.
  *
  * Mirrors run-tier-c.mjs style: one OK/FAIL line per check, exit 1 on any
- * FAIL, ends with `TIER B: n/6 PASSED`.
+ * FAIL, ends with `TIER B: n/7 PASSED`.
  */
 
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 const SERVER_PATH = path.join(REPO_ROOT, "apps", "web", "dist", "server.js");
 const DECKS_DIR = path.join(REPO_ROOT, "decks");
+const GROUNDING_PATH = path.join(REPO_ROOT, "apps", "web", "dist", "grounding-core.js");
 
 const CHAT_TIMEOUT_MS = 240_000;
 
@@ -416,6 +421,34 @@ async function main() {
     } catch (err) {
       record("B-fmt-6", false, `threw: ${err.message}`);
     }
+
+    // --- B-fmt-7: every card claim traces to a tool fetch (#47, per-claim; B-fmt-6 is per-reply) ---
+    try {
+      const { checkGrounding } = await import(pathToFileURL(GROUNDING_PATH).href);
+      const { chatId, events } = await chat({
+        message:
+          "Suggest 5 more ramp cards for this deck. Name each card, and say briefly why it fits.",
+        activeDeck: deckName,
+      });
+      const { segments, text } = await readPersisted(chatId);
+      const calls = segments
+        .filter((s) => s.type === "tool")
+        .map((s) => ({ name: s.name, input: s.input, result: s.result }));
+      const sseToolUses = events.filter((e) => e.type === "tool-use").length;
+      const report = checkGrounding(text, calls);
+      // claims >= 1 so a reply that names no card cannot pass vacuously
+      const ok = report.claims.length >= 1 && report.ungrounded.length === 0;
+      record(
+        "B-fmt-7",
+        ok,
+        `claims=${report.claims.length} grounded=${report.grounded.length} ` +
+          `ungrounded=${JSON.stringify(report.ungrounded.map((c) => c.name))} fetched=${report.fetched.length} ` +
+          `persistedToolCalls=${calls.length} sseToolUses=${sseToolUses} ` +
+          `truncatedResults=${report.truncatedResults} (results are cut at 2048 chars; >0 means an ungrounded name may be a real, unseen fetch)`,
+      );
+    } catch (err) {
+      record("B-fmt-7", false, `threw: ${err.message}`);
+    }
   } finally {
     // ---- cleanup: only artifacts this run created ----
     for (const id of createdChatIds) {
@@ -444,8 +477,8 @@ async function main() {
   }
 
   const passed = results.filter((r) => r.ok).length;
-  console.log(`\nTIER B: ${passed}/6 PASSED`);
-  if (passed < results.length || results.length < 6) {
+  console.log(`\nTIER B: ${passed}/7 PASSED`);
+  if (passed < results.length || results.length < 7) {
     process.exit(1);
   }
 }
