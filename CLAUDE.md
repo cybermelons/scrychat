@@ -87,6 +87,17 @@ Prefer a spec over a model-authored component. If a slide genuinely cannot be
 expressed as a spec, render the component inside an iframe with no parent
 access — never into the main document.
 
+Built as of 2026-10-11 (#56): a slide may carry `html`, rendered via `srcdoc`
+into an iframe whose `sandbox` attribute is the **empty string**. Do not add an
+`allow-*` token to it. `sandbox=""` is what denies parent access; a single
+`allow-scripts` would let markup authored from card oracle text run JS in the
+user's browser, and `allow-scripts allow-same-origin` together void the
+boundary entirely. `checkSlideHtml` (`apps/web/ui/src/slide-html-core.ts`)
+handles only what the sandbox does not — outbound subresource requests
+(`<img src>`, CSS `url()`) and `<meta refresh>` — and is an allowlist that
+rejects suspect markup whole. Do not turn it into a sanitizer that cleans and
+renders the remainder.
+
 ## Tool permissions — do not widen without reading this
 
 `apps/web/src/server.ts` sets `permissionMode: "dontAsk"`, so an allowed tool
