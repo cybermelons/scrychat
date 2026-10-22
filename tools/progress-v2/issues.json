@@ -77,7 +77,7 @@
       "side": "left",
       "state": "open",
       "title": "Promote function-first deckbuilding from prompt text into UI + API schema",
-      "pin": "The one axis where farseek is ahead of us (comparison/00-summary.md). They made named functional roles plus typed bracket/budget the SHAPE OF THE REQUEST; we reach the same skeleton through a skill prompt. A prompt constraint is advisory and a miss is invisible - a deck quietly short on removal still looks fine. Schema-level, a violation is a test failure."
+      "pin": "DONE in 0d89735: wincon quota role, Deck.bracket/budgetUsd, priceUsd + contractViolations in deckReport, deck_set_meta tool, deck_present refuses while violations exist; SKILL.md prose moved to the contract. Bracket is stored, not rule-checked. Waiting for the owner to close it."
     },
     {
       "n": 80,
