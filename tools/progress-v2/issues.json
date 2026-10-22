@@ -103,5 +103,14 @@
       "title": "Oracle: collection/printing analysis and originality scoring",
       "pin": "Moved here from farseek-teardown gitea #3, where it did not belong - it is a scrychat feature request, not a teardown finding. Originality scoring is the natural extension of our 'no popularity prior' stance. Their ranking formula is server-side and uncopyable; only the idea transfers, implemented with our published formula. Output shape is STATED, not MEASURED - a real-deck Oracle reading was gated on account age and never ran."
     }
-  ]
+  ],
+  "off_board": {
+    "44": "Not part of Farseek layout parity. Tracked on the current-surface board, tools/progress (docs/progress/index.html).",
+    "57": "Not part of Farseek layout parity. Tracked on the current-surface board, tools/progress (docs/progress/index.html).",
+    "63": "Not part of Farseek layout parity. Tracked on the current-surface board, tools/progress (docs/progress/index.html).",
+    "64": "Not part of Farseek layout parity. Tracked on the current-surface board, tools/progress (docs/progress/index.html).",
+    "71": "Not part of Farseek layout parity. Tracked on the current-surface board, tools/progress (docs/progress/index.html).",
+    "72": "Not part of Farseek layout parity. Tracked on the current-surface board, tools/progress (docs/progress/index.html).",
+    "82": "Not part of Farseek layout parity. Tracked on the current-surface board, tools/progress (docs/progress/index.html)."
+  }
 }

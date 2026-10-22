@@ -662,7 +662,7 @@ def apply_tracker_state(issues, live):
     return changed
 
 
-def audit(issues):
+def audit(issues, off_board):
     """Compare the board against the tracker, in both directions.
 
     A board that is only checked one way drifts silently: an issue closed in
@@ -697,7 +697,8 @@ def audit(issues):
                 f'#{n} title drifted\n  tracker: {it["title"]}\n  board:   {i["title"]}')
 
     for n, it in sorted(live.items()):
-        if n not in board and it['state'] == 'open':
+        # off_board: open issues this board excuses, each with its reason.
+        if n not in board and str(n) not in off_board and it['state'] == 'open':
             problems.append(f'#{n} open in the tracker, no pin: {it["title"]}')
 
     return problems
@@ -716,7 +717,7 @@ def main():
     data = json.loads(DATA.read_text())
 
     if args.audit:
-        problems = audit(data['issues'])
+        problems = audit(data['issues'], data.get('off_board', {}))
         for p in problems:
             print(p)
         print(f'{len(problems)} problem(s)' if problems else 'board matches tracker')
