@@ -9,8 +9,8 @@
       "live": true
     },
     "preview": {
-      "url": "http://100.115.109.103:8140/progress.html",
-      "label": "this board (tailnet)",
+      "url": "https://tsunomaki.tail623785.ts.net:18812/board/progress.html",
+      "label": "this board (dev preview)",
       "live": true
     }
   },
