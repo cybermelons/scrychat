@@ -420,6 +420,8 @@ app.post("/api/chat", async (req: Request, res: Response) => {
           "mcp__scrychat__deck_set_card_tags",
           "mcp__scrychat__deck_rename",
           "mcp__scrychat__deck_set_commander",
+          // Edits deck metadata (bracket, budget, role targets), never cards.
+          "mcp__scrychat__deck_set_meta",
           "mcp__scrychat__deck_export",
           "mcp__scrychat__goldfish_deck",
           "mcp__scrychat__goldfish_compare",
@@ -805,6 +807,7 @@ const resolver: CardResolver = async (name: string) => {
         manaCost: card.manaCost,
         producedMana: card.producedMana,
         arena: card.arena,
+        usd: card.usd,
       }
     : null;
   resolverCache.set(key, resolved);

@@ -10,6 +10,7 @@ const QUOTA_ROWS: { key: QuotaTargetKey; label: string }[] = [
   { key: "draw", label: "Draw" },
   { key: "interaction", label: "Interaction" },
   { key: "wipes", label: "Wipes" },
+  { key: "wincon", label: "Win conditions" },
 ];
 
 type QuotaDraft = Record<QuotaTargetKey, [string, string]>;

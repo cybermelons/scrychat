@@ -17,6 +17,8 @@ export type Deck = {
   cards: CardEntry[];
   updatedAt: string;
   commanderImage?: string | null;
+  bracket?: 1 | 2 | 3 | 4 | 5;
+  budgetUsd?: number;
 };
 
 export type DeckSummary = {
@@ -49,7 +51,10 @@ export type DeckReport = {
     draw: QuotaCheck;
     interaction: QuotaCheck;
     wipes: QuotaCheck;
+    wincon: QuotaCheck;
   };
+  priceUsd: { total: number; unpriced: number };
+  violations: string[];
   identityViolations: string[];
   arenaCheck?: ArenaCheck;
 };
@@ -94,7 +99,7 @@ export type DeckImportResult = {
 
 export type ExportFormat = "mtga" | "plain" | "moxfield";
 
-export type QuotaTargetKey = "lands" | "ramp" | "draw" | "interaction" | "wipes";
+export type QuotaTargetKey = "lands" | "ramp" | "draw" | "interaction" | "wipes" | "wincon";
 
 export type QuotaTargets = Partial<Record<QuotaTargetKey, [number, number]>>;
 

@@ -18,6 +18,7 @@ export type QuotaTargets = {
   draw: [number, number];
   interaction: [number, number];
   wipes: [number, number];
+  wincon: [number, number];
 };
 
 export const DEFAULT_QUOTA_TARGETS: QuotaTargets = {
@@ -26,6 +27,7 @@ export const DEFAULT_QUOTA_TARGETS: QuotaTargets = {
   draw: [10, 12],
   interaction: [8, 10],
   wipes: [2, 4],
+  wincon: [1, 3],
 };
 
 export type Deck = {
@@ -35,6 +37,9 @@ export type Deck = {
   cards: CardEntry[];
   updatedAt: string;
   quotaTargets?: Partial<QuotaTargets>;
+  bracket?: 1 | 2 | 3 | 4 | 5;
+  /** Whole-deck price ceiling in USD. */
+  budgetUsd?: number;
 };
 
 export type ResolvedCard = {
@@ -47,6 +52,7 @@ export type ResolvedCard = {
   manaCost?: string | null;
   producedMana?: string[] | null;
   arena?: boolean | null;
+  usd?: number | null;
 };
 
 export type CardResolver = (name: string) => Promise<ResolvedCard | null>;
@@ -77,7 +83,10 @@ export type DeckReport = {
     draw: QuotaCheck;
     interaction: QuotaCheck;
     wipes: QuotaCheck;
+    wincon: QuotaCheck;
   };
+  priceUsd: { total: number; unpriced: number };
+  violations: string[];
   identityViolations: string[];
   arenaCheck: {
     onArena: number;
@@ -593,7 +602,7 @@ export async function removeTag(
   return { deck, affected };
 }
 
-const QUOTA_TAG_NAMES = new Set(["land", "ramp", "draw", "interaction", "wipe"]);
+const QUOTA_TAG_NAMES = new Set(["land", "ramp", "draw", "interaction", "wipe", "wincon"]);
 const UNTAGGED = "untagged";
 
 export const RECOGNIZED_QUOTA_TAGS: string[] = [...new Set([...QUOTA_TAG_NAMES, ...INTERACTION_ROLES])];
@@ -611,7 +620,7 @@ function quota(have: number, [min, max]: [number, number]): QuotaCheck {
   };
 }
 
-const QUOTA_TARGET_FIELDS = ["lands", "ramp", "draw", "interaction", "wipes"] as const;
+const QUOTA_TARGET_FIELDS = ["lands", "ramp", "draw", "interaction", "wipes", "wincon"] as const;
 
 function isValidTuple(value: unknown): value is [number, number] {
   if (!Array.isArray(value) || value.length !== 2) return false;
@@ -650,6 +659,63 @@ export function resolveQuotaTargets(
   return result;
 }
 
+/**
+ * The deck's stated contract as a list of misses: quota counts outside their
+ * target and total price over `budgetUsd`. Empty = contract met.
+ * ponytail: bracket is stored, not checked; official brackets need the
+ * game-changer / tutor / extra-turn / combo lists. Add `checkBracket()` when
+ * that list is in the local mirror.
+ */
+export function contractViolations(
+  deck: Deck,
+  report: Pick<DeckReport, "quotaCheck" | "priceUsd">
+): string[] {
+  const out: string[] = [];
+  for (const [key, q] of Object.entries(report.quotaCheck)) {
+    if (q.ok) continue;
+    const min = Number(q.want.split("-")[0]);
+    out.push(`${key} ${q.have} ${q.have < min ? "<" : ">"} ${q.want}`);
+  }
+  const { budgetUsd } = deck;
+  if (budgetUsd != null && report.priceUsd.total > budgetUsd) {
+    out.push(`budget $${report.priceUsd.total.toFixed(2)} > $${budgetUsd}`);
+  }
+  return out;
+}
+
+export type DeckMeta = {
+  bracket?: number;
+  budget_usd?: number;
+  quota_targets?: Partial<QuotaTargets>;
+};
+
+/** Sets bracket / budget / per-deck quota targets. Only given fields change. */
+export async function setDeckMeta(
+  name: string,
+  meta: DeckMeta,
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<Deck> {
+  const deck = await getDeck(name, decksDir);
+  if (!deck) throw new Error(`Deck not found: ${name}`);
+  if (meta.bracket !== undefined) {
+    if (![1, 2, 3, 4, 5].includes(meta.bracket)) throw new Error(`bracket must be 1-5: ${meta.bracket}`);
+    deck.bracket = meta.bracket as Deck["bracket"];
+  }
+  if (meta.budget_usd !== undefined) {
+    if (!(meta.budget_usd > 0)) throw new Error(`budget_usd must be positive: ${meta.budget_usd}`);
+    deck.budgetUsd = meta.budget_usd;
+  }
+  for (const field of QUOTA_TARGET_FIELDS) {
+    const v = meta.quota_targets?.[field];
+    if (v === undefined) continue;
+    if (!isValidTuple(v)) throw new Error(`quota_targets.${field} must be [min, max] with min <= max`);
+    deck.quotaTargets = { ...deck.quotaTargets, [field]: v };
+  }
+  deck.updatedAt = new Date().toISOString();
+  await writeDeckFile(decksDir, deck);
+  return deck;
+}
+
 export async function deckReport(
   name: string,
   resolver: CardResolver,
@@ -679,6 +745,8 @@ export async function deckReport(
   let untaggedForQuota = 0;
   let interactionHave = 0;
   let onArena = 0;
+  let priceTotal = 0;
+  let unpriced = 0;
   const arenaMissing: string[] = [];
   const arenaUnknown: string[] = [];
 
@@ -712,6 +780,8 @@ export async function deckReport(
     }
 
     const resolved = resolvedByName.get(card.name) ?? null;
+    if (typeof resolved?.usd === "number") priceTotal += resolved.usd * count;
+    else unpriced += count;
     if (resolved) {
       if (!isSubsetIdentity(resolved.colorIdentity, deck.commanderIdentity)) {
         identityViolations.push(card.name);
@@ -739,6 +809,17 @@ export async function deckReport(
   const rampHave = byTag["ramp"] ?? 0;
   const drawHave = byTag["draw"] ?? 0;
   const wipesHave = byTag["wipe"] ?? 0;
+  const winconHave = byTag["wincon"] ?? 0;
+
+  const quotaCheck = {
+    lands: quota(landsHave, effectiveTargets.lands),
+    ramp: quota(rampHave, effectiveTargets.ramp),
+    draw: quota(drawHave, effectiveTargets.draw),
+    interaction: quota(interactionHave, effectiveTargets.interaction),
+    wipes: quota(wipesHave, effectiveTargets.wipes),
+    wincon: quota(winconHave, effectiveTargets.wincon),
+  };
+  const priceUsd = { total: Math.round(priceTotal * 100) / 100, unpriced };
 
   return {
     total,
@@ -747,13 +828,9 @@ export async function deckReport(
     byTag,
     untaggedForQuota,
     curve,
-    quotaCheck: {
-      lands: quota(landsHave, effectiveTargets.lands),
-      ramp: quota(rampHave, effectiveTargets.ramp),
-      draw: quota(drawHave, effectiveTargets.draw),
-      interaction: quota(interactionHave, effectiveTargets.interaction),
-      wipes: quota(wipesHave, effectiveTargets.wipes),
-    },
+    quotaCheck,
+    priceUsd,
+    violations: contractViolations(deck, { quotaCheck, priceUsd }),
     identityViolations,
     arenaCheck: {
       onArena,
@@ -770,6 +847,8 @@ export type DeckSummary = {
   untaggedForQuota: number;
   remaining: number;
   arenaCheck: DeckReport["arenaCheck"];
+  violations: string[];
+  priceUsd: DeckReport["priceUsd"];
 };
 
 export async function deckSummary(
@@ -785,5 +864,7 @@ export async function deckSummary(
     untaggedForQuota: report.untaggedForQuota,
     remaining: 100 - report.total,
     arenaCheck: report.arenaCheck,
+    violations: report.violations,
+    priceUsd: report.priceUsd,
   };
 }

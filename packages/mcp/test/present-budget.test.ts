@@ -16,7 +16,7 @@ const read = (rel: string) =>
  * Rebuilds deck_present's four slides using only values the producer can
  * actually emit, so a worst case here is a real one rather than a contrived
  * number:
- *  - quotaCheck is a FIXED five keys (lands/ramp/draw/interaction/wipes) from
+ *  - quotaCheck is a FIXED six keys (lands/ramp/draw/interaction/wipes) from
  *    QuotaTargets in packages/core/src/decks.ts -- not user-named tags.
  *  - `want` is a "min-max" string, per quota() at decks.ts:606.
  *  - the curve bucket is `cmc >= 7 ? "7+" : String(cmc)` (decks.ts:722), so
@@ -25,7 +25,7 @@ const read = (rel: string) =>
  * this stops reflecting it and the sizes below must be re-measured, which is
  * exactly when a human should look again.
  */
-const QUOTA_KEYS = ["lands", "ramp", "draw", "interaction", "wipes"] as const;
+const QUOTA_KEYS = ["lands", "ramp", "draw", "interaction", "wipes", "wincon"] as const;
 const CURVE_BUCKETS = ["0", "1", "2", "3", "4", "5", "6", "7+"] as const;
 const cell = 'style="padding:2px 6px"';
 
@@ -51,7 +51,7 @@ function buildSlides(opts: {
   const html =
     `<div style="font:12px system-ui;color:#c0caf5">` +
     `<table><thead><tr style="color:#787c99">` +
-    `<th ${cell}>tag</th><th ${cell}>have</th><th ${cell}>want</th><th></th>` +
+    `<th>tag</th><th>have</th><th>want</th><th></th>` +
     `</tr></thead><tbody>${rows}</tbody></table></div>`;
   return [
     {
@@ -68,7 +68,7 @@ function buildSlides(opts: {
     {
       title: "Quotas",
       text: quotas
-        .map((q) => `${q.k} ${q.have} (want ${q.want}) ${q.ok ? "ok" : "OFF"}`)
+        .map((q) => `${q.k} ${q.have}/${q.want}${q.ok ? "" : " OFF"}`)
         .join("\n")
         .slice(0, 320),
       html,

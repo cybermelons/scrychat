@@ -79,3 +79,19 @@ export function parseSlideSpec(result?: string): SlideSpec | null {
   }
   return { slides };
 }
+
+/**
+ * deck_present refuses with {error:"contract not met", violations} while the
+ * deck misses its contract. Returns the violation strings, or null for any
+ * other result. Untrusted: only strings survive.
+ */
+export function parseContractRefusal(result?: string): string[] | null {
+  if (typeof result !== "string") return null;
+  try {
+    const p = JSON.parse(result);
+    if (p?.error !== "contract not met" || !Array.isArray(p.violations)) return null;
+    return p.violations.filter((v: unknown): v is string => typeof v === "string");
+  } catch {
+    return null;
+  }
+}

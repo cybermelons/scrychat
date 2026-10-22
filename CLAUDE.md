@@ -8,7 +8,7 @@ reasoning behind them.
 
 - `packages/core` — Scryfall + Commander Spellbook clients, local tag index,
   functional-alternatives scoring, deck file CRUD. Decks are JSON under `decks/`.
-- `packages/mcp` — MCP stdio server, 24 tools over core.
+- `packages/mcp` — MCP stdio server, 25 tools over core.
 - `apps/web` — Express + Claude Agent SDK backend, React frontend, SSE between
   chat and deck panel. Tool permissions live in `apps/web/src/server.ts`.
 
@@ -111,7 +111,7 @@ execution on the host as the logged-in user.
 
 Current shape, and the reason for each part:
 
-- Allowed: 21 of the 24 `mcp__scrychat__*` tools, plus `Read` and `Grep`.
+- Allowed: 22 of the 25 `mcp__scrychat__*` tools, plus `Read` and `Grep`.
   The 3 that are registered but NOT allowlisted are `collection_stats`,
   `deck_rename_tag` and `deck_set_card_count`. Counted from
   `apps/web/src/server.ts` and `packages/mcp/src/tools.ts` on 2026-10-11.

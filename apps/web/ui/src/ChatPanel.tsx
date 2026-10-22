@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { AppConfig, ChartSpec, CompareSpec, SlideSpec, ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
 import { parseChartSpec } from "./chart-core";
 import { compareVerdict, parseCompareSpec } from "./compare-core";
-import { parseSlideSpec } from "./slides-core";
+import { parseSlideSpec, parseContractRefusal } from "./slides-core";
 import {
   ATTACH_MAX_COUNT,
   base64FromDataUrl,
@@ -330,7 +330,13 @@ function AssistantBody({
             })()}
             {seg.name.replace(/^mcp__scrychat__/, "") === "deck_present" && (() => {
               const spec = parseSlideSpec(seg.result);
-              return spec ? <Module head="Slides"><SlideStrip spec={spec} /></Module> : null;
+              if (spec) return <Module head="Slides"><SlideStrip spec={spec} /></Module>;
+              const refused = parseContractRefusal(seg.result);
+              return refused ? (
+                <Module head="Contract not met">
+                  <ul>{refused.map((v, k) => <li key={k}>{v}</li>)}</ul>
+                </Module>
+              ) : null;
             })()}
           </div>
         )

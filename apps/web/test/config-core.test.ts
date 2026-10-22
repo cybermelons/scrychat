@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolveQuotaTargets } from "@scrychat/core";
 import { parseConfig, applyConfigPatch, DEFAULT_CONFIG } from "../src/config-core.js";
 
 describe("parseConfig", () => {
@@ -157,5 +159,24 @@ describe("applyConfigPatch", () => {
     const { config, errors } = applyConfigPatch(base, "nope");
     expect(errors.length).toBeGreaterThan(0);
     expect(config).toEqual(base);
+  });
+});
+
+describe("wincon quota target and deck_set_meta allowlist", () => {
+  const base = { defaultExportFormat: "mtga" as const, goldfishSeed: 0 };
+
+  it("PATCH persists wincon and it resolves to [1,3]; [3,1] is rejected", () => {
+    const ok = applyConfigPatch(base, { quotaTargets: { wincon: [1, 3] } });
+    expect(ok.errors).toEqual([]);
+    expect(resolveQuotaTargets(ok.config.quotaTargets).wincon).toEqual([1, 3]);
+    const bad = applyConfigPatch(base, { quotaTargets: { wincon: [3, 1] } });
+    expect(bad.errors.length).toBeGreaterThan(0);
+  });
+
+  it("deck_set_meta is allowlisted and no write tool is", () => {
+    const server = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+    const allowed = server.slice(server.indexOf("allowedTools: ["), server.indexOf("disallowedTools: ["));
+    expect(allowed).toContain('"mcp__scrychat__deck_set_meta"');
+    expect(allowed).not.toMatch(/"(Bash|Write|Edit|WebFetch)"/);
   });
 });

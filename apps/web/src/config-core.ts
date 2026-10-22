@@ -21,7 +21,7 @@ export const DEFAULT_CONFIG: ScrychatConfig = {
 };
 
 const EXPORT_FORMATS = ["mtga", "plain", "moxfield"] as const;
-const QUOTA_TARGET_FIELDS = ["lands", "ramp", "draw", "interaction", "wipes"] as const;
+const QUOTA_TARGET_FIELDS = ["lands", "ramp", "draw", "interaction", "wipes", "wincon"] as const;
 
 function isExportFormat(value: unknown): value is ScrychatConfig["defaultExportFormat"] {
   return typeof value === "string" && (EXPORT_FORMATS as readonly string[]).includes(value);

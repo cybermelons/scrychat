@@ -108,9 +108,10 @@ instead of asking.
    - board wipes (`otag:sweeper`)
    - theme payoffs from step 3
 5. `find_combos` filtered to identity for win lines; add 1-3 as the explicit game plan.
-6. `deck_create`, then `deck_add` each pick with `tags`: one quota tag where applicable
-   (land/ramp/draw/interaction/wipe — these drive the quota checklist) plus any free-form
-   strategy tags that fit (e.g. "aristocrats payoff", "combo piece", "sac fodder", "wincon").
+6. `deck_create` (pass `bracket` / `budget_usd` / `quota_targets` whenever the user stated any;
+   `deck_set_meta` sets them on an existing deck), then `deck_add` each pick with `tags`: one quota tag
+   where applicable (land/ramp/draw/interaction/wipe/wincon — these drive the quota checklist) plus
+   any free-form strategy tags that fit (e.g. "aristocrats payoff", "combo piece", "sac fodder").
    `role` is still accepted as a legacy single-tag alias, but prefer `tags`.
 7. `deck_get` to check the quota report (now grouped `byTag`, with `untaggedForQuota` flagging
    cards that carry no quota tag) + mana curve; relay any rejection reasons from `deck_add`
@@ -125,8 +126,8 @@ instead of asking.
    remove+re-add when just changing how many Forests/Islands/etc. are in the deck), `deck_rename`
    renames the deck (rejects on name collision), and `deck_set_commander` swaps the commander
    (reports but does not auto-remove cards outside the new identity, via `nowIllegal`).
-9. If a budget was given, run a final pass replacing over-budget cards via `find_alternatives`
-   with `usd<N prefer:usd-low`.
+9. `summary.violations` must be empty before `deck_present`; it refuses otherwise. Fix each named
+   violation (budget: `find_alternatives` with `usd<N prefer:usd-low`).
 
 **F. "Import a pasted decklist"**
 1. When the user pastes something that looks like a decklist (multiple lines, many with leading
@@ -165,23 +166,17 @@ instead of asking.
 
 ## EDH skeleton quotas
 
-- Lands: ~36-38 (down toward 33-35 with a low curve or heavy ramp package)
-- Ramp: 10-12
-- Card advantage: 10-12
-- Interaction (removal/counters): 8-10
-- Board wipes: 2-4
-- Remainder: theme payoffs / win conditions
+- Role targets live in the deck contract (`quotaCheck[...].want`); `want` is authoritative
 - Singleton: exactly one copy of each nonland card (basic lands exempt)
 - Color identity includes mana symbols in rules text, not just the mana cost — check both
-- These numbers are just defaults — targets are configurable (global config + per-deck override,
-  per-deck wins); `deck_get`'s `quotaCheck[...].want` always reflects the ACTIVE targets, so trust
-  `want`, don't assume the defaults above (e.g. landfall/stax decks may run different numbers)
+- Targets are configurable (global config + per-deck override, per-deck wins); never assume
+  defaults (e.g. landfall/stax decks may run different numbers)
 
 ## Presentation
 
 - Group every suggestion list by functional role, and name the role — and when you name a role,
   emit its `[[group:role|...]]` chip inline (see below) rather than only a heading.
-- Show price (`usd`) whenever budget is a stated or implied constraint.
+- `deck_get` `report.priceUsd` is the deck price; show it when `budgetUsd` is set. Show per-card `usd` when budget is a stated or implied constraint.
 - For decks, always show the quota checklist (lands/ramp/draw/interaction/wipes/payoffs vs.
   target) and a mana curve summary from `deck_get`.
 - If an `otag:` search returns few or no hits, say so explicitly — it may be a tag-coverage gap,

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { parseSlideSpec } from "../ui/src/slides-core.js";
+import { parseSlideSpec, parseContractRefusal } from "../ui/src/slides-core.js";
 
 // parseSlideSpec logs every rejection at debug level; silence it so the suite output stays readable.
 beforeEach(() => vi.spyOn(console, "debug").mockImplementation(() => {}));
@@ -133,5 +133,13 @@ describe("parseSlideSpec rejects", () => {
 
   it("one bad slide among good ones", () => {
     expect(parseSlideSpec(j(make([{ title: "A", text: "x" }, { title: "B" }])))).toBeNull();
+  });
+});
+
+describe("parseContractRefusal", () => {
+  it("returns the violations of a deck_present refusal and null for anything else", () => {
+    expect(parseContractRefusal(JSON.stringify({ error: "contract not met", violations: ["ramp 4 < 10-12", 7] }))).toEqual(["ramp 4 < 10-12"]);
+    expect(parseContractRefusal(JSON.stringify({ error: "Deck not found: x" }))).toBeNull();
+    expect(parseContractRefusal("not json")).toBeNull();
   });
 });

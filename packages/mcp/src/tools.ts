@@ -34,6 +34,7 @@ import {
   deckSummary,
   renameDeck,
   setCommander,
+  setDeckMeta,
   setCardTagsResult,
   renameTag,
   setCardCount,
@@ -113,7 +114,26 @@ const resolveCard: CardResolver = async (name: string) => {
     typeLine: card.typeLine,
     legalCommander: card.legalCommander,
     arena: card.arena,
+    usd: card.usd,
   };
+};
+
+const tuple = z.tuple([z.number(), z.number()]);
+/** Deck contract fields shared by deck_create and deck_set_meta. */
+const DECK_META = {
+  bracket: z.number().int().min(1).max(5).optional().describe("Commander bracket 1-5 (stored, not rule-checked)"),
+  budget_usd: z.number().positive().optional().describe("Whole-deck price ceiling in USD"),
+  quota_targets: z
+    .object({
+      lands: tuple.optional(),
+      ramp: tuple.optional(),
+      draw: tuple.optional(),
+      interaction: tuple.optional(),
+      wipes: tuple.optional(),
+      wincon: tuple.optional(),
+    })
+    .optional()
+    .describe("Per-deck [min, max] role targets; override the global config"),
 };
 
 function json(data: unknown) {
@@ -346,11 +366,13 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         name: z.string().describe("Deck name"),
         commander: z.string().describe("Commander card name"),
+        ...DECK_META,
       },
     },
-    async ({ name, commander }) => {
+    async ({ name, commander, ...meta }) => {
       return safe(async () => {
-        const deck = await createDeck(name, commander, resolveCard, decksDir);
+        let deck = await createDeck(name, commander, resolveCard, decksDir);
+        if (Object.keys(meta).length > 0) deck = await setDeckMeta(name, meta, decksDir);
         return {
           name: deck.name,
           commander: deck.commander,
@@ -362,12 +384,30 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "deck_set_meta",
+    {
+      title: "Set deck contract",
+      description:
+        "Sets a deck's bracket, whole-deck budget_usd and per-deck quota_targets (lands/ramp/draw/interaction/wipes/wincon). " +
+        "Only given fields change. Returns the deck summary; summary.violations lists every miss against the contract.",
+      inputSchema: { deck_name: z.string(), ...DECK_META },
+    },
+    async ({ deck_name, ...meta }) => {
+      return safe(async () => {
+        const deck = await setDeckMeta(deck_name, meta, decksDir);
+        const summary = await deckSummary(deck_name, resolveCard, decksDir, globalQuotaTargets);
+        return { name: deck.name, bracket: deck.bracket, budgetUsd: deck.budgetUsd, quotaTargets: deck.quotaTargets, summary };
+      });
+    },
+  );
+
+  server.registerTool(
     "deck_get",
     {
       title: "Get deck",
       description:
         "Fetches a deck's full card list (grouped by tag) plus a deck report: quota check against " +
-        "recommended counts (lands/ramp/draw/interaction/wipes), mana curve, any color identity violations, " +
+        "recommended counts (lands/ramp/draw/interaction/wipes/wincon), report.violations (misses against the deck contract), mana curve, any color identity violations, " +
         "and arenaCheck (MTG Arena availability: onArena/total copies plus missing/unknown name lists). " +
         "Answer whole-deck Arena questions ('is this deck playable on Arena', 'what's missing from Arena') " +
         "from arenaCheck directly — do not re-derive it via per-card lookups.",
@@ -413,7 +453,11 @@ export function registerTools(server: McpServer): void {
             untaggedForQuota: report.untaggedForQuota,
             identityViolations: report.identityViolations,
             arenaCheck: report.arenaCheck,
+            violations: report.violations,
+            priceUsd: report.priceUsd,
           },
+          bracket: deck.bracket,
+          budgetUsd: deck.budgetUsd,
         };
       });
     },
@@ -736,6 +780,7 @@ export function registerTools(server: McpServer): void {
         "Builds a short slide deck about one saved deck: mana curve, quota check, the suggestion queue and the " +
         "pending suggestions. Returns {kind:'slides', deck, slides:[{title, text?, chart?}]}; the UI renders it as " +
         "a slide strip. Use when the user asks to present, walk through or summarise a deck or its suggestions. " +
+        "Refuses with {error:'contract not met', violations} while the deck misses its contract (fix those first). "+
         "Read-only: it proposes nothing and edits nothing; use deck_suggest to queue changes.",
       inputSchema: {
         deck_name: z.string().describe("Deck name"),
@@ -747,6 +792,8 @@ export function registerTools(server: McpServer): void {
         if (!deck) return { error: `Deck not found: ${deck_name}` };
         await getCards(deck.cards.map((c) => c.name));
         const report = await deckReport(deck_name, resolveCard, decksDir, globalQuotaTargets);
+        // ponytail: hard refusal; add an acknowledge_violations flag if presenting a WIP deck becomes a real flow.
+        if (report.violations.length > 0) return { error: "contract not met", violations: report.violations };
         const suggestions = await listSuggestions(deck_name, suggestionsDir);
 
         // The web app truncates a tool result at 2048 chars; a longer result never renders. Every
@@ -797,14 +844,14 @@ export function registerTools(server: McpServer): void {
         const quotaHtml =
           `<div style="font:12px system-ui;color:#c0caf5">` +
           `<table><thead><tr style="color:#787c99">` +
-          `<th ${cell}>tag</th><th ${cell}>have</th><th ${cell}>want</th><th></th>` +
+          `<th>tag</th><th>have</th><th>want</th><th></th>` +
           `</tr></thead><tbody>${rows}</tbody></table></div>`;
         slides.push({
           title: "Quotas",
           // text is kept as the fallback for any client that rejects the html.
           text: clip(
             Object.entries(report.quotaCheck)
-              .map(([k, q]) => `${k} ${q.have} (want ${q.want}) ${q.ok ? "ok" : "OFF"}`)
+              .map(([k, q]) => `${k} ${q.have}/${q.want}${q.ok ? "" : " OFF"}`)
               .join("\n"),
             320,
           ),

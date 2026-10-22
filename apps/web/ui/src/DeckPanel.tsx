@@ -1523,7 +1523,7 @@ export function DeckPanel({
               <div className="heroactions">
                 <button type="button" className="chip bracket" onClick={stub("Commander bracket")}>
                   <span className="dot" />
-                  Bracket —
+                  Bracket {deck.bracket ?? "—"}
                 </button>
                 <button type="button" className="chip" onClick={stub("Deckbuilding rules")}>
                   Deckbuilding rules
@@ -1766,7 +1766,7 @@ export function DeckPanel({
                   {" · "}
                 </span>
                 <button type="button" className="link" onClick={stub("Deck price")}>
-                  €—
+                  {report ? `$${report.priceUsd.total.toFixed(2)}${report.priceUsd.unpriced > 0 ? ` (${report.priceUsd.unpriced} unpriced)` : ""}` : "$—"}
                 </button>
                 {loading && <span className="refreshing"> · refreshing…</span>}
               </div>
@@ -1976,6 +1976,7 @@ export function DeckPanel({
                         ["Ramp", report.quotaCheck.ramp],
                         ["Card draw", report.quotaCheck.draw],
                         ["Removal", report.quotaCheck.interaction],
+                        ["Win cons", report.quotaCheck.wincon],
                       ] as [string, QuotaCheck][]
                     ).map(([label, q]) => (
                       <div className="bar" key={label}>
@@ -2009,6 +2010,12 @@ export function DeckPanel({
                     </div>
                   </div>
                   <ManaCurve curve={report.curve} />
+                  {report.violations.length > 0 && (
+                    <div className="link benchnote" style={{ color: "var(--bad, #f7768e)" }}>
+                      {report.violations.length} contract {report.violations.length === 1 ? "miss" : "misses"}:{" "}
+                      {report.violations.join("; ")}
+                    </div>
+                  )}
                   {report.untaggedForQuota > 0 && (
                     <div className="link benchnote">{report.untaggedForQuota} cards untagged for quota</div>
                   )}

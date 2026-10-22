@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   createDeck,
+  setDeckMeta,
   addCards,
   removeCards,
   getDeck,
@@ -144,6 +145,24 @@ describe("decks", () => {
 
     const fetched = await getDeck("Selesnya Value", decksDir);
     expect(fetched?.name).toBe("Selesnya Value");
+  });
+
+  it("contract violations: budget and wincon, cleared by setDeckMeta", async () => {
+    const priced: CardResolver = async (n) => {
+      const c = await resolver(n);
+      return c && c.name === "Sol Ring" ? { ...c, usd: 12 } : c;
+    };
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", priced, decksDir);
+    await setDeckMeta("Selesnya Value", { budget_usd: 10 }, decksDir);
+    await addCards("Selesnya Value", [{ name: "Sol Ring", tags: ["ramp"] }], priced, decksDir);
+    const before = await deckReport("Selesnya Value", priced, decksDir);
+    expect(before.priceUsd).toEqual({ total: 12, unpriced: 0 });
+    expect(before.violations.some((v) => v.startsWith("budget"))).toBe(true);
+    expect(before.violations.some((v) => v.startsWith("wincon"))).toBe(true);
+    await setDeckMeta("Selesnya Value", { quota_targets: { wincon: [0, 0] }, budget_usd: 20 }, decksDir);
+    const after = await deckReport("Selesnya Value", priced, decksDir);
+    expect(after.violations.some((v) => v.startsWith("budget"))).toBe(false);
+    expect(after.violations.some((v) => v.startsWith("wincon"))).toBe(false);
   });
 
   it("rejects creating a deck with an unknown commander", async () => {
@@ -347,7 +366,7 @@ describe("decks", () => {
 
   it("RECOGNIZED_QUOTA_TAGS is the union of quota tag names and interaction roles", () => {
     expect(new Set(RECOGNIZED_QUOTA_TAGS)).toEqual(
-      new Set(["land", "ramp", "draw", "interaction", "wipe", "removal", "counterspell"])
+      new Set(["land", "ramp", "draw", "interaction", "wipe", "wincon", "removal", "counterspell"])
     );
   });
 
