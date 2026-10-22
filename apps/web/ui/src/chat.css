@@ -13,7 +13,11 @@
 .modbody{padding:var(--space-3)}
 .modhead .card-group{text-transform:none;letter-spacing:0}
 .chipname{position:relative}
-.cfoot-left{display:flex;align-items:center;gap:var(--space-2);min-width:0}
+.chatpanes,.chatpane,.inputbox{min-width:0}
+#chatcol{min-width:0}
+.cfoot{gap:var(--space-2)}
+.cfoot-left{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);min-width:0;flex:1 1 0}
+#deck-chip{flex:1 1 100%;min-width:0}
 .cfoot .meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .send:disabled{opacity:.4;cursor:default}
 .send.chat-stop{background:var(--error)}

@@ -19,6 +19,7 @@
   position: absolute; top: var(--space-6); right: var(--space-6); z-index: 0;
   height: 220px; width: auto; border-radius: var(--radius-md); opacity: 0.9;
 }
+@media (max-width: 1240px) { .hero .commander-thumb { display: none; } }
 .popwrap { position: relative; display: inline-flex; }
 .pop {
   position: absolute; top: calc(100% + var(--space-2)); left: 0; z-index: 20; min-width: 220px;
