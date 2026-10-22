@@ -21,7 +21,7 @@
       "side": "left",
       "state": "open",
       "title": "v2 mockup: add element ids to every pinnable region",
-      "pin": "DONE in mockup.html: ids went 4 -> 32. This board could not be built before it - a pin naming a missing id fails check_anchors(). Close once the ids land in the repo's own copy of the target."
+      "pin": "DONE: mockup ids 4 -> 32, and the app carries them (waves 3-4). Waiting for the owner to close it (gh issue close is blocked for the loop)."
     },
     {
       "n": 74,
@@ -29,7 +29,7 @@
       "side": "right",
       "state": "open",
       "title": "v2 mockup: build the Cards and History tab panes",
-      "pin": "Tabs are inert labels: grep for 'class=\"pane|data-tab|role=\"tab' returns 0. Only Chat has content. At rest the Cards tab shows deck RECOMMENDATIONS, not search results (ui/04-chat-tabs.md). Panes must stack in one grid cell and stay measurable when inactive - display:none measures 0x0 and stacks every label at the top of the column."
+      "pin": "IN PROGRESS (wave 6): build #pane-chat/#pane-cards/#pane-history in mockup.html from ui/04-chat-tabs.md, then mirror in the app."
     },
     {
       "n": 74,
@@ -37,7 +37,7 @@
       "side": "right",
       "state": "open",
       "title": "v2 mockup: build the Cards and History tab panes",
-      "pin": "History side. Empty on the captured 1-card deck, so either mock the populated shape and tag it INFERRED, or mock the empty state and say which."
+      "pin": "IN PROGRESS (wave 6): build #pane-chat/#pane-cards/#pane-history in mockup.html from ui/04-chat-tabs.md, then mirror in the app."
     },
     {
       "n": 75,
@@ -45,7 +45,7 @@
       "side": "left",
       "state": "open",
       "title": "v2 mockup: playtest overlay",
-      "pin": "Button with nothing behind it. Captured in full (ui/05-playtest.md): full-viewport, top bar, battlefield, hand, four piles, no URL change. Populated hand and battlefield are UNVERIFIED - a 1-card deck has none. kbd hints A N D V S are STATED, never pressed."
+      "pin": "IN PROGRESS (wave 6): playtest overlay in mockup.html from ui/05-playtest.md, empty shape marked UNVERIFIED; app button is a stub until then."
     },
     {
       "n": 76,
@@ -53,7 +53,7 @@
       "side": "right",
       "state": "open",
       "title": "UI inventory: credit-blocked areas (chat modes, paid tier, ranking)",
-      "pin": "BLOCKED ON BUDGET, not effort. Chat modes, paid tier, ranking, retrieval path, multi-turn: all behind the credit wall. Free tier is ~1 message/week, a chat turn costs 35, the account sat at 15/50. ~$7 for a mid-tier month settles the first five. Retrieval mechanism and ranking formula stay unknowable from outside at any price."
+      "pin": "SKIPPED: needs about $7 of Farseek credits; the owner said to skip it while out of credits."
     },
     {
       "n": 77,
@@ -69,7 +69,7 @@
       "side": "right",
       "state": "open",
       "title": "linkify: parse [[Card]] only, drop the prose scan and the haiku pass",
-      "pin": "Verified against HEAD 8079479: AMBIGUOUS_WORDLIST is 113 words (linkify-core.ts:329) and includes all five basic lands plus counterspell, shock, opt, murder, exile. So the haiku pass fires constantly in a deckbuilding chat. The agent already knows its own intent; the scan reconstructs it from text with strictly less information. SKILL.md:190-193 already mandates brackets everywhere, table cells included."
+      "pin": "DONE in 9a38ddf: linkify-core.ts deleted, Haiku pass and prose scan gone, linkifyPass key removed, chips run ungated. 542 tests green. Waiting for the owner to close it."
     },
     {
       "n": 79,
@@ -85,7 +85,7 @@
       "side": "left",
       "state": "open",
       "title": "v2 layout: three-column shell and the 76 design tokens",
-      "pin": "Measured geometry: 260/825/1/354 at 1440, 48/645/1/330 at 820, single column + bottom bar at 390. 76 tokens in ui/00-tokens.md. CORRECTION the mockup gets wrong: card rows are display:flex, not grid (ui/06-computed-styles.md) - build v2 as flex. Token values and geometry only; their class names are build-hashed so the compiled CSS is both useless and a provenance problem."
+      "pin": "DONE: three-column shell and Farseek tokens in the app (5a2f1e8, e1da351, ab325f6); no page overflow at 1440/820/390. Waiting for the owner to close it."
     },
     {
       "n": 80,
@@ -93,7 +93,7 @@
       "side": "right",
       "state": "open",
       "title": "v2 layout: three-column shell and the 76 design tokens",
-      "pin": "The third column is the whole thesis: dock the AI permanently beside the deck and make everything it suggests actionable in place. The build-and-tune loop then runs with no navigation."
+      "pin": "DONE: three-column shell and Farseek tokens in the app (5a2f1e8, e1da351, ab325f6); no page overflow at 1440/820/390. Waiting for the owner to close it."
     },
     {
       "n": 81,
