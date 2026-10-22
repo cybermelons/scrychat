@@ -247,6 +247,45 @@ h1.deckname{font-size:var(--text-3xl);margin-bottom:var(--space-1)}
 .send:hover{background:var(--accent-hover)}
 
 /* annotation overlay */
+
+/* ---- chat panes: stacked, inactive = invisible but still laid out ---- */
+.panes{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);min-height:0;flex:1}
+.panes>.pane{grid-area:1/1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;
+  opacity:0;z-index:-1;pointer-events:none}
+.panes>.pane.on{opacity:1;z-index:auto;pointer-events:auto}
+.pane-body{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)}
+.prov{display:inline-flex;align-items:center;padding:1px var(--space-2);border:1px solid var(--bg-border);
+  border-radius:var(--radius-full);font-size:10px;line-height:1.5;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text-secondary);font-family:var(--font-mono);white-space:nowrap}
+.prov.unverified,.prov.inferred{border-style:dashed;color:var(--warning);border-color:var(--warning)}
+.prov.measured,.prov.stated{border-style:solid}
+.prov.measured{color:var(--success);border-color:var(--success)}
+.ctrls{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+.ctrls input{flex:1;min-width:120px;height:var(--control-h);padding:0 var(--space-3);border-radius:var(--radius-sm);
+  border:1px solid var(--bg-border);background:var(--bg-base);color:var(--text-primary);font:inherit;font-size:var(--text-sm)}
+.deckcard{border:1px solid var(--bg-border);border-radius:var(--radius-md);overflow:hidden;background:var(--bg-base)}
+.deckcard .art{height:90px;background:linear-gradient(135deg,var(--bg-elevated),var(--bg-hover))}
+.deckcard .db{padding:var(--space-3)}
+.deckcard .dt{font-size:var(--text-sm);font-weight:var(--weight-medium)}
+.deckcard .dm{font-size:var(--text-xs);color:var(--text-muted)}
+.empty{text-align:center;padding:var(--space-8) var(--space-4);color:var(--text-secondary);font-size:var(--text-sm)}
+.empty b{display:block;color:var(--text-primary);font-weight:var(--weight-medium);margin-bottom:var(--space-2)}
+/* ---- playtest overlay ---- */
+kbd{font-family:var(--font-mono);font-size:var(--text-xs);padding:0 5px;border:1px solid var(--bg-border);
+  border-radius:var(--radius-sm);background:var(--bg-base);color:var(--text-secondary)}
+.playtest{position:fixed;inset:0;z-index:100;background:rgb(26,24,22);display:grid;grid-template-rows:49px 1fr 240px}
+.playtest[hidden]{display:none}
+#pt-topbar{display:flex;align-items:center;gap:var(--space-2);padding:0 12px;border-bottom:1px solid var(--bg-border)}
+#pt-topbar .sp{flex:1}
+#pt-topbar .pill{padding:2px var(--space-4);border:1px solid var(--bg-border);border-radius:var(--radius-full);font-size:var(--text-sm)}
+#pt-battlefield{position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:var(--space-2);
+  color:var(--text-muted);min-height:0}
+#pt-bottom{display:flex;border-top:1px solid var(--bg-border);min-height:0}
+#pt-hand{flex:1;padding:var(--space-2) var(--space-3);color:var(--text-muted);font-size:var(--text-xs);letter-spacing:.08em}
+#pt-piles{display:flex;gap:8px;padding:var(--space-2) var(--space-3)}
+#pt-piles .pile{width:132px;display:flex;flex-direction:column;gap:var(--space-2);font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em}
+#pt-piles .slot{width:110px;height:154px;border:1px dashed var(--bg-border);border-radius:var(--radius-sm)}
+#pt-piles .acts{display:flex;gap:4px;flex-wrap:wrap;text-transform:none;letter-spacing:0}
 .legend{position:fixed;left:0;right:0;bottom:0;z-index:50;display:grid;
   grid-template-columns:repeat(4,1fr);gap:var(--space-3);padding:var(--space-4) var(--space-5);
   background:#120f0ef7;border-top:1px solid var(--accent);backdrop-filter:blur(6px);
@@ -431,6 +470,8 @@ body.annotate .toggle{background:var(--accent);border-color:var(--accent);color:
       <button class="tab" id="tab-history">History</button>
     </div>
 
+    <div class="panes">
+    <div class="pane on" id="pane-chat">
     <div class="msgs" id="msgs">
       <div class="hint"><span>✦</span><span>Discover cards for your deck — ask for a function, not a name.</span></div>
 
@@ -480,6 +521,31 @@ body.annotate .toggle{background:var(--accent);border-color:var(--accent);color:
       </div>
     </div>
 
+    </div>
+    <div class="pane" id="pane-cards">
+      <div class="pane-body">
+        <div><span class="prov measured">MEASURED shape</span></div>
+        <div class="note">Pin text says "card rows with + Add to deck"; the capture shows recommended decks. Measured form shown.</div>
+        <div class="ctrls">
+          <input placeholder="ETB creatures that draw cards" aria-label="Search">
+          <button class="btn" title="Sort: Popular">Sort: Popular</button>
+          <button class="btn primary" title="Filter (1 active)">Filter (1 active)</button>
+        </div>
+        <h3>Other Sefris of the Hidden Ways decks</h3>
+        <a class="deckcard"><div class="art"></div><div class="db"><div class="dt">Dungeons Journey (Done)</div><div class="dm">Commander · Sefris of the Hidden Ways</div></div></a>
+        <a class="deckcard"><div class="art"></div><div class="db"><div class="dt">Sefris of the Hidden Ways</div><div class="dm">Commander · Sefris of the Hidden Ways</div></div></a>
+        <a class="deckcard"><div class="art"></div><div class="db"><div class="dt">Sefris of the Hidden Ways</div><div class="dm">Commander · Sefris of the Hidden Ways</div></div></a>
+        <a class="link">Explore all Sefris of the Hidden Ways deck</a>
+      </div>
+    </div>
+    <div class="pane" id="pane-history">
+      <div class="pane-body">
+        <div><span class="prov measured">MEASURED (empty)</span></div>
+        <div class="empty"><b>No edit history yet</b>Cards you add, cut, or move between mainboard and sideboard will appear here.</div>
+      </div>
+    </div>
+    </div>
+
     <div class="composer" id="composer">
       <div class="inputbox">
         <textarea rows="2" placeholder="Ask for a function, a cut, a cheaper swap…"></textarea>
@@ -490,6 +556,30 @@ body.annotate .toggle{background:var(--accent);border-color:var(--accent);color:
       </div>
     </div>
   </aside>
+</div>
+
+<div id="playtest" class="playtest" hidden>
+  <div id="pt-topbar">
+    <button class="btn" id="pt-back">← Back</button>
+    <span class="sp"></span>
+    <span class="pill">Turn 1 · Land drops 0/1</span>
+    <button class="btn">Undo</button><button class="btn">Redo</button>
+    <button class="btn">Battlefield ▾</button>
+    <button class="btn">Create token <kbd>A</kbd></button>
+    <button class="btn primary">Next turn <kbd>N</kbd></button>
+    <button class="btn">More</button>
+    <span class="prov stated">kbd STATED: shown, never pressed</span>
+  </div>
+  <div id="pt-battlefield"><span class="prov unverified">UNVERIFIED</span><span>populated battlefield never observed</span></div>
+  <div id="pt-bottom">
+    <div id="pt-hand"><div>HAND (0)</div><div><span class="prov unverified">UNVERIFIED</span> Empty</div></div>
+    <div id="pt-piles">
+      <div class="pile">Library 0<div class="slot"></div><div class="acts"><button class="mini">Draw <kbd>D</kbd></button><button class="mini">Search <kbd>V</kbd></button><button class="mini">Shuffle <kbd>S</kbd></button></div></div>
+      <div class="pile">Graveyard 0<div class="slot"></div></div>
+      <div class="pile">Exile 0<div class="slot"></div></div>
+      <div class="pile">Command 1<div class="slot"></div></div>
+    </div>
+  </div>
 </div>
 
 <nav class="mobilebar">
@@ -527,4 +617,15 @@ function shuffle(){
 }
 shuffle();
 document.body.classList.add('annotate');
+for(const n of ['chat','cards','history'])
+  document.getElementById('tab-'+n).onclick=()=>{
+    for(const m of ['chat','cards','history']){
+      document.getElementById('tab-'+m).classList.toggle('active',m===n);
+      document.getElementById('pane-'+m).classList.toggle('on',m===n);
+    }
+  };
+const pt=document.getElementById('playtest');
+document.getElementById('tb-playtest').onclick=()=>{pt.hidden=false};
+document.getElementById('pt-back').onclick=()=>{pt.hidden=true};
+addEventListener('keydown',e=>{ if(e.key==='Escape') pt.hidden=true; });
 </script>

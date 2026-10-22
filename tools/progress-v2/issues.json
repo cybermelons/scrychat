@@ -29,7 +29,7 @@
       "side": "right",
       "state": "open",
       "title": "v2 mockup: build the Cards and History tab panes",
-      "pin": "IN PROGRESS (wave 6): build #pane-chat/#pane-cards/#pane-history in mockup.html from ui/04-chat-tabs.md, then mirror in the app."
+      "pin": "DONE in mockup.html: #pane-chat/#pane-cards/#pane-history stacked in one grid cell; inactive panes stay measurable; composer does not move (Playwright: 761/761/761). Cards shows the measured recommended-decks form, not the pin's card rows. Waiting for the owner to close it."
     },
     {
       "n": 74,
@@ -37,7 +37,7 @@
       "side": "right",
       "state": "open",
       "title": "v2 mockup: build the Cards and History tab panes",
-      "pin": "IN PROGRESS (wave 6): build #pane-chat/#pane-cards/#pane-history in mockup.html from ui/04-chat-tabs.md, then mirror in the app."
+      "pin": "DONE in mockup.html: #pane-chat/#pane-cards/#pane-history stacked in one grid cell; inactive panes stay measurable; composer does not move (Playwright: 761/761/761). Cards shows the measured recommended-decks form, not the pin's card rows. Waiting for the owner to close it."
     },
     {
       "n": 75,
@@ -45,7 +45,7 @@
       "side": "left",
       "state": "open",
       "title": "v2 mockup: playtest overlay",
-      "pin": "IN PROGRESS (wave 6): playtest overlay in mockup.html from ui/05-playtest.md, empty shape marked UNVERIFIED; app button is a stub until then."
+      "pin": "DONE in mockup.html: #playtest fixed overlay, #pt-topbar/#pt-battlefield/#pt-hand/#pt-piles, opened by #tb-playtest, Back/Esc close, no URL change. Empty shape marked UNVERIFIED, kbd hints STATED. Waiting for the owner to close it."
     },
     {
       "n": 76,

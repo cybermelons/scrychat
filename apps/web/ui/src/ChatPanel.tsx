@@ -1202,7 +1202,7 @@ export function ChatPanel({
         onShowInDeckChange={setShowInDeck}
       />
       <div className="chatpanes">
-        <div className={pane("chat")}>
+        <div className={pane("chat")} id="pane-chat">
           <div
             id="chat-log"
             className="msgs"

@@ -312,7 +312,16 @@
   background:var(--bg-base);padding:var(--space-3);transition:border-color var(--transition-fast)}.target-root .inputbox:focus-within{border-color:var(--accent)}.target-root .inputbox textarea{width:100%;border:0;outline:0;background:none;color:var(--text-primary);
   font-family:inherit;font-size:var(--text-sm);resize:none;line-height:var(--leading-normal)}.target-root .inputbox textarea::placeholder{color:var(--text-muted)}.target-root .cfoot{display:flex;align-items:center;justify-content:space-between;margin-top:var(--space-2)}.target-root .cfoot .meta{font-size:var(--text-xs);color:var(--text-muted)}.target-root .send{height:28px;padding:0 var(--space-4);border-radius:var(--radius-md);background:var(--accent);
   color:var(--text-on-accent);font-size:var(--text-sm);font-weight:var(--weight-medium)}.target-root .send:hover{background:var(--accent-hover)}.target-root /* annotation overlay */
-.legend{position:fixed;left:0;right:0;bottom:0;z-index:50;display:grid;
+
+/* ---- chat panes: stacked, .target-root inactive = invisible but still laid out ---- */
+.panes{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);min-height:0;flex:1}.target-root .panes>.pane{grid-area:1/1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;
+  opacity:0;z-index:-1;pointer-events:none}.target-root .panes>.pane.on{opacity:1;z-index:auto;pointer-events:auto}.target-root .pane-body{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)}.target-root .prov{display:inline-flex;align-items:center;padding:1px var(--space-2);border:1px solid var(--bg-border);
+  border-radius:var(--radius-full);font-size:10px;line-height:1.5;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text-secondary);font-family:var(--font-mono);white-space:nowrap}.target-root .prov.unverified, .target-root .prov.inferred{border-style:dashed;color:var(--warning);border-color:var(--warning)}.target-root .prov.measured, .target-root .prov.stated{border-style:solid}.target-root .prov.measured{color:var(--success);border-color:var(--success)}.target-root .ctrls{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}.target-root .ctrls input{flex:1;min-width:120px;height:var(--control-h);padding:0 var(--space-3);border-radius:var(--radius-sm);
+  border:1px solid var(--bg-border);background:var(--bg-base);color:var(--text-primary);font:inherit;font-size:var(--text-sm)}.target-root .deckcard{border:1px solid var(--bg-border);border-radius:var(--radius-md);overflow:hidden;background:var(--bg-base)}.target-root .deckcard .art{height:90px;background:linear-gradient(135deg,var(--bg-elevated),var(--bg-hover))}.target-root .deckcard .db{padding:var(--space-3)}.target-root .deckcard .dt{font-size:var(--text-sm);font-weight:var(--weight-medium)}.target-root .deckcard .dm{font-size:var(--text-xs);color:var(--text-muted)}.target-root .empty{text-align:center;padding:var(--space-8) var(--space-4);color:var(--text-secondary);font-size:var(--text-sm)}.target-root .empty b{display:block;color:var(--text-primary);font-weight:var(--weight-medium);margin-bottom:var(--space-2)}.target-root /* ---- playtest overlay ---- */
+kbd{font-family:var(--font-mono);font-size:var(--text-xs);padding:0 5px;border:1px solid var(--bg-border);
+  border-radius:var(--radius-sm);background:var(--bg-base);color:var(--text-secondary)}.target-root .playtest{position:fixed;inset:0;z-index:100;background:rgb(26,24,22);display:grid;grid-template-rows:49px 1fr 240px}.target-root .playtest[hidden]{display:none}.target-root #pt-topbar{display:flex;align-items:center;gap:var(--space-2);padding:0 12px;border-bottom:1px solid var(--bg-border)}.target-root #pt-topbar .sp{flex:1}.target-root #pt-topbar .pill{padding:2px var(--space-4);border:1px solid var(--bg-border);border-radius:var(--radius-full);font-size:var(--text-sm)}.target-root #pt-battlefield{position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:var(--space-2);
+  color:var(--text-muted);min-height:0}.target-root #pt-bottom{display:flex;border-top:1px solid var(--bg-border);min-height:0}.target-root #pt-hand{flex:1;padding:var(--space-2) var(--space-3);color:var(--text-muted);font-size:var(--text-xs);letter-spacing:.08em}.target-root #pt-piles{display:flex;gap:8px;padding:var(--space-2) var(--space-3)}.target-root #pt-piles .pile{width:132px;display:flex;flex-direction:column;gap:var(--space-2);font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em}.target-root #pt-piles .slot{width:110px;height:154px;border:1px dashed var(--bg-border);border-radius:var(--radius-sm)}.target-root #pt-piles .acts{display:flex;gap:4px;flex-wrap:wrap;text-transform:none;letter-spacing:0}.target-root .legend{position:fixed;left:0;right:0;bottom:0;z-index:50;display:grid;
   grid-template-columns:repeat(4,1fr);gap:var(--space-3);padding:var(--space-4) var(--space-5);
   background:#120f0ef7;border-top:1px solid var(--accent);backdrop-filter:blur(6px);
   translate:0 100%;transition:translate var(--transition-base)}.target-root body.annotate .legend{translate:0 0}.target-root .note{font-size:var(--text-xs);color:var(--text-secondary);line-height:var(--leading-normal)}.target-root .note b{color:var(--accent);display:block;font-weight:var(--weight-medium);margin-bottom:2px}.target-root .toggle{position:fixed;right:var(--space-4);bottom:var(--space-4);z-index:60;transition:bottom var(--transition-base);height:var(--control-h);
@@ -511,6 +520,8 @@
       <button class="tab" id="tab-history">History</button>
     </div>
 
+    <div class="panes">
+    <div class="pane on" id="pane-chat">
     <div class="msgs" id="msgs">
       <div class="hint"><span>✦</span><span>Discover cards for your deck — ask for a function, not a name.</span></div>
 
@@ -560,6 +571,31 @@
       </div>
     </div>
 
+    </div>
+    <div class="pane" id="pane-cards">
+      <div class="pane-body">
+        <div><span class="prov measured">MEASURED shape</span></div>
+        <div class="note">Pin text says "card rows with + Add to deck"; the capture shows recommended decks. Measured form shown.</div>
+        <div class="ctrls">
+          <input placeholder="ETB creatures that draw cards" aria-label="Search">
+          <button class="btn" title="Sort: Popular">Sort: Popular</button>
+          <button class="btn primary" title="Filter (1 active)">Filter (1 active)</button>
+        </div>
+        <h3>Other Sefris of the Hidden Ways decks</h3>
+        <a class="deckcard"><div class="art"></div><div class="db"><div class="dt">Dungeons Journey (Done)</div><div class="dm">Commander · Sefris of the Hidden Ways</div></div></a>
+        <a class="deckcard"><div class="art"></div><div class="db"><div class="dt">Sefris of the Hidden Ways</div><div class="dm">Commander · Sefris of the Hidden Ways</div></div></a>
+        <a class="deckcard"><div class="art"></div><div class="db"><div class="dt">Sefris of the Hidden Ways</div><div class="dm">Commander · Sefris of the Hidden Ways</div></div></a>
+        <a class="link">Explore all Sefris of the Hidden Ways deck</a>
+      </div>
+    </div>
+    <div class="pane" id="pane-history">
+      <div class="pane-body">
+        <div><span class="prov measured">MEASURED (empty)</span></div>
+        <div class="empty"><b>No edit history yet</b>Cards you add, cut, or move between mainboard and sideboard will appear here.</div>
+      </div>
+    </div>
+    </div>
+
     <div class="composer" id="composer">
       <div class="inputbox">
         <textarea rows="2" placeholder="Ask for a function, a cut, a cheaper swap…"></textarea>
@@ -570,6 +606,30 @@
       </div>
     </div>
   </aside>
+</div>
+
+<div id="playtest" class="playtest" hidden>
+  <div id="pt-topbar">
+    <button class="btn" id="pt-back">← Back</button>
+    <span class="sp"></span>
+    <span class="pill">Turn 1 · Land drops 0/1</span>
+    <button class="btn">Undo</button><button class="btn">Redo</button>
+    <button class="btn">Battlefield ▾</button>
+    <button class="btn">Create token <kbd>A</kbd></button>
+    <button class="btn primary">Next turn <kbd>N</kbd></button>
+    <button class="btn">More</button>
+    <span class="prov stated">kbd STATED: shown, never pressed</span>
+  </div>
+  <div id="pt-battlefield"><span class="prov unverified">UNVERIFIED</span><span>populated battlefield never observed</span></div>
+  <div id="pt-bottom">
+    <div id="pt-hand"><div>HAND (0)</div><div><span class="prov unverified">UNVERIFIED</span> Empty</div></div>
+    <div id="pt-piles">
+      <div class="pile">Library 0<div class="slot"></div><div class="acts"><button class="mini">Draw <kbd>D</kbd></button><button class="mini">Search <kbd>V</kbd></button><button class="mini">Shuffle <kbd>S</kbd></button></div></div>
+      <div class="pile">Graveyard 0<div class="slot"></div></div>
+      <div class="pile">Exile 0<div class="slot"></div></div>
+      <div class="pile">Command 1<div class="slot"></div></div>
+    </div>
+  </div>
 </div>
 
 <nav class="mobilebar">
@@ -602,17 +662,28 @@ function shuffle(){
 }
 shuffle();
 document.body.classList.add('annotate');
+for(const n of ['chat','cards','history'])
+  document.getElementById('tab-'+n).onclick=()=>{
+    for(const m of ['chat','cards','history']){
+      document.getElementById('tab-'+m).classList.toggle('active',m===n);
+      document.getElementById('pane-'+m).classList.toggle('on',m===n);
+    }
+  };
+const pt=document.getElementById('playtest');
+document.getElementById('tb-playtest').onclick=()=>{pt.hidden=false};
+document.getElementById('pt-back').onclick=()=>{pt.hidden=true};
+addEventListener('keydown',e=>{ if(e.key==='Escape') pt.hidden=true; });
 </script>
 </div>
   </div>
   <div id="pin-left"><a class="pin open left" data-anchor="#sidebar" href="https://github.com/cybermelons/scrychat/issues/73" target="_blank" rel="noopener"><span class="pin-n">73</span><span class="pin-t">v2 mockup: add element ids to every pinnable region</span><span class="pin-p">DONE: mockup ids 4 -&gt; 32, and the app carries them (waves 3-4). Waiting for the owner to close it (gh issue close is blocked for the loop).</span></a>
-  <a class="pin open left" data-anchor="#tb-playtest" href="https://github.com/cybermelons/scrychat/issues/75" target="_blank" rel="noopener"><span class="pin-n">75</span><span class="pin-t">v2 mockup: playtest overlay</span><span class="pin-p">IN PROGRESS (wave 6): playtest overlay in mockup.html from ui/05-playtest.md, empty shape marked UNVERIFIED; app button is a stub until then.</span></a>
+  <a class="pin open left" data-anchor="#tb-playtest" href="https://github.com/cybermelons/scrychat/issues/75" target="_blank" rel="noopener"><span class="pin-n">75</span><span class="pin-t">v2 mockup: playtest overlay</span><span class="pin-p">DONE in mockup.html: #playtest fixed overlay, #pt-topbar/#pt-battlefield/#pt-hand/#pt-piles, opened by #tb-playtest, Back/Esc close, no URL change. Empty shape marked UNVERIFIED, kbd hints STATED. Waiting for the owner to close it.</span></a>
   <a class="pin open left" data-anchor="#nav-search" href="https://github.com/cybermelons/scrychat/issues/77" target="_blank" rel="noopener"><span class="pin-n">77</span><span class="pin-t">UI inventory: finish the free captures missed on the first sweep</span><span class="pin-p">Costs nothing - DOM state changes and a populated deck, not chat turns. Card search results (no query was ever typed), multi-column card list, populated History, playtest menus, hover/focus/disabled states, light mode, keyboard nav. Extend ui/tabs.mjs and tabs2.mjs.</span></a>
   <a class="pin open left" data-anchor="#strategy" href="https://github.com/cybermelons/scrychat/issues/79" target="_blank" rel="noopener"><span class="pin-n">79</span><span class="pin-t">Promote function-first deckbuilding from prompt text into UI + API schema</span><span class="pin-p">The one axis where farseek is ahead of us (comparison/00-summary.md). They made named functional roles plus typed bracket/budget the SHAPE OF THE REQUEST; we reach the same skeleton through a skill prompt. A prompt constraint is advisory and a miss is invisible - a deck quietly short on removal still looks fine. Schema-level, a violation is a test failure.</span></a>
   <a class="pin open left" data-anchor="#deckcol" href="https://github.com/cybermelons/scrychat/issues/80" target="_blank" rel="noopener"><span class="pin-n">80</span><span class="pin-t">v2 layout: three-column shell and the 76 design tokens</span><span class="pin-p">DONE: three-column shell and Farseek tokens in the app (5a2f1e8, e1da351, ab325f6); no page overflow at 1440/820/390. Waiting for the owner to close it.</span></a>
   <a class="pin open left" data-anchor="#nav-collection" href="https://github.com/cybermelons/scrychat/issues/81" target="_blank" rel="noopener"><span class="pin-n">81</span><span class="pin-t">Oracle: collection/printing analysis and originality scoring</span><span class="pin-p">Moved here from farseek-teardown gitea #3, where it did not belong - it is a scrychat feature request, not a teardown finding. Originality scoring is the natural extension of our &#x27;no popularity prior&#x27; stance. Their ranking formula is server-side and uncopyable; only the idea transfers, implemented with our published formula. Output shape is STATED, not MEASURED - a real-deck Oracle reading was gated on account age and never ran.</span></a></div>
-  <div id="pin-right"><a class="pin open right" data-anchor="#tab-cards" href="https://github.com/cybermelons/scrychat/issues/74" target="_blank" rel="noopener"><span class="pin-n">74</span><span class="pin-t">v2 mockup: build the Cards and History tab panes</span><span class="pin-p">IN PROGRESS (wave 6): build #pane-chat/#pane-cards/#pane-history in mockup.html from ui/04-chat-tabs.md, then mirror in the app.</span></a>
-  <a class="pin open right" data-anchor="#tab-history" href="https://github.com/cybermelons/scrychat/issues/74" target="_blank" rel="noopener"><span class="pin-n">74</span><span class="pin-t">v2 mockup: build the Cards and History tab panes</span><span class="pin-p">IN PROGRESS (wave 6): build #pane-chat/#pane-cards/#pane-history in mockup.html from ui/04-chat-tabs.md, then mirror in the app.</span></a>
+  <div id="pin-right"><a class="pin open right" data-anchor="#tab-cards" href="https://github.com/cybermelons/scrychat/issues/74" target="_blank" rel="noopener"><span class="pin-n">74</span><span class="pin-t">v2 mockup: build the Cards and History tab panes</span><span class="pin-p">DONE in mockup.html: #pane-chat/#pane-cards/#pane-history stacked in one grid cell; inactive panes stay measurable; composer does not move (Playwright: 761/761/761). Cards shows the measured recommended-decks form, not the pin&#x27;s card rows. Waiting for the owner to close it.</span></a>
+  <a class="pin open right" data-anchor="#tab-history" href="https://github.com/cybermelons/scrychat/issues/74" target="_blank" rel="noopener"><span class="pin-n">74</span><span class="pin-t">v2 mockup: build the Cards and History tab panes</span><span class="pin-p">DONE in mockup.html: #pane-chat/#pane-cards/#pane-history stacked in one grid cell; inactive panes stay measurable; composer does not move (Playwright: 761/761/761). Cards shows the measured recommended-decks form, not the pin&#x27;s card rows. Waiting for the owner to close it.</span></a>
   <a class="pin open right" data-anchor="#composer" href="https://github.com/cybermelons/scrychat/issues/76" target="_blank" rel="noopener"><span class="pin-n">76</span><span class="pin-t">UI inventory: credit-blocked areas (chat modes, paid tier, ranking)</span><span class="pin-p">SKIPPED: needs about $7 of Farseek credits; the owner said to skip it while out of credits.</span></a>
   <a class="pin open right" data-anchor="#msgs" href="https://github.com/cybermelons/scrychat/issues/78" target="_blank" rel="noopener"><span class="pin-n">78</span><span class="pin-t">linkify: parse [[Card]] only, drop the prose scan and the haiku pass</span><span class="pin-p">DONE in 9a38ddf: linkify-core.ts deleted, Haiku pass and prose scan gone, linkifyPass key removed, chips run ungated. 542 tests green. Waiting for the owner to close it.</span></a>
   <a class="pin open right" data-anchor="#chatcol" href="https://github.com/cybermelons/scrychat/issues/80" target="_blank" rel="noopener"><span class="pin-n">80</span><span class="pin-t">v2 layout: three-column shell and the 76 design tokens</span><span class="pin-p">DONE: three-column shell and Farseek tokens in the app (5a2f1e8, e1da351, ab325f6); no page overflow at 1440/820/390. Waiting for the owner to close it.</span></a></div>
