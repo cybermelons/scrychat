@@ -1,0 +1,32 @@
+/* App-specific additions to the mockup chat column. Mockup classes
+   (.tabs .msgs .module .cardchip .mini .composer .cfoot .send ...) live in styles.css. */
+
+/* panes share one grid cell; inactive ones stay laid out (measurable) */
+.chatpanes{flex:1;min-height:0;display:grid}
+.chatpane{grid-area:1/1;min-height:0;display:flex;flex-direction:column;
+  visibility:hidden;pointer-events:none}
+.chatpane.on{visibility:visible;pointer-events:auto}
+.chatpane-body{flex:1;min-height:0;overflow-y:auto;padding:var(--space-4);
+  display:flex;flex-direction:column;gap:var(--space-3)}
+
+.tab-gear{margin-left:auto}
+.modbody{padding:var(--space-3)}
+.modhead .card-group{text-transform:none;letter-spacing:0}
+.chipname{position:relative}
+.cfoot-left{display:flex;align-items:center;gap:var(--space-2);min-width:0}
+.cfoot .meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.send:disabled{opacity:.4;cursor:default}
+.send.chat-stop{background:var(--error)}
+.composer .attach-strip{margin-bottom:var(--space-2)}
+.tool-chip-row.amsg{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-2)}
+
+.cards-search-input{width:100%;border:0;outline:0;background:none;color:var(--text-primary);
+  font-family:inherit;font-size:var(--text-sm)}
+.history-bar{display:flex;gap:var(--space-2);align-items:center}
+.history-bar .chat-select{flex:1;min-width:0}
+.histitem{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-2) var(--space-3);
+  border:1px solid var(--bg-border);border-radius:var(--radius-md);background:var(--bg-base)}
+.histitem.active{border-color:var(--accent)}
+.histtitle{text-align:left;font-size:var(--text-sm);color:var(--text-primary);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.histacts{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center}

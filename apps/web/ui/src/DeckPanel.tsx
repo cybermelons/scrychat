@@ -15,9 +15,54 @@ import { CardName } from "./CardName";
 import { renderManaSymbols } from "./markdown";
 import { CollectionSync } from "./CollectionSync";
 import { Suggestions } from "./Suggestions";
+import { stub } from "./stub";
+import "./deck.css";
 
 const CURVE_ORDER = ["0", "1", "2", "3", "4", "5", "6", "7+"];
 const LAST_DECK_KEY = "scrychat.lastDeck";
+
+// Type groups (#tb-group = Type). Land wins over every other type; anything
+// unmatched falls into "Other".
+const TYPE_ORDER = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land"];
+const primaryType = (t?: string | null): string => {
+  const s = t ?? "";
+  if (s.includes("Land")) return "Land";
+  return TYPE_ORDER.find((x) => s.includes(x)) ?? "Other";
+};
+const typeLabel = (t: string) => (t === "Other" ? t : `${t}s`);
+const PIP_VAR: Record<string, string> = { W: "w", U: "u", B: "b", R: "r", G: "g" };
+
+// Mana value from a mana-cost string (front face only). {2/W} counts 2, other
+// hybrid/phyrexian symbols 1, X 0. Used only for Sort: Cost.
+function cmcOf(cost?: string | null): number {
+  if (!cost) return 0;
+  let n = 0;
+  for (const m of cost.split(" // ")[0].matchAll(/\{([^}]+)\}/g)) {
+    const sym = m[1];
+    const lead = parseInt(sym, 10);
+    n += /^[XYZ]$/.test(sym) ? 0 : Number.isNaN(lead) ? 1 : lead;
+  }
+  return n;
+}
+
+// Mean mana value of non-land cards, from report.curve (core already excludes
+// lands and floors cmc; the "7+" bucket counts as 7).
+function avgManaValue(curve: Record<string, number>): number | null {
+  let cards = 0;
+  let sum = 0;
+  for (const k of CURVE_ORDER) {
+    const v = curve[k] ?? 0;
+    cards += v;
+    sum += v * parseInt(k, 10);
+  }
+  return cards > 0 ? sum / cards : null;
+}
+
+// "34-38" -> meter fill against the upper bound.
+function quotaFill(q: QuotaCheck): number {
+  const max = parseInt(q.want.split("-").pop() ?? "", 10);
+  return max > 0 ? Math.min(100, Math.round((q.have / max) * 100)) : 0;
+}
 
 /**
  * Attempts to copy text to the clipboard, layering fallbacks for
@@ -129,7 +174,7 @@ export function DeckPanel({
   setSelected,
   onDeckNames,
   defaultExportFormat,
-  onOpenSettings: _onOpenSettings,
+  onOpenSettings,
 }: {
   selected: string;
   setSelected: (name: string) => void;
@@ -182,6 +227,16 @@ export function DeckPanel({
   const [renameBusy, setRenameBusy] = useState(false);
   const groupRenameTriggerRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
+  // sidebar / toolbar / hero UI state
+  const [groupBy, setGroupBy] = useState<"type" | "tag">("type");
+  const [sortBy, setSortBy] = useState<"name" | "cost">("name");
+  const [addOpen, setAddOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [decksOpen, setDecksOpen] = useState(true);
+  const [collOpen, setCollOpen] = useState(false);
+  const [collState, setCollState] = useState<"none" | "fresh" | "stale">("none");
+
   // inline delete-deck confirm
   const [confirmingDeleteDeck, setConfirmingDeleteDeck] = useState(false);
 
@@ -190,7 +245,7 @@ export function DeckPanel({
   const [deckRenameValue, setDeckRenameValue] = useState("");
   const [deckRenameBusy, setDeckRenameBusy] = useState(false);
   const [deckRenameError, setDeckRenameError] = useState<string | null>(null);
-  const deckRenameTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const deckRenameTriggerRef = useRef<HTMLElement | null>(null);
 
   // commander change ("change" affordance in commander block)
   const [changingCommander, setChangingCommander] = useState(false);
@@ -761,6 +816,11 @@ export function DeckPanel({
         setManualCopyText(null);
         return;
       }
+      if (shareOpen || moreOpen) {
+        setShareOpen(false);
+        setMoreOpen(false);
+        return;
+      }
       if (editingCard !== null) {
         closeTagEditor();
         return;
@@ -785,6 +845,8 @@ export function DeckPanel({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [
     manualCopyText,
+    shareOpen,
+    moreOpen,
     editingCard,
     confirmingDeleteDeck,
     closeTagEditor,
@@ -826,6 +888,7 @@ export function DeckPanel({
     arena?: boolean | null;
   };
   const tagGroups: [string, CardRow[]][] = [];
+  const typeMap = new Map<string, CardRow[]>();
   const allDeckTags: string[] = [];
   if (deck) {
     const map = new Map<string, CardRow[]>();
@@ -843,6 +906,9 @@ export function DeckPanel({
         owned: c.owned,
         arena: c.arena,
       };
+      const pt = primaryType(c.typeLine);
+      if (!typeMap.has(pt)) typeMap.set(pt, []);
+      typeMap.get(pt)!.push(row);
       if (tags.length === 0) {
         if (!map.has(UNTAGGED)) map.set(UNTAGGED, []);
         map.get(UNTAGGED)!.push(row);
@@ -862,6 +928,19 @@ export function DeckPanel({
     for (const entry of entries) tagGroups.push(entry);
     if (map.has(UNTAGGED)) tagGroups.push([UNTAGGED, map.get(UNTAGGED)!]);
   }
+
+  const typeOrder = [...TYPE_ORDER, "Other"];
+  const typeGroups: [string, CardRow[]][] = typeOrder
+    .filter((t) => typeMap.has(t))
+    .map((t) => [t, typeMap.get(t)!]);
+  const sortRows = (rows: CardRow[]) =>
+    [...rows].sort((a, b) =>
+      sortBy === "cost"
+        ? cmcOf(a.manaCost) - cmcOf(b.manaCost) || a.name.localeCompare(b.name)
+        : a.name.localeCompare(b.name)
+    );
+  const groups = groupBy === "tag" ? tagGroups : typeGroups;
+  const avgMV = report ? avgManaValue(report.curve) : null;
 
   const totalCards = deck
     ? deck.cards.reduce((n, c) => n + (c.count ?? 1), 0)
@@ -991,155 +1070,691 @@ export function DeckPanel({
     </form>
   );
 
-  return (
-    <>
-      <nav className="sidebar" id="sidebar">
-        <div className="deck-panel-header">
-          <h1 className="app-title">scrychat</h1>
-        <div className="deck-select-row">
-          {renamingDeck ? (
-            <span className="inline-confirm deck-rename-row">
-              <input
-                className="text-input"
-                value={deckRenameValue}
-                onChange={(e) => setDeckRenameValue(e.target.value)}
-                disabled={deckRenameBusy}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submitDeckRename();
-                  if (e.key === "Escape") cancelDeckRename();
-                }}
-                onBlur={submitDeckRename}
-                aria-label="Rename deck"
-              />
-            </span>
-          ) : (
-            <>
-              <select
-                className="deck-select"
-                value={selected}
-                onChange={(e) => setSelected(e.target.value)}
-                aria-label="Select deck"
-              >
-                {decks.length === 0 && <option value="">no decks</option>}
-                {decks.map((d) => (
-                  <option key={d.name} value={d.name}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-              {decks.length > 0 && selected && (
+
+  const renderRow = (groupKey: string, c: CardRow) => {
+    const editKey = `${groupKey}::${c.name}`;
+    const isBasic = (c.typeLine ?? "").includes("Basic Land");
+    const isLand = (c.typeLine ?? "").includes("Land");
+    const producedMana = c.producedMana ?? [];
+    const symbols = isLand
+      ? producedMana.length > 0
+        ? `{T}: ${producedMana.map((m) => `{${m}}`).join("")}`
+        : "{T}"
+      : c.manaCost;
+    const toggleEditor = (trigger: HTMLButtonElement | null) =>
+      editingCard === editKey ? closeTagEditor() : openTagEditor(editKey, c.tags, trigger);
+    return (
+      <Fragment key={c.name}>
+        <div
+          className={c.arena === false ? "row card-row card-row-no-arena" : "row card-row"}
+          onClick={(e) =>
+            toggleEditor(e.currentTarget.querySelector<HTMLButtonElement>(".edit-tags-btn"))
+          }
+        >
+          <div className={isBasic ? "qty has-stepper" : "qty"} onClick={(e) => e.stopPropagation()}>
+            {isBasic ? (
+              <span className="count-stepper">
                 <button
                   type="button"
-                  className="rename-deck-btn"
-                  ref={deckRenameTriggerRef}
-                  onClick={openDeckRename}
-                  aria-label="Rename deck"
-                  title="Rename deck"
+                  className="count-stepper-btn"
+                  onClick={() => changeCardCount(c.name, c.count - 1)}
+                  disabled={c.count <= 1 || countBusy === c.name}
+                  aria-label={`Decrease ${c.name} count`}
                 >
-                  ✎
+                  −
                 </button>
-              )}
-            </>
-          )}
-          {decks.length > 0 && !renamingDeck && (
+                <span className="count-stepper-val">{c.count}</span>
+                <button
+                  type="button"
+                  className="count-stepper-btn"
+                  onClick={() => changeCardCount(c.name, c.count + 1)}
+                  disabled={countBusy === c.name}
+                  aria-label={`Increase ${c.name} count`}
+                >
+                  +
+                </button>
+              </span>
+            ) : (
+              c.count
+            )}
+          </div>
+          <div className="cname">
+            <CardName name={c.name} image={c.image} />
+            {c.owned === false && <span className="owned-chip owned-missing">missing</span>}
+            {c.owned === true && <span className="owned-chip owned-yes">✓</span>}
+            {c.arena === false && (
+              <span className="owned-chip arena-missing" title="Not available on Arena">
+                not on Arena
+              </span>
+            )}
+          </div>
+          <div className="cost">
+            {symbols && (
+              <span
+                className="card-mana-cost"
+                dangerouslySetInnerHTML={{ __html: renderManaSymbols(symbols) }}
+              />
+            )}
+          </div>
+          <button
+            type="button"
+            className="price"
+            onClick={(e) => {
+              e.stopPropagation();
+              stub("Card prices")(e);
+            }}
+            title="Card price"
+          >
+            —
+          </button>
+          <button
+            type="button"
+            className="edit-tags-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleEditor(e.currentTarget);
+            }}
+            aria-label={`Edit tags for ${c.name}`}
+            title="Edit tags"
+          >
+            ✎
+          </button>
+          <button
+            type="button"
+            className="remove-card-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              removeCard(c.name, c.tags, c.count);
+            }}
+            disabled={removeBusy === c.name}
+            aria-label={`Remove ${c.name}`}
+            title={`Remove ${c.name}`}
+          >
+            ×
+          </button>
+        </div>
+        {countError[c.name] && (
+          <div className="row-error">
+            <div className="sc-chip sc-chip-error sc-chip-dismissible">
+              {c.name}: {countError[c.name]}
+              <button
+                type="button"
+                className="sc-chip-dismiss"
+                onClick={() =>
+                  setCountError((prev) => {
+                    const { [c.name]: _drop, ...rest } = prev;
+                    return rest;
+                  })
+                }
+                aria-label={`Dismiss error for ${c.name}`}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+        {editingCard === editKey && (
+          <div className="tag-editor-row">
+            <div
+              className="tag-editor"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  closeTagEditor();
+                }
+              }}
+            >
+              <div className="tag-editor-current">
+                {editorTags.map((t) => (
+                  <span
+                    className="tag-chip tag-chip-removable"
+                    key={t}
+                    onClick={() => setEditorTags((prev) => prev.filter((x) => x !== t))}
+                    title="Click to remove"
+                  >
+                    {t} ×
+                  </span>
+                ))}
+              </div>
+              <div className="tag-editor-input-row">
+                <input
+                  className="text-input"
+                  placeholder="Add tag, press Enter"
+                  value={editorInput}
+                  onChange={(e) => setEditorInput(e.target.value)}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const v = editorInput.trim();
+                      if (v && !editorTags.includes(v)) {
+                        setEditorTags((prev) => [...prev, v]);
+                      }
+                      setEditorInput("");
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      closeTagEditor();
+                    }
+                  }}
+                  disabled={editorBusy}
+                />
+                <button
+                  type="button"
+                  className="sc-btn sc-btn-primary sc-btn-small"
+                  disabled={editorBusy}
+                  onClick={() => saveCardTags(c.name, editorTags)}
+                >
+                  {editorBusy ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className="sc-btn sc-btn-ghost sc-btn-small"
+                  disabled={editorBusy}
+                  onClick={closeTagEditor}
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="tag-editor-suggestions">
+                {[...LEGACY_ROLE_TAGS, ...allDeckTags]
+                  .filter((t, i, arr) => arr.indexOf(t) === i && !editorTags.includes(t))
+                  .map((t) => (
+                    <span
+                      className="tag-chip tag-chip-suggestion"
+                      key={t}
+                      onClick={() => setEditorTags((prev) => [...prev, t])}
+                    >
+                      + {t}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Fragment>
+    );
+  };
+
+  const renderGroupHead = (key: string, cards: CardRow[]) => {
+    const count = cards.reduce((n, c) => n + c.count, 0);
+    if (groupBy === "type") {
+      return (
+        <div className="grouphead" key={key}>
+          <b>{typeLabel(key)}</b> · {count}
+        </div>
+      );
+    }
+    const tag = key;
+    if (renamingGroup === tag) {
+      return (
+        <div className="grouphead" key={key}>
+          <span className="group-rename-row">
+            <input
+              className="text-input group-rename-input"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              disabled={renameBusy}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") renameGroup(tag, renameValue);
+                if (e.key === "Escape") cancelGroupRename(tag);
+              }}
+              aria-label={`Rename tag ${tag}`}
+            />
             <button
               type="button"
               className="sc-btn sc-btn-ghost sc-btn-small"
-              onClick={() => setShowNewDeck((s) => !s)}
+              onClick={() => renameGroup(tag, renameValue)}
+              disabled={renameBusy}
             >
-              + New Deck
+              Save
             </button>
-          )}
+            <button
+              type="button"
+              className="sc-btn sc-btn-ghost sc-btn-small"
+              onClick={() => cancelGroupRename(tag)}
+              disabled={renameBusy}
+            >
+              Cancel
+            </button>
+          </span>
         </div>
-        {deckRenameError && <div className="sc-chip sc-chip-error">{deckRenameError}</div>}
-        {decks.length > 0 && showNewDeck && newDeckForm}
-        {refreshFailed && <div className="sc-chip sc-chip-muted">couldn't refresh decks</div>}
-        <CollectionSync onImported={onCollectionImported} />
+      );
+    }
+    if (confirmingDeleteTag === tag) {
+      return (
+        <div className="grouphead" key={key}>
+          <span className="inline-confirm group-delete-row">
+            <span className="inline-confirm-text">
+              remove tag "{tag}" from {cards.length} card{cards.length === 1 ? "" : "s"}?
+            </span>
+            <button
+              type="button"
+              className="sc-btn sc-btn-danger sc-btn-small"
+              onClick={() => deleteTagGroup(tag)}
+              disabled={tagDeleteBusy}
+              autoFocus
+            >
+              {tagDeleteBusy ? "Removing…" : "Yes"}
+            </button>
+            <button
+              type="button"
+              className="sc-btn sc-btn-ghost sc-btn-small"
+              onClick={() => setConfirmingDeleteTag(null)}
+              disabled={tagDeleteBusy}
+            >
+              No
+            </button>
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div className="grouphead" key={key}>
+        <b>{tag}</b> · {count}
+        {tag !== UNTAGGED && (
+          <span className="gctl">
+            <button
+              type="button"
+              className="group-rename-btn"
+              ref={(el) => {
+                if (el) groupRenameTriggerRefs.current.set(tag, el);
+                else groupRenameTriggerRefs.current.delete(tag);
+              }}
+              onClick={() => {
+                setRenamingGroup(tag);
+                setRenameValue(tag);
+              }}
+              aria-label={`Rename tag ${tag}`}
+              title="Rename tag"
+            >
+              ✎
+            </button>
+            <button
+              type="button"
+              className="group-delete-btn"
+              onClick={() => setConfirmingDeleteTag(tag)}
+              aria-label={`Remove tag ${tag}`}
+              title="Remove tag"
+            >
+              ×
+            </button>
+          </span>
+        )}
       </div>
-      </nav>
-      <main className="deck-panel deck" id="pane-deck">
+    );
+  };
 
-      {decks.length === 0 && (
-        <div className="empty-state">
-          <div className="empty-state-icon" aria-hidden="true">🂠</div>
-          <p>No decks yet — create one to get started.</p>
-          {newDeckForm}
+  return (
+    <>
+      <nav className="sidebar" id="sidebar">
+        <div className="logo">
+          <span className="mark">◆</span>
+          <span>scrychat</span>
         </div>
-      )}
+        <button
+          type="button"
+          className="newdeck"
+          id="nav-newdeck"
+          onClick={() => setShowNewDeck((s) => !s)}
+        >
+          <span className="ico">＋</span>
+          <span>New deck</span>
+        </button>
+        {showNewDeck && decks.length > 0 && <div className="navpanel">{newDeckForm}</div>}
 
-      {loading && !deck && decks.length > 0 && <DeckSkeleton />}
-      {reportError && !deck && decks.length > 0 && !loading && (
-        <div className="sc-chip sc-chip-error">deck error: {reportError}</div>
-      )}
+        <div className="navsec">
+          <div className="navlabel">Browse</div>
+          <button type="button" className="navitem" id="nav-explore" onClick={stub("Explore decks")}>
+            <span className="ico">⌸</span>
+            <span>Explore decks</span>
+          </button>
+          <button type="button" className="navitem" id="nav-commanders" onClick={stub("Commanders")}>
+            <span className="ico">✦</span>
+            <span>Commanders</span>
+          </button>
+          <button type="button" className="navitem" id="nav-precons" onClick={stub("Precons")}>
+            <span className="ico">▤</span>
+            <span>Precons</span>
+          </button>
+          <button type="button" className="navitem" id="nav-search" onClick={stub("Search cards")}>
+            <span className="ico">⌕</span>
+            <span>Search cards</span>
+          </button>
+        </div>
+        <div className="navsec">
+          <div className="navlabel">Library</div>
+          <button
+            type="button"
+            className="navitem"
+            id="nav-collection"
+            onClick={() => setCollOpen((o) => !o)}
+            aria-expanded={collOpen}
+          >
+            <span className="ico">◈</span>
+            <span>My collection</span>
+            <span className={`status-dot status-${collState}`} title={`collection: ${collState}`} />
+          </button>
+          {/* always mounted: CollectionSync auto-syncs the linked Arena folder on mount */}
+          <div className="navpanel" hidden={!collOpen}>
+            <CollectionSync onImported={onCollectionImported} onState={setCollState} />
+          </div>
+          <button
+            type="button"
+            className="navitem"
+            id="nav-mydecks"
+            onClick={() => setDecksOpen((o) => !o)}
+            aria-expanded={decksOpen}
+          >
+            <span className="ico">▣</span>
+            <span>My decks</span>
+          </button>
+          {decksOpen && (
+            <div className="navpanel decklist">
+              {decks.length === 0 && <div className="text-dim">no decks</div>}
+              {decks.map((d) => (
+                <button
+                  type="button"
+                  key={d.name}
+                  className={d.name === selected ? "navitem active" : "navitem"}
+                  onClick={() => setSelected(d.name)}
+                >
+                  <span className="ico">▣</span>
+                  <span>{d.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {refreshFailed && <div className="sc-chip sc-chip-muted">couldn't refresh decks</div>}
+        </div>
+        <div className="navsec">
+          <div className="navlabel">Session</div>
+          <button
+            type="button"
+            className="navitem active"
+            onClick={() => setDecksOpen(true)}
+            title="Active deck"
+          >
+            <span className="ico">●</span>
+            <span>{selected || "no deck"}</span>
+          </button>
+        </div>
 
-      {deck && (
-        <div className="deck-body">
-          <div className="commander">
-            <div className="commander-label">Commander</div>
-            <div className="commander-row">
+        <div className="spacer" />
+        <div className="manacard">
+          <div className="manatop">
+            <span>mana</span>
+            <b>— / —</b>
+          </div>
+          <div className="track">
+            <div className="fill" style={{ width: 0 }} />
+          </div>
+        </div>
+        <button type="button" className="user" onClick={onOpenSettings} title="Settings">
+          <span className="avatar">⚙</span>
+          <span>
+            <span className="uname">—</span>
+            <br />
+            <span className="urank">Settings</span>
+          </span>
+        </button>
+      </nav>
+
+      <main className="deck-panel deck" id="pane-deck">
+        {decks.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-state-icon" aria-hidden="true">🂠</div>
+            <p>No decks yet — create one to get started.</p>
+            {newDeckForm}
+          </div>
+        )}
+
+        {loading && !deck && decks.length > 0 && <DeckSkeleton />}
+        {reportError && !deck && decks.length > 0 && !loading && (
+          <div className="sc-chip sc-chip-error">deck error: {reportError}</div>
+        )}
+
+        {deck && (
+          <>
+            <header className="hero">
               {deck.commanderImage && (
-                <img
-                  className="commander-thumb"
-                  src={deck.commanderImage}
-                  alt=""
-                  loading="lazy"
-                />
+                <img className="commander-thumb" src={deck.commanderImage} alt="" loading="lazy" />
               )}
-              <div>
-                {changingCommander ? (
-                  <span
-                    className="inline-confirm commander-change-row"
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") cancelCommanderChange();
+              <div className="heroactions">
+                <button type="button" className="chip bracket" onClick={stub("Commander bracket")}>
+                  <span className="dot" />
+                  Bracket —
+                </button>
+                <button type="button" className="chip" onClick={stub("Deckbuilding rules")}>
+                  Deckbuilding rules
+                </button>
+                <span className="popwrap">
+                  <button
+                    type="button"
+                    className="chip"
+                    onClick={() => {
+                      setShareOpen((o) => !o);
+                      setMoreOpen(false);
                     }}
+                    aria-expanded={shareOpen}
                   >
-                    <input
-                      className="text-input"
-                      value={commanderValue}
-                      onChange={(e) => setCommanderValue(e.target.value)}
-                      disabled={commanderBusy}
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") submitCommanderChange();
-                      }}
-                      aria-label="Change commander"
-                    />
-                    <button
-                      type="button"
-                      className="sc-btn sc-btn-primary sc-btn-small"
-                      onClick={submitCommanderChange}
-                      disabled={commanderBusy}
-                    >
-                      {commanderBusy ? "Saving…" : "Save"}
-                    </button>
-                    <button
-                      type="button"
-                      className="sc-btn sc-btn-ghost sc-btn-small"
-                      onClick={cancelCommanderChange}
-                      disabled={commanderBusy}
-                    >
-                      Cancel
-                    </button>
+                    Share
+                  </button>
+                  {shareOpen && (
+                    <div className="pop">
+                      <div className="export-row">
+                        <select
+                          className="role-select export-format-select"
+                          value={exportFormat}
+                          onChange={(e) => {
+                            exportFormatTouchedRef.current = true;
+                            setExportFormat(e.target.value as ExportFormat);
+                          }}
+                          aria-label="Export format"
+                        >
+                          <option value="mtga">MTGA</option>
+                          <option value="moxfield">Moxfield</option>
+                          <option value="plain">Plain</option>
+                        </select>
+                        <button
+                          type="button"
+                          className="sc-btn sc-btn-ghost sc-btn-small export-deck-btn"
+                          onClick={copyExport}
+                        >
+                          {copyState === "copied" ? "Copied ✓" : copyState === "error" ? "Copy failed" : "Export"}
+                        </button>
+                      </div>
+                      {manualCopyText !== null && (
+                        <div className="manual-copy-popover" role="dialog" aria-label="Copy deck export">
+                          <div className="manual-copy-hint">Press Ctrl/Cmd+C to copy</div>
+                          <textarea
+                            className="manual-copy-textarea"
+                            readOnly
+                            value={manualCopyText}
+                            autoFocus
+                            onFocus={(e) => e.currentTarget.select()}
+                          />
+                          <button
+                            type="button"
+                            className="sc-btn sc-btn-ghost sc-btn-small manual-copy-close-btn"
+                            onClick={() => setManualCopyText(null)}
+                          >
+                            Close
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </span>
+                <span className="popwrap">
+                  <button
+                    type="button"
+                    className="chip"
+                    onClick={() => {
+                      setMoreOpen((o) => !o);
+                      setShareOpen(false);
+                    }}
+                    aria-expanded={moreOpen}
+                    aria-label="More deck actions"
+                  >
+                    ⋯
+                  </button>
+                  {moreOpen && (
+                    <div className="pop">
+                      {confirmingDeleteDeck ? (
+                        <span
+                          className="inline-confirm"
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") setConfirmingDeleteDeck(false);
+                          }}
+                        >
+                          <span className="inline-confirm-text">Delete deck?</span>
+                          <button
+                            type="button"
+                            className="sc-btn sc-btn-danger sc-btn-small"
+                            onClick={deleteCurrentDeck}
+                            disabled={deleteBusy}
+                            autoFocus
+                          >
+                            {deleteBusy ? "Deleting…" : "Yes"}
+                          </button>
+                          <button
+                            type="button"
+                            className="sc-btn sc-btn-ghost sc-btn-small"
+                            onClick={() => setConfirmingDeleteDeck(false)}
+                            disabled={deleteBusy}
+                          >
+                            No
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="sc-btn sc-btn-danger sc-btn-small delete-deck-btn"
+                          onClick={() => setConfirmingDeleteDeck(true)}
+                          disabled={deleteBusy}
+                        >
+                          Delete deck
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </span>
+                {report && report.identityViolations.length > 0 && (
+                  <span className="chip chip-bad" title={report.identityViolations.join(", ")}>
+                    identity violations: {report.identityViolations.join(", ")}
                   </span>
-                ) : (
-                  <div className="commander-name">
-                    <CardName name={deck.commander} image={deck.commanderImage} />
-                    <button
-                      type="button"
-                      className="change-commander-btn"
-                      ref={commanderTriggerRef}
-                      onClick={openCommanderChange}
-                      aria-label="Change commander"
-                      title="Change commander"
-                    >
-                      change
-                    </button>
-                  </div>
                 )}
-                {commanderError && <div className="sc-chip sc-chip-error">{commanderError}</div>}
-                <div className="commander-meta">
-                  {deck.commanderIdentity.join("")} · {totalCards + 1} cards
+                {nowIllegal.length > 0 && (
+                  <span className="chip chip-bad">
+                    {nowIllegal.length} card{nowIllegal.length === 1 ? "" : "s"} now illegal
+                  </span>
+                )}
+              </div>
+
+              {renamingDeck ? (
+                <input
+                  className="text-input deckname-input"
+                  value={deckRenameValue}
+                  onChange={(e) => setDeckRenameValue(e.target.value)}
+                  disabled={deckRenameBusy}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitDeckRename();
+                    if (e.key === "Escape") cancelDeckRename();
+                  }}
+                  onBlur={submitDeckRename}
+                  aria-label="Rename deck"
+                />
+              ) : (
+                <h1
+                  className="deckname"
+                  ref={deckRenameTriggerRef as React.RefObject<HTMLHeadingElement>}
+                  role="button"
+                  tabIndex={0}
+                  onClick={openDeckRename}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") openDeckRename();
+                  }}
+                  title="Click to rename"
+                  aria-label="Rename deck"
+                >
+                  {deck.name}
+                </h1>
+              )}
+              {deckRenameError && <div className="sc-chip sc-chip-error">{deckRenameError}</div>}
+
+              {changingCommander ? (
+                <span
+                  className="inline-confirm commander-change-row"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") cancelCommanderChange();
+                  }}
+                >
+                  <input
+                    className="text-input"
+                    value={commanderValue}
+                    onChange={(e) => setCommanderValue(e.target.value)}
+                    disabled={commanderBusy}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submitCommanderChange();
+                    }}
+                    aria-label="Change commander"
+                  />
+                  <button
+                    type="button"
+                    className="sc-btn sc-btn-primary sc-btn-small"
+                    onClick={submitCommanderChange}
+                    disabled={commanderBusy}
+                  >
+                    {commanderBusy ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    className="sc-btn sc-btn-ghost sc-btn-small"
+                    onClick={cancelCommanderChange}
+                    disabled={commanderBusy}
+                  >
+                    Cancel
+                  </button>
+                </span>
+              ) : (
+                <div className="commander-line">
+                  <span className="commander-label">Commander</span>{" "}
+                  <CardName name={deck.commander} image={deck.commanderImage} />
+                  <button
+                    type="button"
+                    className="link change-commander-btn"
+                    ref={commanderTriggerRef}
+                    onClick={openCommanderChange}
+                    aria-label="Change commander"
+                    title="Change commander"
+                  >
+                    change
+                  </button>
+                </div>
+              )}
+              {commanderError && <div className="sc-chip sc-chip-error">{commanderError}</div>}
+
+              <div className="subtitle">
+                <span className="pips">
+                  {deck.commanderIdentity.length === 0 ? (
+                    <span className="pip" style={{ background: "var(--mtg-c)" }}>C</span>
+                  ) : (
+                    deck.commanderIdentity.map((c) => (
+                      <span
+                        className="pip"
+                        key={c}
+                        style={{ background: `var(--mtg-${PIP_VAR[c] ?? "c"})` }}
+                      >
+                        {c}
+                      </span>
+                    ))
+                  )}
+                </span>
+                <span>
+                  {totalCards + 1} cards
                   {collectionInfo && (
                     <>
                       {" · "}
@@ -1148,526 +1763,291 @@ export function DeckPanel({
                         : `${collectionInfo.missingCount} missing on Arena`}
                     </>
                   )}
-                  {loading && <span className="refreshing"> · refreshing…</span>}
-                </div>
+                  {" · "}
+                </span>
+                <button type="button" className="link" onClick={stub("Deck price")}>
+                  €—
+                </button>
+                {loading && <span className="refreshing"> · refreshing…</span>}
               </div>
-            </div>
+            </header>
+
             {nowIllegal.length > 0 && (
-              <div className="sc-chip sc-chip-error sc-chip-dismissible now-illegal-warning">
-                <div>
-                  <strong>{nowIllegal.length} card{nowIllegal.length === 1 ? "" : "s"} now illegal:</strong>
-                  <ul className="now-illegal-list">
-                    {nowIllegal.map((c, i) => (
-                      <li key={`${c.name}-${i}`}>
-                        {c.name} — {c.reason}
-                      </li>
-                    ))}
-                  </ul>
+              <div className="section now-illegal-section">
+                <div className="sc-chip sc-chip-error sc-chip-dismissible now-illegal-warning">
+                  <div>
+                    <strong>{nowIllegal.length} card{nowIllegal.length === 1 ? "" : "s"} now illegal:</strong>
+                    <ul className="now-illegal-list">
+                      {nowIllegal.map((c, i) => (
+                        <li key={`${c.name}-${i}`}>
+                          {c.name} — {c.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <button
+                    type="button"
+                    className="sc-chip-dismiss"
+                    onClick={() => setNowIllegal([])}
+                    aria-label="Dismiss illegal-cards warning"
+                  >
+                    ×
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="sc-chip-dismiss"
-                  onClick={() => setNowIllegal([])}
-                  aria-label="Dismiss illegal-cards warning"
-                >
-                  ×
-                </button>
               </div>
             )}
-            <div className="export-row">
-              <select
-                className="role-select export-format-select"
-                value={exportFormat}
-                onChange={(e) => {
-                  exportFormatTouchedRef.current = true;
-                  setExportFormat(e.target.value as ExportFormat);
-                }}
-                aria-label="Export format"
-              >
-                <option value="mtga">MTGA</option>
-                <option value="moxfield">Moxfield</option>
-                <option value="plain">Plain</option>
-              </select>
+
+            <section className="section" id="strategy">
+              <div className="sechead">
+                <div className="sectitle">Strategy</div>
+                <button type="button" className="link" onClick={stub("Deck strategy")}>
+                  Read strategy →
+                </button>
+              </div>
+              <div className="strategy">—</div>
+              <div className="tags">
+                <span className="tag">
+                  — <button type="button" className="x" onClick={stub("Deck themes")}>✕</button>
+                </span>
+                <button type="button" className="tag add" onClick={stub("Deck themes")}>
+                  ＋ Add a theme
+                </button>
+              </div>
+            </section>
+
+            <div className="toolbar">
               <button
                 type="button"
-                className="sc-btn sc-btn-ghost sc-btn-small export-deck-btn"
-                onClick={copyExport}
+                className="btn primary"
+                onClick={() => setAddOpen((o) => !o)}
+                aria-expanded={addOpen}
               >
-                {copyState === "copied" ? "Copied ✓" : copyState === "error" ? "Copy failed" : "Export"}
+                ＋ Add card
               </button>
+              <button type="button" className="btn" id="tb-bulk" onClick={stub("Bulk actions")}>
+                Bulk actions
+              </button>
+              <button type="button" className="btn" id="tb-playtest" onClick={stub("Playtest")}>
+                Playtest
+              </button>
+              <div className="tbspacer" />
+              <button
+                type="button"
+                className="btn"
+                id="tb-group"
+                onClick={() => setGroupBy((g) => (g === "type" ? "tag" : "type"))}
+              >
+                Group: {groupBy === "type" ? "Type" : "Tag"} ▾
+              </button>
+              <button
+                type="button"
+                className="btn"
+                id="tb-sort"
+                onClick={() => setSortBy((s) => (s === "name" ? "cost" : "name"))}
+              >
+                Sort: {sortBy === "name" ? "Name" : "Cost"} ▾
+              </button>
+              <button type="button" className="btn" onClick={stub("List view options")}>
+                View: List ▾
+              </button>
+              {actionError && (
+                <div className="sc-chip sc-chip-error sc-chip-dismissible">
+                  {actionError}
+                  <button
+                    type="button"
+                    className="sc-chip-dismiss"
+                    onClick={() => setActionError(null)}
+                    aria-label="Dismiss error"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              {undo && (
+                <div className="sc-chip sc-chip-hint-inline">
+                  Removed {undo.name}
+                  <button type="button" className="sc-chip-retry" onClick={undoRemove}>
+                    Undo
+                  </button>
+                </div>
+              )}
             </div>
-            {confirmingDeleteDeck ? (
-              <span className="inline-confirm" onKeyDown={(e) => {
-                if (e.key === "Escape") setConfirmingDeleteDeck(false);
-              }}>
-                <span className="inline-confirm-text">Delete deck?</span>
-                <button
-                  type="button"
-                  className="sc-btn sc-btn-danger sc-btn-small"
-                  onClick={deleteCurrentDeck}
-                  disabled={deleteBusy}
-                  autoFocus
-                >
-                  {deleteBusy ? "Deleting…" : "Yes"}
-                </button>
-                <button
-                  type="button"
-                  className="sc-btn sc-btn-ghost sc-btn-small"
-                  onClick={() => setConfirmingDeleteDeck(false)}
-                  disabled={deleteBusy}
-                >
-                  No
-                </button>
-              </span>
-            ) : (
-              <button
-                type="button"
-                className="sc-btn sc-btn-danger sc-btn-small delete-deck-btn"
-                onClick={() => setConfirmingDeleteDeck(true)}
-                disabled={deleteBusy}
-              >
-                Delete deck
-              </button>
-            )}
-            {manualCopyText !== null && (
-              <div className="manual-copy-popover" role="dialog" aria-label="Copy deck export">
-                <div className="manual-copy-hint">Press Ctrl/Cmd+C to copy</div>
-                <textarea
-                  className="manual-copy-textarea"
-                  readOnly
-                  value={manualCopyText}
-                  autoFocus
-                  onFocus={(e) => e.currentTarget.select()}
-                />
-                <button
-                  type="button"
-                  className="sc-btn sc-btn-ghost sc-btn-small manual-copy-close-btn"
-                  onClick={() => setManualCopyText(null)}
-                >
-                  Close
-                </button>
-              </div>
-            )}
-          </div>
 
-          {report ? (
-            <>
-              <section className="deck-section">
-                <h2>Quotas</h2>
-                <ul className="quota-list">
-                  <QuotaRow label="Lands" q={report.quotaCheck.lands} />
-                  <QuotaRow label="Ramp" q={report.quotaCheck.ramp} />
-                  <QuotaRow label="Draw" q={report.quotaCheck.draw} />
-                  <QuotaRow label="Interaction" q={report.quotaCheck.interaction} />
-                  <QuotaRow label="Wipes" q={report.quotaCheck.wipes} />
-                </ul>
-                {report.identityViolations.length > 0 && (
-                  <div className="sc-chip sc-chip-error">
-                    identity violations: {report.identityViolations.join(", ")}
+            {(addOpen || rejected.length > 0) && (
+              <div className="section addsec">
+                {addOpen && (
+                  <form className="add-card-form" onSubmit={addCard}>
+                    <input
+                      className="text-input"
+                      placeholder="Add card by name"
+                      value={addCardName}
+                      onChange={(e) => setAddCardName(e.target.value)}
+                      disabled={addCardBusy}
+                      aria-label="Card name to add"
+                      autoFocus
+                    />
+                    <input
+                      className="text-input tags-input"
+                      placeholder="tags (comma-separated)"
+                      value={addCardTags}
+                      onChange={(e) => setAddCardTags(e.target.value)}
+                      disabled={addCardBusy}
+                      aria-label="Card tags"
+                      list="legacy-role-tags"
+                    />
+                    <datalist id="legacy-role-tags">
+                      {LEGACY_ROLE_TAGS.map((r) => (
+                        <option key={r} value={r} />
+                      ))}
+                    </datalist>
+                    <input
+                      className="text-input count-input"
+                      type="number"
+                      min={1}
+                      value={addCardCount}
+                      onChange={(e) => setAddCardCount(e.target.value)}
+                      disabled={addCardBusy}
+                      aria-label="Card count"
+                    />
+                    <button type="submit" className="sc-btn sc-btn-primary sc-btn-small" disabled={addCardBusy}>
+                      {addCardBusy ? "Adding…" : "Add"}
+                    </button>
+                  </form>
+                )}
+                {rejected.length > 0 && (
+                  <div className="rejected-list">
+                    {rejected.map((r, i) => (
+                      <div className="sc-chip sc-chip-error" key={`${r.name}-${i}`}>
+                        {r.name}: {r.reason}
+                      </div>
+                    ))}
                   </div>
                 )}
-                {report.untaggedForQuota > 0 && (
-                  <div className="quota-note">{report.untaggedForQuota} cards untagged for quota</div>
-                )}
-                {report.arenaCheck && (
-                  <div className="quota-note">
-                    {report.arenaCheck.onArena} / {report.arenaCheck.total} on Arena
-                    {report.arenaCheck.missing.length > 0 && ` · ${report.arenaCheck.missing.length} missing`}
-                  </div>
-                )}
-              </section>
-
-              <section className="deck-section">
-                <h2>Mana curve</h2>
-                <ManaCurve curve={report.curve} />
-              </section>
-            </>
-          ) : reportError ? (
-            <div className="sc-chip sc-chip-error">report failed: {reportError}</div>
-          ) : (
-            <div className="deck-loading">loading report…</div>
-          )}
-
-          <Suggestions deckName={deck.name} onApplied={onSuggestionApplied} />
-
-          <section className="deck-section">
-            <h2>Cards</h2>
-            {actionError && (
-              <div className="sc-chip sc-chip-error sc-chip-dismissible">
-                {actionError}
-                <button
-                  type="button"
-                  className="sc-chip-dismiss"
-                  onClick={() => setActionError(null)}
-                  aria-label="Dismiss error"
-                >
-                  ×
-                </button>
               </div>
             )}
-            {undo && (
-              <div className="sc-chip sc-chip-hint-inline">
-                Removed {undo.name}
-                <button type="button" className="sc-chip-retry" onClick={undoRemove}>
-                  Undo
-                </button>
-              </div>
-            )}
-            <form className="add-card-form" onSubmit={addCard}>
-              <input
-                className="text-input"
-                placeholder="Add card by name"
-                value={addCardName}
-                onChange={(e) => setAddCardName(e.target.value)}
-                disabled={addCardBusy}
-                aria-label="Card name to add"
-              />
-              <input
-                className="text-input tags-input"
-                placeholder="tags (comma-separated)"
-                value={addCardTags}
-                onChange={(e) => setAddCardTags(e.target.value)}
-                disabled={addCardBusy}
-                aria-label="Card tags"
-                list="legacy-role-tags"
-              />
-              <datalist id="legacy-role-tags">
-                {LEGACY_ROLE_TAGS.map((r) => (
-                  <option key={r} value={r} />
-                ))}
-              </datalist>
-              <input
-                className="text-input count-input"
-                type="number"
-                min={1}
-                value={addCardCount}
-                onChange={(e) => setAddCardCount(e.target.value)}
-                disabled={addCardBusy}
-                aria-label="Card count"
-              />
-              <button type="submit" className="sc-btn sc-btn-primary sc-btn-small" disabled={addCardBusy}>
-                {addCardBusy ? "Adding…" : "Add"}
-              </button>
-            </form>
-            {rejected.length > 0 && (
-              <div className="rejected-list">
-                {rejected.map((r, i) => (
-                  <div className="sc-chip sc-chip-error" key={`${r.name}-${i}`}>
-                    {r.name}: {r.reason}
-                  </div>
-                ))}
-              </div>
-            )}
-            {tagGroups.length > 0 && (
-              <table className="card-table">
-                {tagGroups.map(([tag, cards]) => (
-                  <tbody className="role-group" key={tag}>
-                    <tr className="role-header-row">
-                      <th className="role-header-cell" colSpan={5}>
-                        {renamingGroup === tag ? (
-                          <span className="group-rename-row" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              className="text-input group-rename-input"
-                              value={renameValue}
-                              onChange={(e) => setRenameValue(e.target.value)}
-                              disabled={renameBusy}
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") renameGroup(tag, renameValue);
-                                if (e.key === "Escape") cancelGroupRename(tag);
-                              }}
-                              aria-label={`Rename tag ${tag}`}
-                            />
-                            <button
-                              type="button"
-                              className="sc-btn sc-btn-ghost sc-btn-small"
-                              onClick={() => renameGroup(tag, renameValue)}
-                              disabled={renameBusy}
-                            >
-                              Save
-                            </button>
-                            <button
-                              type="button"
-                              className="sc-btn sc-btn-ghost sc-btn-small"
-                              onClick={() => cancelGroupRename(tag)}
-                              disabled={renameBusy}
-                            >
-                              Cancel
-                            </button>
-                          </span>
-                        ) : confirmingDeleteTag === tag ? (
-                          <span className="inline-confirm group-delete-row" onClick={(e) => e.stopPropagation()}>
-                            <span className="inline-confirm-text">
-                              remove tag "{tag}" from {cards.length} card{cards.length === 1 ? "" : "s"}?
-                            </span>
-                            <button
-                              type="button"
-                              className="sc-btn sc-btn-danger sc-btn-small"
-                              onClick={() => deleteTagGroup(tag)}
-                              disabled={tagDeleteBusy}
-                              autoFocus
-                            >
-                              {tagDeleteBusy ? "Removing…" : "Yes"}
-                            </button>
-                            <button
-                              type="button"
-                              className="sc-btn sc-btn-ghost sc-btn-small"
-                              onClick={() => setConfirmingDeleteTag(null)}
-                              disabled={tagDeleteBusy}
-                            >
-                              No
-                            </button>
-                          </span>
-                        ) : (
-                          <>
-                            <span className="role-name">{tag}</span>
-                            {tag !== UNTAGGED && (
-                              <button
-                                type="button"
-                                className="group-rename-btn"
-                                ref={(el) => {
-                                  if (el) groupRenameTriggerRefs.current.set(tag, el);
-                                  else groupRenameTriggerRefs.current.delete(tag);
-                                }}
-                                onClick={() => {
-                                  setRenamingGroup(tag);
-                                  setRenameValue(tag);
-                                }}
-                                aria-label={`Rename tag ${tag}`}
-                                title="Rename tag"
-                              >
-                                ✎
-                              </button>
-                            )}
-                            {tag !== UNTAGGED && (
-                              <button
-                                type="button"
-                                className="group-delete-btn"
-                                onClick={() => setConfirmingDeleteTag(tag)}
-                                aria-label={`Remove tag ${tag}`}
-                                title="Remove tag"
-                              >
-                                ×
-                              </button>
-                            )}
-                            <span className="role-count">
-                              {cards.reduce((n, c) => n + c.count, 0)}
-                            </span>
-                          </>
-                        )}
-                      </th>
-                    </tr>
-                    {cards.map((c) => {
-                      const editKey = `${tag}::${c.name}`;
-                      return (
-                      <Fragment key={c.name}>
-                        <tr className={c.arena === false ? "card-row card-row-no-arena" : "card-row"}>
-                          <td className="card-count-cell">
-                            {(c.typeLine ?? "").includes("Basic Land") ? (
-                              <span className="count-stepper">
-                                <button
-                                  type="button"
-                                  className="count-stepper-btn"
-                                  onClick={() => changeCardCount(c.name, c.count - 1)}
-                                  disabled={c.count <= 1 || countBusy === c.name}
-                                  aria-label={`Decrease ${c.name} count`}
-                                >
-                                  −
-                                </button>
-                                <span className="count-stepper-val">{c.count}</span>
-                                <button
-                                  type="button"
-                                  className="count-stepper-btn"
-                                  onClick={() => changeCardCount(c.name, c.count + 1)}
-                                  disabled={countBusy === c.name}
-                                  aria-label={`Increase ${c.name} count`}
-                                >
-                                  +
-                                </button>
-                              </span>
-                            ) : (
-                              c.count > 1 ? `${c.count}×` : ""
-                            )}
-                          </td>
-                          <td className="card-name-cell">
-                            <CardName name={c.name} image={c.image} />
-                            {c.owned === false && (
-                              <span className="owned-chip owned-missing">missing</span>
-                            )}
-                            {c.owned === true && (
-                              <span className="owned-chip owned-yes">✓</span>
-                            )}
-                            {c.arena === false && (
-                              <span className="owned-chip arena-missing" title="Not available on Arena">
-                                not on Arena
-                              </span>
-                            )}
-                          </td>
-                          <td className="card-mana-cell">
-                            {(() => {
-                              const isLand = (c.typeLine ?? "").includes("Land");
-                              const producedMana = c.producedMana ?? [];
-                              const symbols = isLand
-                                ? producedMana.length > 0
-                                  ? `{T}: ${producedMana.map((m) => `{${m}}`).join("")}`
-                                  : "{T}"
-                                : c.manaCost;
-                              return (
-                                symbols && (
-                                  <span
-                                    className="card-mana-cost"
-                                    dangerouslySetInnerHTML={{ __html: renderManaSymbols(symbols) }}
-                                  />
-                                )
-                              );
-                            })()}
-                          </td>
-                          <td className="card-edit-cell">
-                            <button
-                              type="button"
-                              className="edit-tags-btn"
-                              onClick={(e) =>
-                                editingCard === editKey
-                                  ? closeTagEditor()
-                                  : openTagEditor(editKey, c.tags, e.currentTarget)
-                              }
-                              aria-label={`Edit tags for ${c.name}`}
-                              title="Edit tags"
-                            >
-                              ✎
-                            </button>
-                          </td>
-                          <td className="card-remove-cell">
-                            <button
-                              type="button"
-                              className="remove-card-btn"
-                              onClick={() => removeCard(c.name, c.tags, c.count)}
-                              disabled={removeBusy === c.name}
-                              aria-label={`Remove ${c.name}`}
-                              title={`Remove ${c.name}`}
-                            >
-                              ×
-                            </button>
-                          </td>
-                        </tr>
-                        {countError[c.name] && (
-                          <tr className="count-error-row">
-                            <td colSpan={5}>
-                              <div className="sc-chip sc-chip-error sc-chip-dismissible">
-                                {c.name}: {countError[c.name]}
-                                <button
-                                  type="button"
-                                  className="sc-chip-dismiss"
-                                  onClick={() =>
-                                    setCountError((prev) => {
-                                      const { [c.name]: _drop, ...rest } = prev;
-                                      return rest;
-                                    })
-                                  }
-                                  aria-label={`Dismiss error for ${c.name}`}
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                        {editingCard === editKey && (
-                          <tr className="tag-editor-row">
-                            <td colSpan={5}>
-                              <div
-                                className="tag-editor"
-                                onKeyDown={(e) => {
-                                  if (e.key === "Escape") {
-                                    e.stopPropagation();
-                                    closeTagEditor();
-                                  }
-                                }}
-                              >
-                                <div className="tag-editor-current">
-                                  {editorTags.map((t) => (
-                                    <span
-                                      className="tag-chip tag-chip-removable"
-                                      key={t}
-                                      onClick={() => setEditorTags((prev) => prev.filter((x) => x !== t))}
-                                      title="Click to remove"
-                                    >
-                                      {t} ×
-                                    </span>
-                                  ))}
-                                </div>
-                                <div className="tag-editor-input-row">
-                                  <input
-                                    className="text-input"
-                                    placeholder="Add tag, press Enter"
-                                    value={editorInput}
-                                    onChange={(e) => setEditorInput(e.target.value)}
-                                    autoFocus
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        const v = editorInput.trim();
-                                        if (v && !editorTags.includes(v)) {
-                                          setEditorTags((prev) => [...prev, v]);
-                                        }
-                                        setEditorInput("");
-                                      } else if (e.key === "Escape") {
-                                        e.preventDefault();
-                                        closeTagEditor();
-                                      }
-                                    }}
-                                    disabled={editorBusy}
-                                  />
-                                  <button
-                                    type="button"
-                                    className="sc-btn sc-btn-primary sc-btn-small"
-                                    disabled={editorBusy}
-                                    onClick={() => saveCardTags(c.name, editorTags)}
-                                  >
-                                    {editorBusy ? "Saving…" : "Save"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="sc-btn sc-btn-ghost sc-btn-small"
-                                    disabled={editorBusy}
-                                    onClick={closeTagEditor}
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                                <div className="tag-editor-suggestions">
-                                  {[...LEGACY_ROLE_TAGS, ...allDeckTags]
-                                    .filter((t, i, arr) => arr.indexOf(t) === i && !editorTags.includes(t))
-                                    .map((t) => (
-                                      <span
-                                        className="tag-chip tag-chip-suggestion"
-                                        key={t}
-                                        onClick={() => setEditorTags((prev) => [...prev, t])}
-                                      >
-                                        + {t}
-                                      </span>
-                                    ))}
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                      );
-                    })}
-                  </tbody>
-                ))}
-              </table>
-            )}
-            {tagGroups.length === 0 && (
+
+            {groups.map(([key, cards]) => (
+              <Fragment key={`${groupBy}:${key}`}>
+                {renderGroupHead(key, cards)}
+                {sortRows(cards).map((c) => renderRow(key, c))}
+              </Fragment>
+            ))}
+            {groups.length === 0 && (
               <div className="empty-state empty-state-inline">
                 <div className="empty-state-icon" aria-hidden="true">🃏</div>
                 <p>No cards yet — add one above or ask the chat.</p>
               </div>
             )}
-          </section>
-        </div>
-      )}
+
+            <Suggestions deckName={deck.name} onApplied={onSuggestionApplied} />
+
+            <section className="section" id="samplehand">
+              <div className="sechead">
+                <div className="sectitle">Sample hand</div>
+                <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                  <button type="button" className="btn" onClick={stub("Sample hand")}>
+                    New hand
+                  </button>
+                  <button type="button" className="btn" onClick={stub("Sample hand")}>
+                    Draw
+                  </button>
+                </div>
+              </div>
+              <div className="hand" id="hand">
+                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                  <div className="hcard" key={i}>—</div>
+                ))}
+              </div>
+            </section>
+
+            <section className="section" id="benchmarks">
+              <div className="sechead">
+                <div className="sectitle">Benchmarks</div>
+                <button type="button" className="link" onClick={stub("Benchmark help")}>
+                  What are these?
+                </button>
+              </div>
+              {report ? (
+                <>
+                  <div className="bars">
+                    {(
+                      [
+                        ["Lands", report.quotaCheck.lands],
+                        ["Ramp", report.quotaCheck.ramp],
+                        ["Card draw", report.quotaCheck.draw],
+                        ["Removal", report.quotaCheck.interaction],
+                      ] as [string, QuotaCheck][]
+                    ).map(([label, q]) => (
+                      <div className="bar" key={label}>
+                        <div className="lbl">{label}</div>
+                        <div className="meter">
+                          <i className={q.ok ? "ok" : "bad"} style={{ width: `${quotaFill(q)}%` }} />
+                        </div>
+                        <div className="val">
+                          {q.have} / {q.want}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="bar">
+                      <div className="lbl">Avg. mana value</div>
+                      <div className="meter">
+                        <i className="ok" style={{ width: `${Math.min(100, Math.round(((avgMV ?? 0) / 6) * 100))}%` }} />
+                      </div>
+                      <div className="val">{avgMV === null ? "—" : avgMV.toFixed(2)}</div>
+                    </div>
+                    <div className="bar">
+                      <div className="lbl">Wipes</div>
+                      <div className="meter">
+                        <i
+                          className={report.quotaCheck.wipes.ok ? "ok" : "bad"}
+                          style={{ width: `${quotaFill(report.quotaCheck.wipes)}%` }}
+                        />
+                      </div>
+                      <div className="val">
+                        {report.quotaCheck.wipes.have} / {report.quotaCheck.wipes.want}
+                      </div>
+                    </div>
+                  </div>
+                  <ManaCurve curve={report.curve} />
+                  {report.untaggedForQuota > 0 && (
+                    <div className="link benchnote">{report.untaggedForQuota} cards untagged for quota</div>
+                  )}
+                  {report.arenaCheck && (
+                    <div className="link benchnote">
+                      {report.arenaCheck.onArena} / {report.arenaCheck.total} on Arena
+                      {report.arenaCheck.missing.length > 0 && ` · ${report.arenaCheck.missing.length} missing`}
+                    </div>
+                  )}
+                </>
+              ) : reportError ? (
+                <div className="sc-chip sc-chip-error">report failed: {reportError}</div>
+              ) : (
+                <div className="deck-loading">loading report…</div>
+              )}
+            </section>
+
+            <section className="section" style={{ borderBottom: 0 }} id="colourbreak">
+              <div className="sechead">
+                <div className="sectitle">Colour breakdown</div>
+              </div>
+              <div className="colors">
+                {(
+                  [
+                    ["w", "White"],
+                    ["u", "Blue"],
+                    ["b", "Black"],
+                    ["c", "Colourless"],
+                  ] as const
+                ).map(([k, name]) => (
+                  <div className="colorcard" key={k}>
+                    <div className="n" style={{ color: `var(--mtg-${k})` }}>—</div>
+                    <div className="c">{name}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
       </main>
     </>
   );

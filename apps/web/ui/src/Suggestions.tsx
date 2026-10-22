@@ -128,13 +128,15 @@ export function Suggestions({
   if (!loading && !error && items.length === 0) return null;
 
   return (
-    <section className="deck-section suggestions">
-      <h2>
-        Suggestions
-        {pending.length > 0 && (
-          <span className="suggestion-count">{pending.length}</span>
-        )}
-      </h2>
+    <section className="section suggestions" id="suggestions">
+      <div className="sechead">
+        <div className="sectitle">
+          Suggestions
+          {pending.length > 0 && (
+            <span className="suggestion-count">{pending.length}</span>
+          )}
+        </div>
+      </div>
 
       {error && <div className="sc-chip sc-chip-error">{error}</div>}
 

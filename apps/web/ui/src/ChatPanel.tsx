@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { AppConfig, ChartSpec, CompareSpec, SlideSpec, ChatEvent, ChatFile, ChatMessage, ChatSegment, ChatSummary } from "./types";
 import { parseChartSpec } from "./chart-core";
 import { compareVerdict, parseCompareSpec } from "./compare-core";
@@ -13,6 +13,8 @@ import {
 import { PRESENT_PROMPT } from "./present-prompt-core";
 import { renderMarkdown } from "./markdown";
 import { SettingsDrawer } from "./SettingsDrawer";
+import { stub } from "./stub";
+import "./chat.css";
 
 const LAST_CHAT_KEY = "scrychat.lastChat";
 const SHOW_IN_DECK_KEY = "scrychat.showInDeck";
@@ -198,20 +200,119 @@ function SlideStrip({ spec }: { spec: SlideSpec }) {
   );
 }
 
-function AssistantBody({ msg }: { msg: ChatMessage }) {
+// [[group:LABEL|A; B]] tokens are lifted out of the prose and rendered as a
+// .module of .cardchip rows. Oracle text / cost are not in the transcript, so
+// the chips carry the name only. ponytail: a group inside a list item or table
+// cell splits that block; fine for how the model emits them (own paragraph).
+const GROUP_RE = /\[\[group:([^|\]]+)\|([^\]]+)\]\]/g;
+type Part = { text: string } | { label: string; names: string[] };
+function splitGroups(text: string): Part[] {
+  const parts: Part[] = [];
+  let last = 0;
+  for (const m of text.matchAll(GROUP_RE)) {
+    parts.push({ text: text.slice(last, m.index) });
+    parts.push({
+      label: m[1].trim(),
+      names: m[2].split(";").map((n) => n.trim()).filter(Boolean),
+    });
+    last = m.index! + m[0].length;
+  }
+  parts.push({ text: text.slice(last) });
+  return parts.filter((p) => !("text" in p) || p.text.trim() !== "");
+}
+
+function Module({ head, children }: { head: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="module">
+      <div className="modhead">{head}</div>
+      <div className="modbody">{children}</div>
+    </div>
+  );
+}
+
+function GroupModule({
+  label,
+  names,
+  deckCardNames,
+  showInDeck,
+}: {
+  label: string;
+  names: string[];
+  deckCardNames: Set<string>;
+  showInDeck: boolean;
+}) {
+  return (
+    <div className="module">
+      <div className="modhead">
+        {names.length} cards ·{" "}
+        <span className="card-group" data-group-label={label} data-group-names={names.join(";")}>
+          {label} &#9662;
+        </span>
+      </div>
+      {names.map((name) => {
+        const inDeck = showInDeck && deckCardNames.has(name.toLowerCase());
+        return (
+          <div className="cardchip" key={name}>
+            <div className="chiptop">
+              <span className="chipname" data-card-name={name}>
+                {name}
+                {inDeck && <span className="in-deck-badge">✓</span>}
+              </span>
+            </div>
+            <div className="chipacts">
+              <button
+                type="button"
+                className={`mini add${inDeck ? " added" : ""}`}
+                data-add-card={name}
+                title={inDeck ? "click to remove from deck" : undefined}
+              >
+                {inDeck ? "✓ In deck" : "＋ Add to deck"}
+              </button>
+              <button type="button" className="mini" onClick={stub("Sideboard")}>
+                ＋ Sideboard
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AssistantBody({
+  msg,
+  deckCardNames,
+  showInDeck,
+}: {
+  msg: ChatMessage;
+  deckCardNames: Set<string>;
+  showInDeck: boolean;
+}) {
   return (
     <>
       {msg.segments.map((seg, i) =>
         seg.type === "text" ? (
-          <div
-            className="md"
-            key={i}
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(seg.text) }}
-          />
+          <Fragment key={i}>
+            {splitGroups(seg.text).map((part, j) =>
+              "text" in part ? (
+                <div className="amsg" key={j}>
+                  <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(part.text) }} />
+                </div>
+              ) : (
+                <GroupModule
+                  key={j}
+                  label={part.label}
+                  names={part.names}
+                  deckCardNames={deckCardNames}
+                  showInDeck={showInDeck}
+                />
+              )
+            )}
+          </Fragment>
         ) : (
-          <div className="tool-chip-row" key={i}>
+          <div className="amsg tool-chip-row" key={i}>
             <span
-              className={`sc-chip sc-chip-tool sc-chip-tool-${toolResultStatus(seg.result)}`}
+              className={`mini sc-chip sc-chip-tool sc-chip-tool-${toolResultStatus(seg.result)}`}
               // Capped: this is a DOM attribute on every chip and its only
               // reader is the hover popover (a human). The components below
               // read seg.result directly, so they still get the whole thing.
@@ -221,20 +322,27 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
             </span>
             {seg.name.replace(/^mcp__scrychat__/, "") === "goldfish_deck" && (() => {
               const spec = parseChartSpec(seg.result);
-              return spec ? <Chart spec={spec} /> : null;
+              return spec ? <Module head="Goldfish"><Chart spec={spec} /></Module> : null;
             })()}
             {seg.name.replace(/^mcp__scrychat__/, "") === "goldfish_compare" && (() => {
               const spec = parseCompareSpec(seg.result);
-              return spec ? <CompareTable spec={spec} /> : null;
+              return spec ? <Module head="Compare"><CompareTable spec={spec} /></Module> : null;
             })()}
             {seg.name.replace(/^mcp__scrychat__/, "") === "deck_present" && (() => {
               const spec = parseSlideSpec(seg.result);
-              return spec ? <SlideStrip spec={spec} /> : null;
+              return spec ? <Module head="Slides"><SlideStrip spec={spec} /></Module> : null;
             })()}
           </div>
         )
       )}
-      {msg.interrupted && <span className="msg-interrupted">stopped</span>}
+      <div className="amsg">
+        {msg.interrupted && <span className="msg-interrupted">stopped</span>}
+        <div className="feedback">
+          <span>Helpful?</span>
+          <button type="button" className="mini" onClick={stub("Feedback")}>▲</button>
+          <button type="button" className="mini" onClick={stub("Feedback")}>▼</button>
+        </div>
+      </div>
     </>
   );
 }
@@ -257,6 +365,8 @@ export function ChatPanel({
   onCloseSettings: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [tab, setTab] = useState<"chat" | "cards" | "history">("chat");
+  const [historyScope, setHistoryScope] = useState<"all" | "deck">("all");
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -851,7 +961,7 @@ export function ChatPanel({
       // Skip .card-embed-img: it already renders its thumbnail inline
       // (see the auto-load effect below) — hovering it shows the same
       // image full-size, which reuses the popover for consistency.
-      const cardEl = target.closest<HTMLElement>(".card-ref, .card-embed-img, .card-embed");
+      const cardEl = target.closest<HTMLElement>(".card-ref, .card-embed-img, .card-embed, .chipname[data-card-name]");
       if (cardEl) {
         const name = cardEl.getAttribute("data-card-name");
         if (!name) return;
@@ -998,6 +1108,13 @@ export function ChatPanel({
     (e: React.MouseEvent) => {
       const target = e.target as HTMLElement;
 
+      const addBtn = target.closest<HTMLElement>("[data-add-card]");
+      if (addBtn) {
+        const name = addBtn.getAttribute("data-add-card");
+        if (name) toggleDeckCard(name, e.clientX, e.clientY);
+        return;
+      }
+
       const groupEl = target.closest<HTMLElement>(".card-group");
       if (groupEl) {
         // Click (re)opens the gallery popover at this chip's position.
@@ -1049,121 +1166,24 @@ export function ChatPanel({
     });
   }, [messages, deckCardNames, showInDeck, groupPopover]);
 
+  const historyList = historyScope === "deck" && selected ? deckChats : chats;
+  const pane = (name: typeof tab) => `chatpane${tab === name ? " on" : ""}`;
+
   return (
-    <aside className="chat-panel chat" id="chatcol">
-      <div className="chat-panel-header" id="top-bar">
-        {selected && (
-          <span className="sc-chip sc-chip-muted" id="deck-chip" title="active deck">
-            {selected}
-            {deckCardNames.size > 0 && ` · ${deckCardNames.size}`}
-          </span>
-        )}
-        <select
-          className="chat-select"
-          value={chatId ?? ""}
-          onChange={(e) => (e.target.value ? void loadChat(e.target.value) : startNewChat())}
-          aria-label="Select chat"
-        >
-          <option value="">{chats.length === 0 ? "New Chat (no chats yet)" : "New Chat"}</option>
-          {selected && deckChats.length > 0 && (
-            <optgroup label={`about ${selected}`}>
-              {deckChats.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title || "(untitled)"}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          <optgroup label={selected && deckChats.length > 0 ? "all chats" : "chats"}>
-            {chats.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title || "(untitled)"}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-        <button type="button" className="sc-btn sc-btn-ghost sc-btn-small" onClick={startNewChat}>
-          + New Chat
+    <aside className="chat" id="chatcol">
+      <div className="tabs" id="top-bar">
+        <button type="button" className={`tab${tab === "chat" ? " active" : ""}`} id="tab-chat" onClick={() => setTab("chat")}>
+          Chat
         </button>
-        {chatId && !renamingChat && (
-          <button
-            type="button"
-            className="sc-btn sc-btn-ghost sc-btn-small"
-            ref={renameTriggerRef}
-            onClick={openRenameChat}
-          >
-            Rename
-          </button>
-        )}
-        {chatId && renamingChat && (
-          <span
-            className="inline-confirm"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") cancelRenameChat();
-            }}
-          >
-            <input
-              className="text-input chat-rename-input"
-              value={renameChatValue}
-              onChange={(e) => setRenameChatValue(e.target.value)}
-              disabled={renameChatBusy}
-              autoFocus
-              aria-label="Rename chat"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveRenameChat();
-                if (e.key === "Escape") cancelRenameChat();
-              }}
-            />
-            <button
-              type="button"
-              className="sc-btn sc-btn-ghost sc-btn-small"
-              onClick={saveRenameChat}
-              disabled={renameChatBusy}
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              className="sc-btn sc-btn-ghost sc-btn-small"
-              onClick={cancelRenameChat}
-              disabled={renameChatBusy}
-            >
-              Cancel
-            </button>
-          </span>
-        )}
-        {chatId && !confirmingDeleteChat && (
-          <button
-            type="button"
-            className="sc-btn sc-btn-danger sc-btn-small"
-            onClick={() => setConfirmingDeleteChat(true)}
-          >
-            Delete
-          </button>
-        )}
-        {chatId && confirmingDeleteChat && (
-          <span
-            className="inline-confirm"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setConfirmingDeleteChat(false);
-            }}
-          >
-            <span className="inline-confirm-text">Delete?</span>
-            <button type="button" className="sc-btn sc-btn-danger sc-btn-small" onClick={deleteChat} autoFocus>
-              Yes
-            </button>
-            <button
-              type="button"
-              className="sc-btn sc-btn-ghost sc-btn-small"
-              onClick={() => setConfirmingDeleteChat(false)}
-            >
-              No
-            </button>
-          </span>
-        )}
+        <button type="button" className={`tab${tab === "cards" ? " active" : ""}`} id="tab-cards" onClick={() => setTab("cards")}>
+          Cards
+        </button>
+        <button type="button" className={`tab${tab === "history" ? " active" : ""}`} id="tab-history" onClick={() => setTab("history")}>
+          History
+        </button>
         <button
           type="button"
-          className="sc-btn sc-btn-ghost sc-btn-small settings-drawer-toggle"
+          className="tab tab-gear settings-drawer-toggle"
           ref={settingsTriggerRef}
           onClick={onOpenSettings}
           aria-label="Open settings"
@@ -1181,217 +1201,359 @@ export function ChatPanel({
         showInDeck={showInDeck}
         onShowInDeckChange={setShowInDeck}
       />
-      {chatError && (
-        <div className="sc-chip sc-chip-error sc-chip-dismissible chat-header-error">
-          {chatError}
-          <button
-            type="button"
-            className="sc-chip-dismiss"
-            onClick={() => setChatError(null)}
-            aria-label="Dismiss error"
+      <div className="chatpanes">
+        <div className={pane("chat")}>
+          <div
+            id="chat-log"
+            className="msgs"
+            ref={scrollRef}
+            onScroll={onChatScroll}
+            onMouseOver={onScrollMouseOver}
+            onMouseMove={onScrollMouseMove}
+            onMouseOut={onScrollMouseOut}
+            onClick={onScrollClick}
           >
-            ×
-          </button>
+            {chatError && (
+              <div className="sc-chip sc-chip-error sc-chip-dismissible chat-header-error">
+                {chatError}
+                <button
+                  type="button"
+                  className="sc-chip-dismiss"
+                  onClick={() => setChatError(null)}
+                  aria-label="Dismiss error"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {(chatsRefreshFailed || deckChatsRefreshFailed) && (
+              <div className="sc-chip sc-chip-muted chat-header-error">couldn't refresh chats</div>
+            )}
+            {!chatsRefreshFailed && chats.length === 0 && (
+              <div className="sc-chip sc-chip-muted chat-header-error">no chats yet — start one below</div>
+            )}
+            {loadingChat && (
+              <div className="chat-skeleton" aria-hidden="true">
+                {[0, 1, 2, 3].map((i) => (
+                  <div className={`skeleton-msg${i % 2 === 0 ? " skeleton-msg-user" : ""}`} key={i}>
+                    <div className="skeleton-block skeleton-shimmer" style={{ height: 16 }} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {!loadingChat && messages.length === 0 && (
+              <div className="hint">
+                <span>✦</span>
+                <span>Discover cards for your deck — ask for a function, not a name.</span>
+              </div>
+            )}
+            {!loadingChat &&
+              messages.map((m, i) =>
+                m.role === "user" ? (
+                  <div className="umsg" key={i}>{m.text}</div>
+                ) : (
+                  <Fragment key={i}>
+                    <AssistantBody msg={m} deckCardNames={deckCardNames} showInDeck={showInDeck} />
+                  </Fragment>
+                )
+              )}
+            {streaming && <div className="sc-chip sc-chip-streaming">thinking…</div>}
+            {error && (
+              <div className="sc-chip sc-chip-error sc-chip-dismissible">
+                error: {error}
+                <button type="button" className="sc-chip-retry" onClick={retry} disabled={streaming}>
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="sc-chip-dismiss"
+                  onClick={() => setError(null)}
+                  aria-label="Dismiss error"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {toolPopover && (
+              <pre className="tool-result-popover" style={{ left: toolPopover.x + 12, top: toolPopover.y + 12 }}>
+                {toolPopover.text}
+              </pre>
+            )}
+            {cardPopover && cardPopover.url && (
+              <img
+                className="card-preview"
+                src={cardPopover.url}
+                alt={cardPopover.name}
+                style={{
+                  left: Math.min(cardPopover.x + 16, window.innerWidth - 260),
+                  top: Math.max(8, Math.min(cardPopover.y - 170, window.innerHeight - 350)),
+                }}
+              />
+            )}
+            {groupPopover && (
+              <div
+                className="card-group-popover"
+                style={{
+                  left: Math.min(groupPopover.x, window.innerWidth - 340),
+                  top: Math.min(groupPopover.y, window.innerHeight - 260),
+                }}
+                onMouseEnter={cancelGroupClose}
+                onMouseLeave={scheduleGroupClose}
+              >
+                <div className="card-group-popover-label">{groupPopover.label}</div>
+                <div className="card-gallery">
+                  {groupPopover.names.map((name) => {
+                    const url = groupPopover.images[name];
+                    const inDeck = showInDeck && deckCardNames.has(name.toLowerCase());
+                    return (
+                      <div className="card-gallery-item" data-card-name={name} key={name}>
+                        {url ? (
+                          <img className="card-gallery-img" src={url} alt={name} />
+                        ) : groupPopover.loading ? (
+                          <div className="card-gallery-img card-gallery-loading" />
+                        ) : (
+                          <div className="card-gallery-img card-gallery-missing" />
+                        )}
+                        {inDeck && <span className="in-deck-badge">✓</span>}
+                        <div className="card-gallery-caption">{name}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {hint && (
+              <div className="sc-chip sc-chip-hint" style={{ left: hint.x + 8, top: hint.y + 8 }}>
+                {hint.text}
+              </div>
+            )}
+            {cardUndo && (
+              <div className="sc-chip sc-chip-hint-inline chat-card-undo">
+                Removed {cardUndo.name} from {cardUndo.deck}
+                <button type="button" className="sc-chip-retry" onClick={undoCardRemove}>
+                  Undo
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      )}
-      {(chatsRefreshFailed || deckChatsRefreshFailed) && (
-        <div className="sc-chip sc-chip-muted chat-header-error">couldn't refresh chats</div>
-      )}
-      {!chatsRefreshFailed && chats.length === 0 && (
-        <div className="sc-chip sc-chip-muted chat-header-error">no chats yet — start one below</div>
-      )}
-      <div
-        id="chat-log"
-        className="chat-scroll"
-        ref={scrollRef}
-        onScroll={onChatScroll}
-        onMouseOver={onScrollMouseOver}
-        onMouseMove={onScrollMouseMove}
-        onMouseOut={onScrollMouseOut}
-        onClick={onScrollClick}
-      >
-        {loadingChat && (
-          <div className="chat-skeleton" aria-hidden="true">
-            {[0, 1, 2, 3].map((i) => (
-              <div className={`skeleton-msg${i % 2 === 0 ? " skeleton-msg-user" : ""}`} key={i}>
-                <div className="skeleton-block skeleton-shimmer" style={{ height: 16 }} />
+
+        <div className={pane("cards")} id="pane-cards">
+          <div className="chatpane-body">
+            <div className="hint">
+              <span>✦</span>
+              <span>Search every card by name, type or rules text.</span>
+            </div>
+            <div className="inputbox">
+              <input
+                className="cards-search-input"
+                placeholder="Search cards…"
+                aria-label="Search cards"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") stub("Cards search")(e as unknown as { currentTarget: Element });
+                }}
+              />
+              <div className="cfoot">
+                <span className="meta">Scryfall syntax</span>
+                <button type="button" className="send" onClick={stub("Cards search")}>
+                  Search
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={pane("history")} id="pane-history">
+          <div className="chatpane-body">
+            <div className="history-bar">
+              <select
+                className="chat-select"
+                value={historyScope}
+                onChange={(e) => setHistoryScope(e.target.value as "all" | "deck")}
+                aria-label="Chat scope"
+              >
+                <option value="all">All chats</option>
+                <option value="deck" disabled={!selected}>
+                  {selected ? `About ${selected}` : "About a deck (none selected)"}
+                </option>
+              </select>
+              <button
+                type="button"
+                className="mini"
+                onClick={() => {
+                  startNewChat();
+                  setTab("chat");
+                }}
+              >
+                + New Chat
+              </button>
+            </div>
+            {historyList.length === 0 && <div className="hint"><span>No chats here yet.</span></div>}
+            {historyList.map((c) => (
+              <div className={`histitem${c.id === chatId ? " active" : ""}`} key={c.id}>
+                <button
+                  type="button"
+                  className="histtitle"
+                  onClick={() => {
+                    void loadChat(c.id);
+                    setTab("chat");
+                  }}
+                >
+                  {c.title || "(untitled)"}
+                </button>
+                {c.id === chatId && (
+                  <span className="histacts">
+                    {!renamingChat && (
+                      <button type="button" className="mini" ref={renameTriggerRef} onClick={openRenameChat}>
+                        Rename
+                      </button>
+                    )}
+                    {renamingChat && (
+                      <span
+                        className="inline-confirm"
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") cancelRenameChat();
+                        }}
+                      >
+                        <input
+                          className="text-input chat-rename-input"
+                          value={renameChatValue}
+                          onChange={(e) => setRenameChatValue(e.target.value)}
+                          disabled={renameChatBusy}
+                          autoFocus
+                          aria-label="Rename chat"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveRenameChat();
+                            if (e.key === "Escape") cancelRenameChat();
+                          }}
+                        />
+                        <button type="button" className="mini" onClick={saveRenameChat} disabled={renameChatBusy}>
+                          Save
+                        </button>
+                        <button type="button" className="mini" onClick={cancelRenameChat} disabled={renameChatBusy}>
+                          Cancel
+                        </button>
+                      </span>
+                    )}
+                    {!confirmingDeleteChat && (
+                      <button type="button" className="mini" onClick={() => setConfirmingDeleteChat(true)}>
+                        Delete
+                      </button>
+                    )}
+                    {confirmingDeleteChat && (
+                      <span
+                        className="inline-confirm"
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") setConfirmingDeleteChat(false);
+                        }}
+                      >
+                        <span className="inline-confirm-text">Delete?</span>
+                        <button type="button" className="mini" onClick={deleteChat} autoFocus>
+                          Yes
+                        </button>
+                        <button type="button" className="mini" onClick={() => setConfirmingDeleteChat(false)}>
+                          No
+                        </button>
+                      </span>
+                    )}
+                  </span>
+                )}
               </div>
             ))}
           </div>
-        )}
-        {!loadingChat && messages.length === 0 && (
-          <div className="chat-empty">
-            <div className="chat-empty-icon" aria-hidden="true">💬</div>
-            <p>No messages yet.</p>
-            <p className="chat-empty-hint">Ask about your deck — card searches, swaps, quotas, combos.</p>
-          </div>
-        )}
-        {!loadingChat && messages.map((m, i) => (
-          <div className={`msg msg-${m.role}`} key={i}>
-            {m.role === "user" ? (
-              <div className="msg-text">{m.text}</div>
-            ) : (
-              <AssistantBody msg={m} />
-            )}
-          </div>
-        ))}
-        {streaming && <div className="sc-chip sc-chip-streaming">thinking…</div>}
-        {error && (
-          <div className="sc-chip sc-chip-error sc-chip-dismissible">
-            error: {error}
-            <button type="button" className="sc-chip-retry" onClick={retry} disabled={streaming}>
-              Retry
-            </button>
-            <button
-              type="button"
-              className="sc-chip-dismiss"
-              onClick={() => setError(null)}
-              aria-label="Dismiss error"
-            >
-              ×
-            </button>
-          </div>
-        )}
-        {toolPopover && (
-          <pre className="tool-result-popover" style={{ left: toolPopover.x + 12, top: toolPopover.y + 12 }}>
-            {toolPopover.text}
-          </pre>
-        )}
-        {cardPopover && cardPopover.url && (
-          <img
-            className="card-preview"
-            src={cardPopover.url}
-            alt={cardPopover.name}
-            style={{
-              left: Math.min(cardPopover.x + 16, window.innerWidth - 260),
-              top: Math.max(8, Math.min(cardPopover.y - 170, window.innerHeight - 350)),
-            }}
-          />
-        )}
-        {groupPopover && (
-          <div
-            className="card-group-popover"
-            style={{
-              left: Math.min(groupPopover.x, window.innerWidth - 340),
-              top: Math.min(groupPopover.y, window.innerHeight - 260),
-            }}
-            onMouseEnter={cancelGroupClose}
-            onMouseLeave={scheduleGroupClose}
-          >
-            <div className="card-group-popover-label">{groupPopover.label}</div>
-            <div className="card-gallery">
-              {groupPopover.names.map((name) => {
-                const url = groupPopover.images[name];
-                const inDeck = showInDeck && deckCardNames.has(name.toLowerCase());
-                return (
-                  <div className="card-gallery-item" data-card-name={name} key={name}>
-                    {url ? (
-                      <img className="card-gallery-img" src={url} alt={name} />
-                    ) : groupPopover.loading ? (
-                      <div className="card-gallery-img card-gallery-loading" />
-                    ) : (
-                      <div className="card-gallery-img card-gallery-missing" />
-                    )}
-                    {inDeck && <span className="in-deck-badge">✓</span>}
-                    <div className="card-gallery-caption">{name}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {hint && (
-          <div className="sc-chip sc-chip-hint" style={{ left: hint.x + 8, top: hint.y + 8 }}>
-            {hint.text}
-          </div>
-        )}
-        {cardUndo && (
-          <div className="sc-chip sc-chip-hint-inline chat-card-undo">
-            Removed {cardUndo.name} from {cardUndo.deck}
-            <button type="button" className="sc-chip-retry" onClick={undoCardRemove}>
-              Undo
-            </button>
-          </div>
-        )}
+        </div>
       </div>
-      {pendingImages.length > 0 && (
-        <div className="attach-strip">
-          {pendingImages.map((img, i) => (
-            <span className="attach-thumb" key={img.previewUrl}>
-              <img src={img.previewUrl} alt={img.name} />
+
+      <div className="composer" id="composer">
+        {pendingImages.length > 0 && (
+          <div className="attach-strip">
+            {pendingImages.map((img, i) => (
+              <span className="attach-thumb" key={img.previewUrl}>
+                <img src={img.previewUrl} alt={img.name} />
+                <button
+                  type="button"
+                  className="attach-remove"
+                  title={`remove ${img.name}`}
+                  onClick={() => removePendingImage(i)}
+                >
+                  &times;
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="inputbox">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            placeholder={streaming ? "waiting for response…" : "Ask for a function, a cut, a cheaper swap…"}
+            disabled={streaming}
+            rows={2}
+            onFocus={() => setTab("chat")}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+          />
+          <div className="cfoot">
+            <span className="cfoot-left">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                multiple
+                hidden
+                onChange={(e) => void onFilesPicked(e.target.files)}
+              />
+              <button
+                id="attach-btn"
+                type="button"
+                className="mini"
+                title="attach an image"
+                disabled={streaming || pendingImages.length >= ATTACH_MAX_COUNT}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                &#128247;
+              </button>
+              {/*
+                The mockup draws Present inside #slide-strip, but a trigger cannot
+                live there: SlideStrip only exists once deck_present has already
+                returned, so a button in it is reachable only after the thing it
+                starts. It goes in the composer instead, where the active deck is
+                already in scope -- and is disabled without one, since deck_present
+                takes a required deck_name.
+              */}
+              <button
+                id="present-btn"
+                type="button"
+                className="mini"
+                title={selected ? `present ${selected}` : "select a deck to present"}
+                disabled={streaming || !selected}
+                onClick={() => void send(PRESENT_PROMPT)}
+              >
+                &#128247;&#8288;Present
+              </button>
+              <button type="button" className="mini" onClick={stub("Prompt tips")}>
+                Tips
+              </button>
+              <span className="meta" id="deck-chip" title="active deck">
+                {selected ? `${selected}${deckCardNames.size > 0 ? ` · ${deckCardNames.size}` : ""}` : "No deck selected"}
+              </span>
+            </span>
+            {streaming ? (
+              <button type="button" className="send chat-stop" onClick={stop}>
+                Stop
+              </button>
+            ) : (
               <button
                 type="button"
-                className="attach-remove"
-                title={`remove ${img.name}`}
-                onClick={() => removePendingImage(i)}
+                className="send"
+                onClick={() => void send()}
+                disabled={input.trim().length === 0}
               >
-                &times;
+                Send
               </button>
-            </span>
-          ))}
+            )}
+          </div>
         </div>
-      )}
-      <div className="chat-input-row">
-        {selected && <span className="sc-chip sc-chip-context">context: {selected}</span>}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/gif,image/webp"
-          multiple
-          hidden
-          onChange={(e) => void onFilesPicked(e.target.files)}
-        />
-        <button
-          id="attach-btn"
-          type="button"
-          className="chat-attach"
-          title="attach an image"
-          disabled={streaming || pendingImages.length >= ATTACH_MAX_COUNT}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          &#128247;
-        </button>
-        {/*
-          The mockup draws Present inside #slide-strip, but a trigger cannot
-          live there: SlideStrip only exists once deck_present has already
-          returned, so a button in it is reachable only after the thing it
-          starts. It goes in the composer instead, where the active deck is
-          already in scope -- and is disabled without one, since deck_present
-          takes a required deck_name.
-        */}
-        <button
-          id="present-btn"
-          type="button"
-          className="chat-present"
-          title={selected ? `present ${selected}` : "select a deck to present"}
-          disabled={streaming || !selected}
-          onClick={() => void send(PRESENT_PROMPT)}
-        >
-          &#128247;&#8288;Present
-        </button>
-        <textarea
-          ref={textareaRef}
-          className="chat-input"
-          value={input}
-          placeholder={streaming ? "waiting for response…" : "Message scrychat"}
-          disabled={streaming}
-          rows={2}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        {streaming ? (
-          <button className="chat-stop" onClick={stop}>
-            Stop
-          </button>
-        ) : (
-          <button
-            className="chat-send"
-            onClick={() => void send()}
-            disabled={input.trim().length === 0}
-          >
-            Send
-          </button>
-        )}
       </div>
     </aside>
   );

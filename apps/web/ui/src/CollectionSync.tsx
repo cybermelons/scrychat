@@ -29,7 +29,14 @@ function ImportedLine({ info }: { info: Extract<CollectionInfo, { exists: true }
   );
 }
 
-export function CollectionSync({ onImported }: { onImported?: () => void }) {
+export function CollectionSync({
+  onImported,
+  onState,
+}: {
+  onImported?: () => void;
+  // Status for the sidebar dot: no import, fresh import, or stale/future import.
+  onState?: (s: "none" | "fresh" | "stale") => void;
+}) {
   const [info, setInfo] = useState<CollectionInfo | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [handle, setHandle] = useState<FileSystemDirectoryHandle | null>(null);
@@ -48,6 +55,14 @@ export function CollectionSync({ onImported }: { onImported?: () => void }) {
   useEffect(() => {
     void refreshInfo();
   }, [refreshInfo]);
+
+  useEffect(() => {
+    if (!info) return;
+    onState?.(
+      !info.exists ? "none" : snapshotAge(info.importedAt).freshness === "fresh" ? "fresh" : "stale"
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [info]);
 
   // On mount, if the file-system API is supported and a handle was
   // previously stored, try an automatic sync against it.
