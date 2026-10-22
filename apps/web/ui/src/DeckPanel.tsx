@@ -128,15 +128,11 @@ export function DeckPanel({
   selected,
   setSelected,
   onDeckNames,
-  open,
-  onClose,
   defaultExportFormat,
 }: {
   selected: string;
   setSelected: (name: string) => void;
   onDeckNames?: (names: Set<string>) => void;
-  open?: boolean;
-  onClose?: () => void;
   defaultExportFormat?: ExportFormat;
 }) {
   const [decks, setDecks] = useState<DeckSummary[]>([]);
@@ -995,8 +991,7 @@ export function DeckPanel({
 
   return (
     <>
-      {open && <div className="drawer-overlay" onClick={onClose} />}
-      <aside className={`deck-panel${open ? " drawer-open" : ""}`} id="pane-deck">
+      <nav id="sidebar">
         <div className="deck-panel-header">
           <h1 className="app-title">scrychat</h1>
         <div className="deck-select-row">
@@ -1060,6 +1055,8 @@ export function DeckPanel({
         {refreshFailed && <div className="chip chip-muted">couldn't refresh decks</div>}
         <CollectionSync onImported={onCollectionImported} />
       </div>
+      </nav>
+      <main className="deck-panel" id="pane-deck">
 
       {decks.length === 0 && (
         <div className="empty-state">
@@ -1669,7 +1666,7 @@ export function DeckPanel({
           </section>
         </div>
       )}
-      </aside>
+      </main>
     </>
   );
 }

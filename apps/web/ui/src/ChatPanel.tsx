@@ -242,13 +242,11 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
 export function ChatPanel({
   selected,
   deckCardNames,
-  onOpenDeckDrawer,
   config,
   onConfigChange,
 }: {
   selected: string;
   deckCardNames: Set<string>;
-  onOpenDeckDrawer?: () => void;
   config: AppConfig | null;
   onConfigChange: (config: AppConfig) => void;
 }) {
@@ -1047,17 +1045,8 @@ export function ChatPanel({
   }, [messages, deckCardNames, showInDeck, groupPopover]);
 
   return (
-    <main className="chat-panel">
+    <aside className="chat-panel" id="chatcol">
       <div className="chat-panel-header" id="top-bar">
-        <button
-          type="button"
-          className="btn btn-ghost btn-small deck-drawer-toggle"
-          onClick={onOpenDeckDrawer}
-          aria-label="Open deck panel"
-          title="Open deck panel"
-        >
-          ☰
-        </button>
         {selected && (
           <span className="chip chip-muted" id="deck-chip" title="active deck">
             {selected}
@@ -1399,6 +1388,6 @@ export function ChatPanel({
           </button>
         )}
       </div>
-    </main>
+    </aside>
   );
 }

@@ -9,8 +9,8 @@ export function App() {
   // reported by DeckPanel on every load/refresh (including deck-events-driven
   // reloads) so ChatPanel can render in-deck badges and know what to toggle.
   const [deckCardNames, setDeckCardNames] = useState<Set<string>>(new Set());
-  // Deck panel as slide-over drawer below ~900px (see styles.css media query).
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Mobile (<=819px) shows one pane at a time; wider layouts show all three.
+  const [tab, setTab] = useState<"deck" | "chat">("chat");
 
   // App-wide server config (linkify pass, default export format, quota
   // targets): fetched once here and passed down so DeckPanel and ChatPanel's
@@ -24,22 +24,27 @@ export function App() {
   }, []);
 
   return (
-    <div className="app" id="app-shell">
+    <div className="app" id="app-shell" data-tab={tab}>
       <DeckPanel
         selected={selected}
         setSelected={setSelected}
         onDeckNames={setDeckCardNames}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
         defaultExportFormat={config?.defaultExportFormat}
       />
+      <div className="col-divider" />
       <ChatPanel
         selected={selected}
         deckCardNames={deckCardNames}
-        onOpenDeckDrawer={() => setDrawerOpen(true)}
         config={config}
         onConfigChange={setConfig}
       />
+      <nav id="tabbar">
+        {(["deck", "chat"] as const).map((t) => (
+          <button key={t} type="button" aria-pressed={tab === t} onClick={() => setTab(t)}>
+            {t === "deck" ? "Deck" : "Chat"}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
