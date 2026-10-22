@@ -8,3 +8,4 @@ evals/transcripts/
 collection.json
 __pycache__/
 *.pyc
+board-*.png
