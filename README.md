@@ -85,8 +85,7 @@ transform/DFC card names down to the front face only, since Arena's
 decklist importer rejects the full `Front // Back` name that other formats
 round-trip fine. The settings drawer (gear icon) sets the default export
 format and quota targets — globally, or as a per-deck override that wins
-field-by-field over the global value — plus the `linkifyPass` toggle
-described below.
+field-by-field over the global value.
 
 ## How it works
 
@@ -119,7 +118,7 @@ Three eval tiers, all in `evals/`:
   the live tool surface; results land in `evals/RESULTS.md` and transcripts
   in `evals/transcripts/`.
 - **Tier B** (`run-tier-b.mjs`) — behavioral formatting-contract checks
-  (card-ref linkify, chips, export shape) asserted mechanically against
+  (card-ref brackets, chips, export shape) asserted mechanically against
   persisted chat files, not judged.
 - **Tier C** (`run-tier-c.mjs`) — mechanical HTTP-level checks against the
   built web server: deck CRUD, `/api/health`, and an Arena-collection
@@ -159,15 +158,9 @@ breaks, it's just slower. A running MCP server or web app re-checks
 `data/scrychat.db`'s mtime (throttled to once per 5 seconds), so it picks up a
 fresh or refreshed mirror within about 5 seconds — no restart needed.
 
-`scrychat.config.json` at repo root: `linkifyPass` (default `true`) runs a
-second cheap-model pass over each reply to wrap any bare card names the model
-missed in `[[...]]`, before persisting. This is gated so it's cheap in the
-common case: a deterministic pass against the local card-name index
-auto-wraps unambiguous names for free, and only escalates to a Haiku call
-for the residue — single words that are both a real card name and ordinary
-English (e.g. "Opt", "Fog") — deciding per-occurrence whether the text means
-the card. Prose with only unambiguous names never touches the model at all.
-Toggle it from the settings drawer (gear icon) or `PATCH /api/config`.
+`scrychat.config.json` at repo root holds the settings-drawer values (default
+export format, quota targets, goldfish seed). Edit it from the settings
+drawer (gear icon) or `PATCH /api/config`.
 
 ## Attribution & data
 

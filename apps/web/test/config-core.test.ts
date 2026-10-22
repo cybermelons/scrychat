@@ -2,20 +2,8 @@ import { describe, it, expect } from "vitest";
 import { parseConfig, applyConfigPatch, DEFAULT_CONFIG } from "../src/config-core.js";
 
 describe("parseConfig", () => {
-  it("accepts the legacy {linkifyPass: true} shape unchanged", () => {
-    expect(parseConfig({ linkifyPass: true })).toEqual({
-      linkifyPass: true,
-      defaultExportFormat: "mtga",
-      goldfishSeed: 0,
-    });
-  });
-
-  it("accepts the legacy {linkifyPass: false} shape unchanged", () => {
-    expect(parseConfig({ linkifyPass: false })).toEqual({
-      linkifyPass: false,
-      defaultExportFormat: "mtga",
-      goldfishSeed: 0,
-    });
+  it("parses a legacy file carrying linkifyPass, ignoring the key", () => {
+    expect(parseConfig({ linkifyPass: true })).toEqual(DEFAULT_CONFIG);
   });
 
   it("defaults absent fields", () => {
@@ -25,11 +13,11 @@ describe("parseConfig", () => {
   });
 
   it("falls back to defaults for invalid field types", () => {
-    expect(parseConfig({ linkifyPass: "yes", defaultExportFormat: "pdf" })).toEqual(DEFAULT_CONFIG);
+    expect(parseConfig({ defaultExportFormat: "pdf" })).toEqual(DEFAULT_CONFIG);
   });
 
   it("defaults goldfishSeed to 0 when absent", () => {
-    expect(parseConfig({ linkifyPass: true }).goldfishSeed).toBe(0);
+    expect(parseConfig({}).goldfishSeed).toBe(0);
   });
 
   it("keeps a valid goldfishSeed", () => {
@@ -44,7 +32,6 @@ describe("parseConfig", () => {
 
   it("drops junk quotaTargets fields and keeps valid partial fields", () => {
     const result = parseConfig({
-      linkifyPass: true,
       quotaTargets: {
         lands: [30, 35],
         ramp: "bogus",
@@ -57,7 +44,7 @@ describe("parseConfig", () => {
   });
 
   it("omits quotaTargets entirely when no valid fields survive", () => {
-    const result = parseConfig({ linkifyPass: true, quotaTargets: { ramp: "bogus" } });
+    const result = parseConfig({ quotaTargets: { ramp: "bogus" } });
     expect(result.quotaTargets).toBeUndefined();
   });
 
@@ -76,12 +63,12 @@ describe("parseConfig", () => {
 });
 
 describe("applyConfigPatch", () => {
-  const base = { linkifyPass: true, defaultExportFormat: "mtga" as const, goldfishSeed: 0 };
+  const base = { defaultExportFormat: "mtga" as const, goldfishSeed: 0 };
 
   it("merges a valid partial patch", () => {
-    const { config, errors } = applyConfigPatch(base, { linkifyPass: false });
+    const { config, errors } = applyConfigPatch(base, { defaultExportFormat: "moxfield" });
     expect(errors).toEqual([]);
-    expect(config).toEqual({ linkifyPass: false, defaultExportFormat: "mtga", goldfishSeed: 0 });
+    expect(config).toEqual({ defaultExportFormat: "moxfield", goldfishSeed: 0 });
   });
 
   it("merges a valid defaultExportFormat patch", () => {
@@ -126,9 +113,9 @@ describe("applyConfigPatch", () => {
     expect(config).toEqual(base);
   });
 
-  it("rejects a non-boolean linkifyPass as an error", () => {
-    const { config, errors } = applyConfigPatch(base, { linkifyPass: "yes" });
-    expect(errors).toEqual(["linkifyPass must be a boolean"]);
+  it("rejects a PATCH of the removed linkifyPass key as unknown", () => {
+    const { config, errors } = applyConfigPatch(base, { linkifyPass: true });
+    expect(errors).toEqual(["unknown field: linkifyPass"]);
     expect(config).toEqual(base);
   });
 

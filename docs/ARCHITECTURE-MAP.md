@@ -25,7 +25,7 @@ turns — see §3 for why both paths exist.
 | R2 domain | tags, alternatives, import | `packages/core/src/` | tag index, functional scoring, decklist parse | re-exported via `index.ts` |
 | R3 tools | mcp | `packages/mcp/src/tools.ts` (+`index.ts`) | 21 MCP tools over core | stdio server, `dist/index.js` |
 | R4 server | web server | `apps/web/src/server.ts` (1867 L) | HTTP + SSE + Agent SDK host | `/api/*` routes |
-| R4 server | *-core helpers | `apps/web/src/{linkify,group-chips,config,collection,deck-name}-core.ts` | pure, unit-tested server logic | per-file exports |
+| R4 server | *-core helpers | `apps/web/src/{group-chips,config,collection,deck-name}-core.ts` | pure, unit-tested server logic | per-file exports |
 | R5 ui | React app | `apps/web/ui/src/` | chat panel, deck panel, suggestions, settings | `App.tsx` root |
 
 `packages/core/src/index.ts` is the single barrel: it re-exports scryfall,
@@ -49,7 +49,7 @@ Two separate channels. Neither is a general event bus.
 | `text-delta` | `server.ts:592` | `{text}` | streaming reply text |
 | `tool-use` | `server.ts:597` | `{name, input}` | tool chip appears |
 | `tool-result` | `server.ts:616` | `{toolIndex, result}` | chip fills in |
-| `segments-update` | `server.ts:793` | `{segments}` | post-pass rewrite (linkify) |
+| `segments-update` | `server.ts:793` | `{segments}` | post-pass rewrite (group chips) |
 | `done` | `server.ts:626`, `:634`, `:812` | `{sessionId, error?, interrupted?}` | three exits: normal, error, interrupt |
 
 `done` is emitted from three sites. A change to its shape must touch all three.
@@ -69,7 +69,7 @@ chat→deck-panel wiring point; there is no shared store between them.
 | server → UI chat | `/api/chat` SSE | server-sent event (§2) |
 | UI → card images | `/api/card-image`, `/api/card-images` | HTTP proxy, server-side fetch |
 | Arena log → collection | `arenaSync.ts` + `POST /api/collection` | File System Access API handle in the browser, `text/plain` body up to 64mb |
-| reply text → card links | `linkify-core.ts` → `segments-update` | post-pass, rewrites persisted segments (§6 row 4) |
+| reply text → group chips | `group-chips-core.ts` → `segments-update` | post-pass, rewrites persisted segments (§6 row 4) |
 
 **Why core is reached two ways.** HTTP routes import core directly; chat turns
 go through MCP stdio. The hop is not redundant — `.mcp.json` mounts the same
@@ -91,7 +91,7 @@ compatibility read.
 | collection | `collection.json` | `CollectionFile` | none |
 | card mirror | `data/scrychat.db` | SQLite, cards/tags/combos/prices | `meta` table via `getMeta`/`setMeta` |
 | bulk downloads | `data/downloads/` | raw Scryfall + Spellbook dumps, ~1GB | cached by filename |
-| config | `scrychat.config.json` | `{linkifyPass, …}` | none; `PATCH /api/config` |
+| config | `scrychat.config.json` | `{defaultExportFormat, …}` | none; `PATCH /api/config` |
 
 Deck and suggestion slugs come from two separate `sanitizeName`
 implementations (`decks.ts:88` area and `suggestions.ts:43`) that must agree.
@@ -163,15 +163,9 @@ Shapes of record live in `packages/core/src/`. Do not restate them elsewhere.
 | **Consumer contract** | `getOwnedIndex` (`collection.ts:95`) and `collectionStats` (`:148`). Renders as a deck report's `arenaCheck` and as `owned` flags on tool results |
 | **Run host** | Local. Browser reads the log, server writes `collection.json` at repo root (`COLLECTION_PATH`, `collection.ts:23`). `docker-compose.yml` mounts only `data/`, `decks/`, `chats/` and the credential, so on the NAS `collection.json` is inside the container filesystem, not a bind mount (inferred from the compose volumes; not otherwise documented) |
 
-### 6.4 linkify post-pass (reply text → card links)
+### 6.4 group-chips post-pass (reply text → chips)
 
-| Facet | Value |
-|---|---|
-| **Source + config** | Each assistant reply, before persist. `linkifyPass` in `scrychat.config.json` (default `true`), toggled from the settings drawer or `PATCH /api/config` (`server.ts:1604`) |
-| **Secret location** | None. Uses the same subscription auth as chat |
-| **Transform + limits** | `apps/web/src/linkify-core.ts` (481 L). **Two-stage and gated:** a deterministic pass against the local card-name index wraps unambiguous names for free; only the ambiguous residue escalates to a Haiku call — single words that are both a card name and ordinary English ("Opt", "Fog") — deciding per occurrence. Prose with only unambiguous names never calls a model |
-| **Consumer contract** | Emits `segments-update` (`server.ts:793`) with rewritten segments; `ChatPanel.tsx` + `CardName.tsx` render `[[Card]]` as a hover and `![[Card]]` as an embedded image. Group chips `[[group:...]]` come from `group-chips-core.ts` |
-| **Run host** | In-process in the web server (on the NAS: the one container, `scrychat` on noel, `docker-compose.yml`) |
+Card links come only from agent-written `[[Card]]` (#78); no server scan. After `done`, `server.ts` runs a group-chips post-pass (`group-chips-core.ts`) and emits one `segments-update` if segments changed. In-process in the web server.
 
 ### 6.5 NAS deployment (host: noel)
 

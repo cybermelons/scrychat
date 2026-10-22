@@ -713,7 +713,7 @@ export function ChatPanel({
       let buffer = "";
       // Chat this stream belongs to. For a resumed chat it's known up front;
       // for a brand-new chat the server assigns it mid-stream via the
-      // "chat" event below. Used to drop late events (e.g. the linkify
+      // "chat" event below. Used to drop late events (e.g. the chip
       // post-pass's segments-update, which can arrive after the user has
       // already switched/started another chat) that would otherwise
       // clobber the wrong chat's last assistant message.
@@ -764,7 +764,7 @@ export function ChatPanel({
           else if (ev.isError && ev.result) setError(String(ev.result));
           if (ev.interrupted) updateLastAssistant((m) => ({ ...m, interrupted: true }));
         } else if (ev.type === "segments-update") {
-          // Late event from the server's post-stream linkify pass; the
+          // Late event from the server's post-stream chip pass; the
           // top-of-function gate above already dropped it if stale.
           updateLastAssistant((m) => ({
             ...m,

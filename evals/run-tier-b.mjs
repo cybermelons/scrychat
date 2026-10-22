@@ -10,8 +10,8 @@
  * and asserts mechanically (regex/JSON) over the PERSISTED chat files
  * (chats/<id>.json segments) plus the live SSE tool-event log. Judge-free.
  *
- * Why persisted segments, not streamed deltas: the linkify / group-chip
- * post-passes mutate text segments AFTER the `done` SSE event (server.ts
+ * Why persisted segments, not streamed deltas: the group-chip
+ * post-pass mutates text segments AFTER the `done` SSE event (server.ts
  * emits `segments-update` in its finally block), so chats/<id>.json is the
  * source of truth for card-ref / chip / embed contracts.
  *
@@ -143,7 +143,7 @@ async function main() {
   // ---- SSE chat helper: POST /api/chat, parse the event stream ----
   // Returns { chatId, events } where events is the ordered parsed event log
   // ({type:"chat"|"text-delta"|"tool-use"|"tool-result"|"segments-update"|"done", ...}).
-  // Reads until the stream actually closes (linkify's segments-update fires
+  // Reads until the stream actually closes (the chip post-pass's segments-update fires
   // AFTER done), or until timeoutMs (abort, return what arrived).
   async function chat({ message, chatId, activeDeck }, timeoutMs = CHAT_TIMEOUT_MS) {
     const body = { message };

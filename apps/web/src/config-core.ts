@@ -3,22 +3,19 @@
  * surface). No fs, no network — server.ts owns reading/writing the file and
  * delegates parsing/patching here so both are unit-testable.
  *
- * The file predates this module and originally only had `linkifyPass`
- * (`{"linkifyPass": true}`); parseConfig must keep accepting that shape
- * unchanged.
+ * The file predates this module and originally held one boolean key
+ * (removed, #78); parseConfig must keep accepting files that still carry it.
  */
 
 import type { QuotaTargets } from "@scrychat/core";
 
 export type ScrychatConfig = {
-  linkifyPass: boolean;
   defaultExportFormat: "mtga" | "plain" | "moxfield";
   goldfishSeed: number;
   quotaTargets?: Partial<QuotaTargets>;
 };
 
 export const DEFAULT_CONFIG: ScrychatConfig = {
-  linkifyPass: true,
   defaultExportFormat: "mtga",
   goldfishSeed: 0,
 };
@@ -72,15 +69,12 @@ function sanitizeQuotaTargets(value: unknown): Partial<QuotaTargets> | undefined
 /**
  * Parse a raw JSON value (already `JSON.parse`d) into a ScrychatConfig.
  * Field-wise validation: unknown/invalid/missing fields silently fall back
- * to defaults. Legacy files with just `{"linkifyPass": true}` parse fine —
- * `defaultExportFormat` falls back to the default and `quotaTargets` is
- * omitted.
+ * to defaults. Legacy files with that stale key parse fine (it is ignored).
  */
 export function parseConfig(raw: unknown): ScrychatConfig {
   if (typeof raw !== "object" || raw === null) return { ...DEFAULT_CONFIG };
   const src = raw as Record<string, unknown>;
 
-  const linkifyPass = typeof src.linkifyPass === "boolean" ? src.linkifyPass : DEFAULT_CONFIG.linkifyPass;
   const defaultExportFormat = isExportFormat(src.defaultExportFormat)
     ? src.defaultExportFormat
     : DEFAULT_CONFIG.defaultExportFormat;
@@ -88,14 +82,13 @@ export function parseConfig(raw: unknown): ScrychatConfig {
   const quotaTargets = sanitizeQuotaTargets(src.quotaTargets);
 
   return {
-    linkifyPass,
     defaultExportFormat,
     goldfishSeed,
     ...(quotaTargets ? { quotaTargets } : {}),
   };
 }
 
-const KNOWN_PATCH_KEYS = new Set(["linkifyPass", "defaultExportFormat", "goldfishSeed", "quotaTargets"]);
+const KNOWN_PATCH_KEYS = new Set(["defaultExportFormat", "goldfishSeed", "quotaTargets"]);
 
 /**
  * Apply a partial PATCH /api/config body on top of the current config.
@@ -129,14 +122,6 @@ export function applyConfigPatch(
   }
 
   const next: ScrychatConfig = { ...current };
-
-  if ("linkifyPass" in src) {
-    if (typeof src.linkifyPass === "boolean") {
-      next.linkifyPass = src.linkifyPass;
-    } else {
-      errors.push("linkifyPass must be a boolean");
-    }
-  }
 
   if ("defaultExportFormat" in src) {
     if (isExportFormat(src.defaultExportFormat)) {

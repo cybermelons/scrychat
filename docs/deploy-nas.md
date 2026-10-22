@@ -77,5 +77,5 @@ Reach it on the LAN at `http://noel:8787/`.
 - **Refreshing card data:** re-run the ingest locally, then re-copy
   `data/scrychat.db` to the NAS and `docker compose restart`. The server detects
   the DB mtime change and reopens it.
-- **Config:** `scrychat.config.json` (`linkifyPass: true`) is baked into the
+- **Config:** `scrychat.config.json` is baked into the
   image at the repo root. Change it in the repo and rebuild to alter behavior.

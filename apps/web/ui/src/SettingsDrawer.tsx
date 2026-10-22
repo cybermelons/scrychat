@@ -71,7 +71,7 @@ export function SettingsDrawer({
   }, [open, onClose, triggerRef]);
 
   const patchConfig = useCallback(
-    (body: Partial<{ linkifyPass: boolean; defaultExportFormat: ExportFormat; quotaTargets: QuotaTargets | null; goldfishSeed: number }>) => {
+    (body: Partial<{ defaultExportFormat: ExportFormat; quotaTargets: QuotaTargets | null; goldfishSeed: number }>) => {
       return fetch("/api/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -88,13 +88,6 @@ export function SettingsDrawer({
       });
     },
     [onConfigChange]
-  );
-
-  const toggleLinkify = useCallback(
-    (checked: boolean) => {
-      void patchConfig({ linkifyPass: checked }).catch(() => void 0);
-    },
-    [patchConfig]
   );
 
   const changeExportFormat = useCallback(
@@ -178,21 +171,6 @@ export function SettingsDrawer({
           <div className="sc-chip sc-chip-muted">loading settings…</div>
         ) : (
           <div className="settings-drawer-body">
-            <section className="settings-section">
-              <label className="settings-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={config.linkifyPass}
-                  onChange={(e) => toggleLinkify(e.target.checked)}
-                  aria-label="Card-name linkify pass"
-                />
-                Card-name linkify pass
-              </label>
-              <p className="settings-hint">
-                Extra cheap-model pass that wraps missed card names after each reply.
-              </p>
-            </section>
-
             <section className="settings-section">
               <label className="settings-label" htmlFor="settings-export-format">
                 Default export format
@@ -351,7 +329,7 @@ export function SettingsDrawer({
             <HealthRow />
 
             <p className="settings-footnote">
-              Model names, the linkify wordlist, and internal caps are intentionally not configurable.
+              Model names and internal caps are intentionally not configurable.
             </p>
           </div>
         )}

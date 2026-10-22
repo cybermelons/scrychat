@@ -161,7 +161,6 @@ before.
   and breaks web chat. `unset ANTHROPIC_API_KEY`.
 - MTGA export needs front-face-only names; Arena's importer rejects
   `Front // Back`, which every other format round-trips.
-- `linkifyPass` escalates to Haiku only for the ambiguous residue (words that
-  are both a card name and ordinary English — "Opt", "Fog"). Prose with only
-  unambiguous names never calls a model. Keep that gate; removing it makes
-  every reply cost an extra call.
+- Card links come only from the `[[Card]]` the agent writes. There is no
+  server scan, table rescue, or Haiku post-pass (#78). A bare name rendering
+  as plain text is a prompt miss: tighten `SKILL.md`, never re-add a scan.

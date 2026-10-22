@@ -16,7 +16,7 @@ export function App() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // App-wide server config (linkify pass, default export format, quota
+  // App-wide server config (default export format, quota
   // targets): fetched once here and passed down so DeckPanel and ChatPanel's
   // settings drawer share one source of truth instead of each fetching it.
   const [config, setConfig] = useState<AppConfig | null>(null);

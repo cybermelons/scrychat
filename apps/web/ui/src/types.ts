@@ -101,7 +101,6 @@ export type QuotaTargets = Partial<Record<QuotaTargetKey, [number, number]>>;
 export type EffectiveQuotaTargets = Record<QuotaTargetKey, [number, number]>;
 
 export type AppConfig = {
-  linkifyPass: boolean;
   defaultExportFormat: ExportFormat;
   quotaTargets?: QuotaTargets;
   goldfishSeed: number;
