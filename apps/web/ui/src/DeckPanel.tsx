@@ -129,11 +129,13 @@ export function DeckPanel({
   setSelected,
   onDeckNames,
   defaultExportFormat,
+  onOpenSettings: _onOpenSettings,
 }: {
   selected: string;
   setSelected: (name: string) => void;
   onDeckNames?: (names: Set<string>) => void;
   defaultExportFormat?: ExportFormat;
+  onOpenSettings?: () => void;
 }) {
   const [decks, setDecks] = useState<DeckSummary[]>([]);
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -884,13 +886,13 @@ export function DeckPanel({
         aria-label="New deck commander"
       />
       <div className="form-row-actions">
-        <button type="submit" className="btn btn-primary" disabled={newDeckBusy}>
+        <button type="submit" className="sc-btn sc-btn-primary" disabled={newDeckBusy}>
           {newDeckBusy ? "Creating…" : "Create deck"}
         </button>
         {decks.length > 0 && (
           <button
             type="button"
-            className="btn btn-ghost"
+            className="sc-btn sc-btn-ghost"
             onClick={() => {
               setShowNewDeck(false);
               setNewDeckError(null);
@@ -901,11 +903,11 @@ export function DeckPanel({
           </button>
         )}
       </div>
-      {newDeckError && <div className="chip chip-error">{newDeckError}</div>}
+      {newDeckError && <div className="sc-chip sc-chip-error">{newDeckError}</div>}
       {!showPasteImport ? (
         <button
           type="button"
-          className="btn btn-ghost btn-small paste-import-toggle"
+          className="sc-btn sc-btn-ghost sc-btn-small paste-import-toggle"
           onClick={() => {
             setShowPasteImport(true);
             setImportResult(null);
@@ -935,7 +937,7 @@ export function DeckPanel({
           <div className="form-row-actions">
             <button
               type="button"
-              className="btn btn-primary btn-small"
+              className="sc-btn sc-btn-primary sc-btn-small"
               disabled={importBusy || !importText.trim()}
               onClick={submitPasteImport}
             >
@@ -943,7 +945,7 @@ export function DeckPanel({
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-small"
+              className="sc-btn sc-btn-ghost sc-btn-small"
               disabled={importBusy}
               onClick={() => {
                 setShowPasteImport(false);
@@ -957,9 +959,9 @@ export function DeckPanel({
           </div>
           {importResult && (
             <div className="import-result">
-              {importResult.error && <div className="chip chip-error">{importResult.error}</div>}
+              {importResult.error && <div className="sc-chip sc-chip-error">{importResult.error}</div>}
               {importResult.needsCommander && (
-                <div className="chip chip-muted">
+                <div className="sc-chip sc-chip-muted">
                   needs a commander — mark the commander line with <code>*CMDR*</code> and resubmit
                   {importResult.candidates && importResult.candidates.length > 0 && (
                     <>: {importResult.candidates.map((c) => c.name).join(", ")}</>
@@ -973,14 +975,14 @@ export function DeckPanel({
               {importResult.rejected && importResult.rejected.length > 0 && (
                 <div className="rejected-list">
                   {importResult.rejected.map((r, i) => (
-                    <div className="chip chip-error" key={`${r.name}-${i}`}>
+                    <div className="sc-chip sc-chip-error" key={`${r.name}-${i}`}>
                       {r.name}: {r.reason}
                     </div>
                   ))}
                 </div>
               )}
               {importResult.unparsed && importResult.unparsed.length > 0 && (
-                <div className="chip chip-muted">unparsed: {importResult.unparsed.join(" · ")}</div>
+                <div className="sc-chip sc-chip-muted">unparsed: {importResult.unparsed.join(" · ")}</div>
               )}
             </div>
           )}
@@ -991,7 +993,7 @@ export function DeckPanel({
 
   return (
     <>
-      <nav id="sidebar">
+      <nav className="sidebar" id="sidebar">
         <div className="deck-panel-header">
           <h1 className="app-title">scrychat</h1>
         <div className="deck-select-row">
@@ -1043,20 +1045,20 @@ export function DeckPanel({
           {decks.length > 0 && !renamingDeck && (
             <button
               type="button"
-              className="btn btn-ghost btn-small"
+              className="sc-btn sc-btn-ghost sc-btn-small"
               onClick={() => setShowNewDeck((s) => !s)}
             >
               + New Deck
             </button>
           )}
         </div>
-        {deckRenameError && <div className="chip chip-error">{deckRenameError}</div>}
+        {deckRenameError && <div className="sc-chip sc-chip-error">{deckRenameError}</div>}
         {decks.length > 0 && showNewDeck && newDeckForm}
-        {refreshFailed && <div className="chip chip-muted">couldn't refresh decks</div>}
+        {refreshFailed && <div className="sc-chip sc-chip-muted">couldn't refresh decks</div>}
         <CollectionSync onImported={onCollectionImported} />
       </div>
       </nav>
-      <main className="deck-panel" id="pane-deck">
+      <main className="deck-panel deck" id="pane-deck">
 
       {decks.length === 0 && (
         <div className="empty-state">
@@ -1068,7 +1070,7 @@ export function DeckPanel({
 
       {loading && !deck && decks.length > 0 && <DeckSkeleton />}
       {reportError && !deck && decks.length > 0 && !loading && (
-        <div className="chip chip-error">deck error: {reportError}</div>
+        <div className="sc-chip sc-chip-error">deck error: {reportError}</div>
       )}
 
       {deck && (
@@ -1105,7 +1107,7 @@ export function DeckPanel({
                     />
                     <button
                       type="button"
-                      className="btn btn-primary btn-small"
+                      className="sc-btn sc-btn-primary sc-btn-small"
                       onClick={submitCommanderChange}
                       disabled={commanderBusy}
                     >
@@ -1113,7 +1115,7 @@ export function DeckPanel({
                     </button>
                     <button
                       type="button"
-                      className="btn btn-ghost btn-small"
+                      className="sc-btn sc-btn-ghost sc-btn-small"
                       onClick={cancelCommanderChange}
                       disabled={commanderBusy}
                     >
@@ -1135,7 +1137,7 @@ export function DeckPanel({
                     </button>
                   </div>
                 )}
-                {commanderError && <div className="chip chip-error">{commanderError}</div>}
+                {commanderError && <div className="sc-chip sc-chip-error">{commanderError}</div>}
                 <div className="commander-meta">
                   {deck.commanderIdentity.join("")} · {totalCards + 1} cards
                   {collectionInfo && (
@@ -1151,7 +1153,7 @@ export function DeckPanel({
               </div>
             </div>
             {nowIllegal.length > 0 && (
-              <div className="chip chip-error chip-dismissible now-illegal-warning">
+              <div className="sc-chip sc-chip-error sc-chip-dismissible now-illegal-warning">
                 <div>
                   <strong>{nowIllegal.length} card{nowIllegal.length === 1 ? "" : "s"} now illegal:</strong>
                   <ul className="now-illegal-list">
@@ -1164,7 +1166,7 @@ export function DeckPanel({
                 </div>
                 <button
                   type="button"
-                  className="chip-dismiss"
+                  className="sc-chip-dismiss"
                   onClick={() => setNowIllegal([])}
                   aria-label="Dismiss illegal-cards warning"
                 >
@@ -1188,7 +1190,7 @@ export function DeckPanel({
               </select>
               <button
                 type="button"
-                className="btn btn-ghost btn-small export-deck-btn"
+                className="sc-btn sc-btn-ghost sc-btn-small export-deck-btn"
                 onClick={copyExport}
               >
                 {copyState === "copied" ? "Copied ✓" : copyState === "error" ? "Copy failed" : "Export"}
@@ -1201,7 +1203,7 @@ export function DeckPanel({
                 <span className="inline-confirm-text">Delete deck?</span>
                 <button
                   type="button"
-                  className="btn btn-danger btn-small"
+                  className="sc-btn sc-btn-danger sc-btn-small"
                   onClick={deleteCurrentDeck}
                   disabled={deleteBusy}
                   autoFocus
@@ -1210,7 +1212,7 @@ export function DeckPanel({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-small"
+                  className="sc-btn sc-btn-ghost sc-btn-small"
                   onClick={() => setConfirmingDeleteDeck(false)}
                   disabled={deleteBusy}
                 >
@@ -1220,7 +1222,7 @@ export function DeckPanel({
             ) : (
               <button
                 type="button"
-                className="btn btn-danger btn-small delete-deck-btn"
+                className="sc-btn sc-btn-danger sc-btn-small delete-deck-btn"
                 onClick={() => setConfirmingDeleteDeck(true)}
                 disabled={deleteBusy}
               >
@@ -1239,7 +1241,7 @@ export function DeckPanel({
                 />
                 <button
                   type="button"
-                  className="btn btn-ghost btn-small manual-copy-close-btn"
+                  className="sc-btn sc-btn-ghost sc-btn-small manual-copy-close-btn"
                   onClick={() => setManualCopyText(null)}
                 >
                   Close
@@ -1260,7 +1262,7 @@ export function DeckPanel({
                   <QuotaRow label="Wipes" q={report.quotaCheck.wipes} />
                 </ul>
                 {report.identityViolations.length > 0 && (
-                  <div className="chip chip-error">
+                  <div className="sc-chip sc-chip-error">
                     identity violations: {report.identityViolations.join(", ")}
                   </div>
                 )}
@@ -1281,7 +1283,7 @@ export function DeckPanel({
               </section>
             </>
           ) : reportError ? (
-            <div className="chip chip-error">report failed: {reportError}</div>
+            <div className="sc-chip sc-chip-error">report failed: {reportError}</div>
           ) : (
             <div className="deck-loading">loading report…</div>
           )}
@@ -1291,11 +1293,11 @@ export function DeckPanel({
           <section className="deck-section">
             <h2>Cards</h2>
             {actionError && (
-              <div className="chip chip-error chip-dismissible">
+              <div className="sc-chip sc-chip-error sc-chip-dismissible">
                 {actionError}
                 <button
                   type="button"
-                  className="chip-dismiss"
+                  className="sc-chip-dismiss"
                   onClick={() => setActionError(null)}
                   aria-label="Dismiss error"
                 >
@@ -1304,9 +1306,9 @@ export function DeckPanel({
               </div>
             )}
             {undo && (
-              <div className="chip chip-hint-inline">
+              <div className="sc-chip sc-chip-hint-inline">
                 Removed {undo.name}
-                <button type="button" className="chip-retry" onClick={undoRemove}>
+                <button type="button" className="sc-chip-retry" onClick={undoRemove}>
                   Undo
                 </button>
               </div>
@@ -1343,14 +1345,14 @@ export function DeckPanel({
                 disabled={addCardBusy}
                 aria-label="Card count"
               />
-              <button type="submit" className="btn btn-primary btn-small" disabled={addCardBusy}>
+              <button type="submit" className="sc-btn sc-btn-primary sc-btn-small" disabled={addCardBusy}>
                 {addCardBusy ? "Adding…" : "Add"}
               </button>
             </form>
             {rejected.length > 0 && (
               <div className="rejected-list">
                 {rejected.map((r, i) => (
-                  <div className="chip chip-error" key={`${r.name}-${i}`}>
+                  <div className="sc-chip sc-chip-error" key={`${r.name}-${i}`}>
                     {r.name}: {r.reason}
                   </div>
                 ))}
@@ -1378,7 +1380,7 @@ export function DeckPanel({
                             />
                             <button
                               type="button"
-                              className="btn btn-ghost btn-small"
+                              className="sc-btn sc-btn-ghost sc-btn-small"
                               onClick={() => renameGroup(tag, renameValue)}
                               disabled={renameBusy}
                             >
@@ -1386,7 +1388,7 @@ export function DeckPanel({
                             </button>
                             <button
                               type="button"
-                              className="btn btn-ghost btn-small"
+                              className="sc-btn sc-btn-ghost sc-btn-small"
                               onClick={() => cancelGroupRename(tag)}
                               disabled={renameBusy}
                             >
@@ -1400,7 +1402,7 @@ export function DeckPanel({
                             </span>
                             <button
                               type="button"
-                              className="btn btn-danger btn-small"
+                              className="sc-btn sc-btn-danger sc-btn-small"
                               onClick={() => deleteTagGroup(tag)}
                               disabled={tagDeleteBusy}
                               autoFocus
@@ -1409,7 +1411,7 @@ export function DeckPanel({
                             </button>
                             <button
                               type="button"
-                              className="btn btn-ghost btn-small"
+                              className="sc-btn sc-btn-ghost sc-btn-small"
                               onClick={() => setConfirmingDeleteTag(null)}
                               disabled={tagDeleteBusy}
                             >
@@ -1551,11 +1553,11 @@ export function DeckPanel({
                         {countError[c.name] && (
                           <tr className="count-error-row">
                             <td colSpan={5}>
-                              <div className="chip chip-error chip-dismissible">
+                              <div className="sc-chip sc-chip-error sc-chip-dismissible">
                                 {c.name}: {countError[c.name]}
                                 <button
                                   type="button"
-                                  className="chip-dismiss"
+                                  className="sc-chip-dismiss"
                                   onClick={() =>
                                     setCountError((prev) => {
                                       const { [c.name]: _drop, ...rest } = prev;
@@ -1618,7 +1620,7 @@ export function DeckPanel({
                                   />
                                   <button
                                     type="button"
-                                    className="btn btn-primary btn-small"
+                                    className="sc-btn sc-btn-primary sc-btn-small"
                                     disabled={editorBusy}
                                     onClick={() => saveCardTags(c.name, editorTags)}
                                   >
@@ -1626,7 +1628,7 @@ export function DeckPanel({
                                   </button>
                                   <button
                                     type="button"
-                                    className="btn btn-ghost btn-small"
+                                    className="sc-btn sc-btn-ghost sc-btn-small"
                                     disabled={editorBusy}
                                     onClick={closeTagEditor}
                                   >

@@ -182,12 +182,12 @@ export function CollectionSync({ onImported }: { onImported?: () => void }) {
       </div>
       <div className="collection-actions">
         {fsApiSupported() && (
-          <button type="button" className="btn btn-ghost btn-small" onClick={doLink} disabled={busy}>
+          <button type="button" className="sc-btn sc-btn-ghost sc-btn-small" onClick={doLink} disabled={busy}>
             Link Arena log folder
           </button>
         )}
         {needsReauth && (
-          <button type="button" className="btn btn-ghost btn-small" onClick={doReauth} disabled={busy}>
+          <button type="button" className="sc-btn sc-btn-ghost sc-btn-small" onClick={doReauth} disabled={busy}>
             Re-authorize
           </button>
         )}

@@ -211,7 +211,7 @@ function AssistantBody({ msg }: { msg: ChatMessage }) {
         ) : (
           <div className="tool-chip-row" key={i}>
             <span
-              className={`chip chip-tool chip-tool-${toolResultStatus(seg.result)}`}
+              className={`sc-chip sc-chip-tool sc-chip-tool-${toolResultStatus(seg.result)}`}
               // Capped: this is a DOM attribute on every chip and its only
               // reader is the hover popover (a human). The components below
               // read seg.result directly, so they still get the whole thing.
@@ -244,11 +244,17 @@ export function ChatPanel({
   deckCardNames,
   config,
   onConfigChange,
+  settingsOpen,
+  onOpenSettings,
+  onCloseSettings,
 }: {
   selected: string;
   deckCardNames: Set<string>;
   config: AppConfig | null;
   onConfigChange: (config: AppConfig) => void;
+  settingsOpen: boolean;
+  onOpenSettings: () => void;
+  onCloseSettings: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -336,7 +342,6 @@ export function ChatPanel({
 
   // Settings drawer (gear icon in header): Escape-close + focus-return to
   // the gear button is handled inside SettingsDrawer itself.
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -826,7 +831,7 @@ export function ChatPanel({
     (e: React.MouseEvent) => {
       const target = e.target as HTMLElement;
 
-      const chip = target.closest<HTMLElement>(".chip-tool");
+      const chip = target.closest<HTMLElement>(".sc-chip-tool");
       if (chip) {
         const resultText = chip.getAttribute("data-result");
         if (resultText) {
@@ -883,7 +888,7 @@ export function ChatPanel({
 
   const onScrollMouseMove = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest(".chip-tool")) {
+    if (target.closest(".sc-chip-tool")) {
       setToolPopover((p) => (p ? { ...p, x: e.clientX, y: e.clientY } : p));
     } else if (target.closest(".card-ref, .card-embed-img, .card-embed")) {
       setCardPopover((p) => (p ? { ...p, x: e.clientX, y: e.clientY } : p));
@@ -893,7 +898,7 @@ export function ChatPanel({
   const onScrollMouseOut = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     const related = e.relatedTarget as HTMLElement | null;
-    if (target.closest(".chip-tool") && !related?.closest(".chip-tool")) {
+    if (target.closest(".sc-chip-tool") && !related?.closest(".sc-chip-tool")) {
       setToolPopover(null);
     }
     if (
@@ -1045,10 +1050,10 @@ export function ChatPanel({
   }, [messages, deckCardNames, showInDeck, groupPopover]);
 
   return (
-    <aside className="chat-panel" id="chatcol">
+    <aside className="chat-panel chat" id="chatcol">
       <div className="chat-panel-header" id="top-bar">
         {selected && (
-          <span className="chip chip-muted" id="deck-chip" title="active deck">
+          <span className="sc-chip sc-chip-muted" id="deck-chip" title="active deck">
             {selected}
             {deckCardNames.size > 0 && ` · ${deckCardNames.size}`}
           </span>
@@ -1077,13 +1082,13 @@ export function ChatPanel({
             ))}
           </optgroup>
         </select>
-        <button type="button" className="btn btn-ghost btn-small" onClick={startNewChat}>
+        <button type="button" className="sc-btn sc-btn-ghost sc-btn-small" onClick={startNewChat}>
           + New Chat
         </button>
         {chatId && !renamingChat && (
           <button
             type="button"
-            className="btn btn-ghost btn-small"
+            className="sc-btn sc-btn-ghost sc-btn-small"
             ref={renameTriggerRef}
             onClick={openRenameChat}
           >
@@ -1111,7 +1116,7 @@ export function ChatPanel({
             />
             <button
               type="button"
-              className="btn btn-ghost btn-small"
+              className="sc-btn sc-btn-ghost sc-btn-small"
               onClick={saveRenameChat}
               disabled={renameChatBusy}
             >
@@ -1119,7 +1124,7 @@ export function ChatPanel({
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-small"
+              className="sc-btn sc-btn-ghost sc-btn-small"
               onClick={cancelRenameChat}
               disabled={renameChatBusy}
             >
@@ -1130,7 +1135,7 @@ export function ChatPanel({
         {chatId && !confirmingDeleteChat && (
           <button
             type="button"
-            className="btn btn-danger btn-small"
+            className="sc-btn sc-btn-danger sc-btn-small"
             onClick={() => setConfirmingDeleteChat(true)}
           >
             Delete
@@ -1144,12 +1149,12 @@ export function ChatPanel({
             }}
           >
             <span className="inline-confirm-text">Delete?</span>
-            <button type="button" className="btn btn-danger btn-small" onClick={deleteChat} autoFocus>
+            <button type="button" className="sc-btn sc-btn-danger sc-btn-small" onClick={deleteChat} autoFocus>
               Yes
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-small"
+              className="sc-btn sc-btn-ghost sc-btn-small"
               onClick={() => setConfirmingDeleteChat(false)}
             >
               No
@@ -1158,9 +1163,9 @@ export function ChatPanel({
         )}
         <button
           type="button"
-          className="btn btn-ghost btn-small settings-drawer-toggle"
+          className="sc-btn sc-btn-ghost sc-btn-small settings-drawer-toggle"
           ref={settingsTriggerRef}
-          onClick={() => setSettingsOpen(true)}
+          onClick={onOpenSettings}
           aria-label="Open settings"
           title="Settings"
         >
@@ -1169,7 +1174,7 @@ export function ChatPanel({
       </div>
       <SettingsDrawer
         open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={onCloseSettings}
         config={config}
         onConfigChange={onConfigChange}
         triggerRef={settingsTriggerRef}
@@ -1177,11 +1182,11 @@ export function ChatPanel({
         onShowInDeckChange={setShowInDeck}
       />
       {chatError && (
-        <div className="chip chip-error chip-dismissible chat-header-error">
+        <div className="sc-chip sc-chip-error sc-chip-dismissible chat-header-error">
           {chatError}
           <button
             type="button"
-            className="chip-dismiss"
+            className="sc-chip-dismiss"
             onClick={() => setChatError(null)}
             aria-label="Dismiss error"
           >
@@ -1190,10 +1195,10 @@ export function ChatPanel({
         </div>
       )}
       {(chatsRefreshFailed || deckChatsRefreshFailed) && (
-        <div className="chip chip-muted chat-header-error">couldn't refresh chats</div>
+        <div className="sc-chip sc-chip-muted chat-header-error">couldn't refresh chats</div>
       )}
       {!chatsRefreshFailed && chats.length === 0 && (
-        <div className="chip chip-muted chat-header-error">no chats yet — start one below</div>
+        <div className="sc-chip sc-chip-muted chat-header-error">no chats yet — start one below</div>
       )}
       <div
         id="chat-log"
@@ -1230,16 +1235,16 @@ export function ChatPanel({
             )}
           </div>
         ))}
-        {streaming && <div className="chip chip-streaming">thinking…</div>}
+        {streaming && <div className="sc-chip sc-chip-streaming">thinking…</div>}
         {error && (
-          <div className="chip chip-error chip-dismissible">
+          <div className="sc-chip sc-chip-error sc-chip-dismissible">
             error: {error}
-            <button type="button" className="chip-retry" onClick={retry} disabled={streaming}>
+            <button type="button" className="sc-chip-retry" onClick={retry} disabled={streaming}>
               Retry
             </button>
             <button
               type="button"
-              className="chip-dismiss"
+              className="sc-chip-dismiss"
               onClick={() => setError(null)}
               aria-label="Dismiss error"
             >
@@ -1296,14 +1301,14 @@ export function ChatPanel({
           </div>
         )}
         {hint && (
-          <div className="chip chip-hint" style={{ left: hint.x + 8, top: hint.y + 8 }}>
+          <div className="sc-chip sc-chip-hint" style={{ left: hint.x + 8, top: hint.y + 8 }}>
             {hint.text}
           </div>
         )}
         {cardUndo && (
-          <div className="chip chip-hint-inline chat-card-undo">
+          <div className="sc-chip sc-chip-hint-inline chat-card-undo">
             Removed {cardUndo.name} from {cardUndo.deck}
-            <button type="button" className="chip-retry" onClick={undoCardRemove}>
+            <button type="button" className="sc-chip-retry" onClick={undoCardRemove}>
               Undo
             </button>
           </div>
@@ -1327,7 +1332,7 @@ export function ChatPanel({
         </div>
       )}
       <div className="chat-input-row">
-        {selected && <span className="chip chip-context">context: {selected}</span>}
+        {selected && <span className="sc-chip sc-chip-context">context: {selected}</span>}
         <input
           ref={fileInputRef}
           type="file"

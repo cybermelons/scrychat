@@ -166,7 +166,7 @@ export function SettingsDrawer({
           <h2>Settings</h2>
           <button
             type="button"
-            className="btn btn-ghost btn-small"
+            className="sc-btn sc-btn-ghost sc-btn-small"
             onClick={onClose}
             aria-label="Close settings"
           >
@@ -175,7 +175,7 @@ export function SettingsDrawer({
         </div>
 
         {!config ? (
-          <div className="chip chip-muted">loading settings…</div>
+          <div className="sc-chip sc-chip-muted">loading settings…</div>
         ) : (
           <div className="settings-drawer-body">
             <section className="settings-section">
@@ -256,7 +256,7 @@ export function SettingsDrawer({
               <div className="form-row-actions">
                 <button
                   type="button"
-                  className="btn btn-primary btn-small"
+                  className="sc-btn sc-btn-primary sc-btn-small"
                   onClick={saveQuotaTargets}
                   disabled={quotaBusy}
                 >
@@ -264,7 +264,7 @@ export function SettingsDrawer({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-small"
+                  className="sc-btn sc-btn-ghost sc-btn-small"
                   onClick={resetQuotaTargets}
                   disabled={quotaBusy}
                 >
@@ -272,11 +272,11 @@ export function SettingsDrawer({
                 </button>
               </div>
               {quotaErrors.length > 0 && (
-                <div className="chip chip-error chip-dismissible">
+                <div className="sc-chip sc-chip-error sc-chip-dismissible">
                   {quotaErrors.join("; ")}
                   <button
                     type="button"
-                    className="chip-dismiss"
+                    className="sc-chip-dismiss"
                     onClick={() => setQuotaErrors([])}
                     aria-label="Dismiss error"
                   >
@@ -305,7 +305,7 @@ export function SettingsDrawer({
                 />
                 <button
                   type="button"
-                  className="btn btn-primary btn-small"
+                  className="sc-btn sc-btn-primary sc-btn-small"
                   onClick={saveSeed}
                   disabled={seedBusy}
                 >
@@ -313,7 +313,7 @@ export function SettingsDrawer({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-small"
+                  className="sc-btn sc-btn-ghost sc-btn-small"
                   onClick={randomizeSeed}
                   disabled={seedBusy}
                 >
@@ -322,11 +322,11 @@ export function SettingsDrawer({
               </div>
               <p className="settings-hint">Fixed seed keeps two runs comparable</p>
               {seedErrors.length > 0 && (
-                <div className="chip chip-error chip-dismissible">
+                <div className="sc-chip sc-chip-error sc-chip-dismissible">
                   {seedErrors.join("; ")}
                   <button
                     type="button"
-                    className="chip-dismiss"
+                    className="sc-chip-dismiss"
                     onClick={() => setSeedErrors([])}
                     aria-label="Dismiss error"
                   >
@@ -340,7 +340,7 @@ export function SettingsDrawer({
               <div className="settings-label">Recognized quota tags</div>
               <div className="settings-tag-list">
                 {config.recognizedQuotaTags.map((t) => (
-                  <span className="chip chip-muted" key={t}>
+                  <span className="sc-chip sc-chip-muted" key={t}>
                     {t}
                   </span>
                 ))}

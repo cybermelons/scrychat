@@ -136,14 +136,14 @@ export function Suggestions({
         )}
       </h2>
 
-      {error && <div className="chip chip-error">{error}</div>}
+      {error && <div className="sc-chip sc-chip-error">{error}</div>}
 
       {loading && items.length === 0 ? (
         <div className="deck-loading">loading suggestions…</div>
       ) : (
         <>
           {pending.length === 0 && decided.length > 0 && (
-            <div className="chip chip-muted">no pending suggestions</div>
+            <div className="sc-chip sc-chip-muted">no pending suggestions</div>
           )}
 
           {pending.map((s) => (
@@ -159,7 +159,7 @@ export function Suggestions({
             <div className="suggestions-decided">
               <button
                 type="button"
-                className="btn btn-ghost btn-small"
+                className="sc-btn sc-btn-ghost sc-btn-small"
                 onClick={() => setShowDecided((v) => !v)}
                 aria-expanded={showDecided}
               >
@@ -172,7 +172,7 @@ export function Suggestions({
                   ))}
                   <button
                     type="button"
-                    className="btn btn-ghost btn-small"
+                    className="sc-btn sc-btn-ghost sc-btn-small"
                     onClick={clearDecided}
                     disabled={clearBusy}
                   >
@@ -211,7 +211,7 @@ function SuggestionCard({
         <span className={`suggestion-kind kind-${s.kind}`}>
           {KIND_LABEL[s.kind]}
         </span>
-        {s.role && <span className="chip suggestion-role">{s.role}</span>}
+        {s.role && <span className="sc-chip suggestion-role">{s.role}</span>}
         {s.status !== "pending" && (
           <span className={`suggestion-verdict verdict-${s.status}`}>
             {s.status}
@@ -252,7 +252,7 @@ function SuggestionCard({
           <div className="suggestion-actions">
             <button
               type="button"
-              className="btn btn-primary btn-small"
+              className="sc-btn sc-btn-primary sc-btn-small"
               onClick={() => onDecide(s.id, "accept", trimmed || undefined)}
               disabled={busy}
             >
@@ -260,7 +260,7 @@ function SuggestionCard({
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-small"
+              className="sc-btn sc-btn-ghost sc-btn-small"
               onClick={() => onDecide(s.id, "reject", trimmed || undefined)}
               disabled={busy}
             >
@@ -268,7 +268,7 @@ function SuggestionCard({
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-small suggestion-note-btn"
+              className="sc-btn sc-btn-ghost sc-btn-small suggestion-note-btn"
               onClick={() => setNoteOpen((v) => !v)}
               disabled={busy}
               aria-expanded={noteOpen}
