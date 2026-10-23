@@ -5,7 +5,7 @@
 # from and is mounted read-write below so the container can use and refresh it.
 # Nothing here bakes secrets into the image.
 #
-# All app state (208MB Scryfall DB, decks, chats) is bind-mounted from the NAS
+# All app state (208MB Scryfall DB, per-user decks/chats) is bind-mounted from the NAS
 # so it survives rebuilds. The DB path is fixed by the repo layout
 # (/app/data/scrychat.db) — there is no env override — so mount targets must be
 # exactly as below.
@@ -24,15 +24,23 @@ services:
     # Autostart with the NAS / Docker daemon; comes back after reboots and
     # crashes, but stays down if you deliberately `docker compose stop`.
     restart: unless-stopped
-    # LAN-only: bind the published port to the NAS's LAN address, or drop the
-    # host IP for all-interfaces. Reach it at http://noel:8787/ on your network.
-    # Do NOT port-forward this to the internet — personal subscription auth runs
-    # inside; put a reverse proxy with auth in front if you ever need remote.
-    ports:
-      - "8787:8787"
+    # NO host port is published. Port 8787 on the LAN would skip Cloudflare
+    # Access. The only way in is the cloudflared tunnel, which joins the external
+    # `scrychat-net` network and routes scrychat.evangelista.moe to
+    # http://scrychat:8787 (see docs/deploy-nas.md). Do NOT add `ports:` back.
+    networks:
+      - scrychat-net
     environment:
       - PORT=8787
       - NODE_ENV=production
+      # Identity: every /api request must carry a valid Cloudflare Access JWT.
+      # Without CF_TEAM/CF_AUD the app answers 401 to everything. Compose refuses
+      # to start if OWNER_EMAIL or CF_AUD is missing (set them in .env).
+      # NEVER set SCRYCHAT_DEV_USER here: it disables authentication.
+      - OWNER_EMAIL=${OWNER_EMAIL:?set OWNER_EMAIL in .env}
+      - CF_TEAM=yeetst.cloudflareaccess.com
+      - CF_AUD=${CF_AUD:?set CF_AUD (the Access application AUD tag) in .env}
+      - SCRYCHAT_USERS_DIR=/app/users
     volumes:
       # Subscription auth. Copy your ~/.claude.json onto the NAS first, e.g.
       #   scp ~/.claude.json noel:/volume1/docker/scrychat/claude.json
@@ -41,9 +49,14 @@ services:
       # Scryfall mirror (208MB). Copy data/scrychat.db onto the NAS once:
       #   scp data/scrychat.db noel:/volume1/docker/scrychat/data/scrychat.db
       - ${SCRYCHAT_DATA_DIR:-./data}:/app/data:rw
-      # User decks and chat history — persistent, editable from the app.
-      - ${SCRYCHAT_DECKS_DIR:-./decks}:/app/decks:rw
-      - ${SCRYCHAT_CHATS_DIR:-./chats}:/app/chats:rw
+      # Per-user state: users/<email>/{decks,chats,suggestions,collection.json,
+      # scrychat.config.json}. Persistent, editable from the app.
+      - ${SCRYCHAT_USERS_DIR:-./users}:/app/users:rw
+      # LEGACY single-user data, read-only, used ONCE: on first start the app
+      # copies it into users/$OWNER_EMAIL if that dir does not exist yet. Remove
+      # these two lines after the migration is verified (docs/deploy-nas.md).
+      - ${SCRYCHAT_DECKS_DIR:-./decks}:/app/decks:ro
+      - ${SCRYCHAT_CHATS_DIR:-./chats}:/app/chats:ro
     # Basic liveness so the NAS/Docker UI shows health and restart policy has a
     # signal to act on. Hitting the served UI root is enough.
     healthcheck:
@@ -52,3 +65,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+networks:
+  # Created once by hand: `docker network create scrychat-net`, then
+  # `docker network connect scrychat-net cloudflare-cloudflared-1`.
+  scrychat-net:
+    external: true

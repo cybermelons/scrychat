@@ -111,7 +111,9 @@ execution on the host as the logged-in user.
 
 Current shape, and the reason for each part:
 
-- Allowed: 22 of the 25 `mcp__scrychat__*` tools, plus `Read` and `Grep`.
+- Allowed: 22 of the 25 `mcp__scrychat__*` tools and nothing else (`ALLOWED_TOOLS` in
+  `apps/web/src/tools-core.ts`). `Read` and `Grep` were removed for multi-user: they
+  reach the OAuth credential and other users' files. Tag vocabulary comes from `search_tags`.
   The 3 that are registered but NOT allowlisted are `collection_stats`,
   `deck_rename_tag` and `deck_set_card_count`. Counted from
   `apps/web/src/server.ts` and `packages/mcp/src/tools.ts` on 2026-10-11.

@@ -56,6 +56,8 @@ import { parseCollectionBody, buildImportResult } from "./collection-core.js";
 import { createDeckHistory, mergeFeedback, unknownMetaField } from "./deck-history-core.js";
 import { getCollectionHealth, getDbHealth } from "./health-core.js";
 import { isValidDeckName } from "./deck-name-core.js";
+import { ALLOWED_TOOLS, DISALLOWED_TOOLS } from "./tools-core.js";
+import { createRequireUser } from "./auth.js";
 import { parseConfig, applyConfigPatch, DEFAULT_CONFIG, type ScrychatConfig } from "./config-core.js";
 
 // CRITICAL: strip stale ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the
@@ -105,6 +107,17 @@ function persistConfig(cfg: ScrychatConfig): void {
 const config = loadConfig();
 
 const app = express();
+
+// ---- identity: Cloudflare Access JWT on every data route (docs/multi-user.md) ----
+// Fails closed: with CF_TEAM/CF_AUD unset every /api and /suggestions request
+// is 401, unless SCRYCHAT_DEV_USER is set (local dev only, NEVER on the NAS).
+// Static UI files stay public (no data). Runs before the 30mb JSON parser so an
+// unauthenticated caller cannot make us buffer a body.
+const CF_TEAM = process.env.CF_TEAM || undefined;
+const CF_AUD = process.env.CF_AUD || undefined;
+const DEV_USER = process.env.SCRYCHAT_DEV_USER || undefined;
+const requireUser = createRequireUser({ team: CF_TEAM, aud: CF_AUD, devUser: DEV_USER });
+app.use(["/api", "/suggestions"], requireUser);
 // 30mb, not the 100kb default: an image turn carries up to
 // MAX_IMAGES_PER_TURN (4) x MAX_IMAGE_BYTES (5mb) of base64, and base64 costs
 // 4 bytes per 3, so the worst legitimate body is ~26.7mb. Measured 2026-10-11:
@@ -412,46 +425,8 @@ app.post("/api/chat", async (req: Request, res: Response) => {
             args: [MCP_SERVER_PATH],
           },
         },
-        allowedTools: [
-          "mcp__scrychat__search_cards",
-          "mcp__scrychat__get_card",
-          "mcp__scrychat__search_tags",
-          "mcp__scrychat__find_alternatives",
-          "mcp__scrychat__find_combos",
-          "mcp__scrychat__deck_list",
-          "mcp__scrychat__deck_create",
-          "mcp__scrychat__deck_get",
-          "mcp__scrychat__deck_add",
-          "mcp__scrychat__deck_remove",
-          "mcp__scrychat__deck_import",
-          "mcp__scrychat__deck_set_card_tags",
-          "mcp__scrychat__deck_rename",
-          "mcp__scrychat__deck_set_commander",
-          // Edits deck metadata (bracket, budget, role targets), never cards.
-          "mcp__scrychat__deck_set_meta",
-          "mcp__scrychat__deck_export",
-          "mcp__scrychat__goldfish_deck",
-          "mcp__scrychat__goldfish_compare",
-          "mcp__scrychat__deck_present",
-          // Suggestions propose a change for a human to accept or reject; they
-          // do not edit the deck. deck_suggestion_decide does edit it, but only
-          // on an explicit accept, so the chat turn can queue and the UI decides.
-          "mcp__scrychat__deck_suggest",
-          "mcp__scrychat__deck_suggestions",
-          "mcp__scrychat__deck_suggestion_decide",
-          "Read",
-          "Grep",
-        ],
-        disallowedTools: [
-          "Bash",
-          "Write",
-          "Edit",
-          "NotebookEdit",
-          "WebFetch",
-          "WebSearch",
-          "Task",
-          "KillShell",
-        ],
+        allowedTools: [...ALLOWED_TOOLS],
+        disallowedTools: [...DISALLOWED_TOOLS],
         permissionMode: "dontAsk",
         systemPrompt: {
           type: "preset",
@@ -1917,4 +1892,7 @@ app.listen(PORT, () => {
   for (const a of addrs) console.log(`  reachable at http://${a}:${PORT}`);
   console.log(`repo root: ${REPO_ROOT}`);
   console.log(`mcp server: ${MCP_SERVER_PATH}`);
+  if (CF_TEAM && CF_AUD) console.log(`auth: Cloudflare Access (${CF_TEAM})`);
+  else if (DEV_USER) console.warn(`!!! SCRYCHAT_DEV_USER=${DEV_USER}: AUTH BYPASSED, every request is that user. Local dev only; never set this on the NAS.`);
+  else console.warn("auth: CF_TEAM/CF_AUD unset and no SCRYCHAT_DEV_USER: every /api request will be 401");
 });

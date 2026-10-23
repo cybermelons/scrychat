@@ -12,8 +12,8 @@ then ENUMERATE candidates from the database with `search_cards`/`search_tags`. N
 card-list question from memory alone — memory suggests candidates and vocabulary, tools verify
 they exist, are legal, and fit the constraints (color identity, budget, curve).
 
-Never guess a tag slug. Before using `otag:<slug>`, either grep
-`references/functional-tags.md` for the concept, or call `search_tags` to discover it. Slugs
+Never guess a tag slug. Before using `otag:<slug>`, call `search_tags` with the concept to
+discover it (you have no file-reading tools; `search_tags` is the whole tag vocabulary). Slugs
 are kebab-case and often don't match the obvious English word (e.g. board wipes are tagged
 `sweeper`, not `board-wipe`; there is no `voltron` or `aristocrats` tag — those are playstyles,
 not oracle-text tags, so decompose them into their component mechanics instead).

@@ -1,3 +1,4 @@
+import { ALLOWED_TOOLS } from "../src/tools-core.js";
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { PRESENT_PROMPT } from "../ui/src/present-prompt-core.js";
@@ -60,13 +61,9 @@ describe("the Present button is wired", () => {
 
 describe("deck_present stays reachable", () => {
   it("is still allowlisted on the server", () => {
-    const server = readFileSync(
-      new URL("../src/server.ts", import.meta.url),
-      "utf8",
-    );
     // If it were dropped from allowedTools the button would post a turn the
     // model cannot fulfil, and the failure would look like a model problem.
-    expect(server).toMatch(/mcp__scrychat__deck_present/);
+    expect(ALLOWED_TOOLS).toContain("mcp__scrychat__deck_present");
   });
 
   it("the UI still renders the result the turn produces", () => {

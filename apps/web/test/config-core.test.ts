@@ -1,3 +1,4 @@
+import { ALLOWED_TOOLS } from "../src/tools-core.js";
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolveQuotaTargets } from "@scrychat/core";
@@ -174,9 +175,8 @@ describe("wincon quota target and deck_set_meta allowlist", () => {
   });
 
   it("deck_set_meta is allowlisted and no write tool is", () => {
-    const server = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
-    const allowed = server.slice(server.indexOf("allowedTools: ["), server.indexOf("disallowedTools: ["));
-    expect(allowed).toContain('"mcp__scrychat__deck_set_meta"');
-    expect(allowed).not.toMatch(/"(Bash|Write|Edit|WebFetch)"/);
+    const allowed = ALLOWED_TOOLS.join("\n");
+    expect(allowed).toContain("mcp__scrychat__deck_set_meta");
+    expect(allowed).not.toMatch(/^(Bash|Write|Edit|WebFetch)$/m);
   });
 });
