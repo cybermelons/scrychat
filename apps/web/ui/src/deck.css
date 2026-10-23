@@ -80,3 +80,35 @@ h1.deckname[role="button"] { cursor: text; }
 #pt-piles .pile{width:92px}
 #pt-piles .slot,.ptstack{width:88px;height:123px}
 #pt-piles .ptcard{width:88px;height:123px}
+
+/* ---- browse overlay (Explore / Commanders / Precons) + other-decks form ---- */
+.browse-overlay{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.6);display:grid;place-items:center;padding:var(--space-4)}
+.browse{width:min(1100px,100%);max-height:100%;display:flex;flex-direction:column;min-width:0;background:var(--bg-base);border:1px solid var(--bg-border);border-radius:var(--radius-lg);overflow:hidden}
+.browse-head{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3);border-bottom:1px solid var(--bg-border)}
+.btab{height:var(--control-h);padding:0 var(--space-3);border:0;border-radius:var(--radius-md);background:none;color:var(--text-secondary);font-size:var(--text-sm);cursor:pointer}
+.btab.active{background:var(--accent-subtle);color:var(--text-primary)}
+.browse-ctrls{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;padding:var(--space-3);border-bottom:1px solid var(--bg-border)}
+.browse-search{flex:1 1 200px;min-width:0;height:var(--control-h);padding:0 var(--space-3);background:var(--bg-surface);border:1px solid var(--bg-border);border-radius:var(--radius-md);color:var(--text-primary)}
+.pip-btn{border:0;cursor:pointer;opacity:.4;width:22px;height:22px;font-size:11px}
+.pip-btn.on{opacity:1;outline:2px solid var(--text-primary)}
+.browse-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)}
+.bgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--space-3)}
+.btile{display:flex;flex-direction:column;gap:var(--space-1);min-width:0;padding:0;background:none;border:0;color:var(--text-primary);text-align:left;cursor:pointer}
+.btile-img{aspect-ratio:488/680;border-radius:var(--radius-md);background:var(--bg-elevated);border:1px solid var(--bg-border);overflow:hidden;display:grid;place-items:center;text-align:center;color:var(--text-muted);font-size:var(--text-sm)}
+.btile-img img{width:100%;height:100%;object-fit:cover;display:block}
+.btile-img span{padding:var(--space-2)}
+.btile:hover .btile-img{border-color:var(--accent)}
+.btile-name{font-size:var(--text-sm);overflow-wrap:anywhere}
+.btile-sub{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;font-size:var(--text-xs);color:var(--text-muted)}
+.bempty{color:var(--text-muted);font-size:var(--text-sm)}
+.bdetail{display:flex;gap:var(--space-5);flex-wrap:wrap;min-width:0}
+.bdetail-img{width:min(300px,100%);border-radius:var(--radius-lg);align-self:flex-start}
+.bdetail-info{flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.bcards{columns:2 200px;margin:0;padding-left:var(--space-4);font-size:var(--text-sm);color:var(--text-secondary)}
+.bcards li{break-inside:avoid;overflow-wrap:anywhere}
+.otherdecks{display:flex;flex-direction:column;gap:var(--space-2);padding-top:var(--space-3)}
+.otherdecks h3{font-size:var(--text-sm);color:var(--text-secondary);margin:0}
+.otherdecks .deckcard{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:var(--space-2) var(--space-3);background:var(--bg-surface);border:1px solid var(--bg-border);border-radius:var(--radius-md);color:var(--text-primary);text-align:left;cursor:pointer;min-width:0}
+.otherdecks .deckcard:hover{background:var(--bg-hover)}
+.otherdecks .dm{font-size:var(--text-xs);color:var(--text-muted)}
+.otherdecks .dt{overflow-wrap:anywhere}

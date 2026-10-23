@@ -13,6 +13,7 @@ import {
 import { PRESENT_PROMPT } from "./present-prompt-core";
 import { renderMarkdown } from "./markdown";
 import { SettingsDrawer } from "./SettingsDrawer";
+import { OtherDecks, type BrowseTarget } from "./Browse";
 import "./chat.css";
 
 const LAST_CHAT_KEY = "scrychat.lastChat";
@@ -385,6 +386,8 @@ export function ChatPanel({
   settingsOpen,
   onOpenSettings,
   onCloseSettings,
+  onSelectDeck,
+  onOpenBrowse,
 }: {
   selected: string;
   deckCardNames: Set<string>;
@@ -393,6 +396,8 @@ export function ChatPanel({
   settingsOpen: boolean;
   onOpenSettings: () => void;
   onCloseSettings: () => void;
+  onSelectDeck?: (name: string) => void;
+  onOpenBrowse?: (t: BrowseTarget) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [tab, setTab] = useState<"chat" | "cards" | "history">("chat");
@@ -1471,6 +1476,11 @@ export function ChatPanel({
                 </button>
               </div>
             </div>
+            <OtherDecks
+              deck={selected}
+              onSelectDeck={(n) => onSelectDeck?.(n)}
+              onOpenPrecon={(f) => onOpenBrowse?.({ tab: "precons", precon: f })}
+            />
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { DeckPanel } from "./DeckPanel";
 import { ChatPanel } from "./ChatPanel";
+import { Browse, type BrowseTarget } from "./Browse";
 import type { AppConfig } from "./types";
 
 export function App() {
@@ -14,6 +15,7 @@ export function App() {
   // Mobile "More": the sidebar as an overlay.
   const [moreOpen, setMoreOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [browse, setBrowse] = useState<BrowseTarget | null>(null);
 
   // App-wide server config (default export format, quota
   // targets): fetched once here and passed down so DeckPanel and ChatPanel's
@@ -58,6 +60,7 @@ export function App() {
         onDeckNames={setDeckCardNames}
         defaultExportFormat={config?.defaultExportFormat}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenBrowse={setBrowse}
       />
       <div className="divider" id="divider" title="drag to resize" />
       <ChatPanel
@@ -68,7 +71,21 @@ export function App() {
         settingsOpen={settingsOpen}
         onOpenSettings={() => setSettingsOpen(true)}
         onCloseSettings={() => setSettingsOpen(false)}
+        onSelectDeck={setSelected}
+        onOpenBrowse={setBrowse}
       />
+      {browse && (
+        <Browse
+          key={`${browse.tab}:${browse.precon ?? ""}`}
+          target={browse}
+          onClose={() => setBrowse(null)}
+          onOpenDeck={(name) => {
+            setBrowse(null);
+            setSelected(name);
+            window.dispatchEvent(new CustomEvent("sc:deck-created", { detail: name }));
+          }}
+        />
+      )}
       <nav className="mobilebar">
         <button type="button" className={mtab("deck", tab === "deck" && !moreOpen)} id="mtab-deck" onClick={() => goTab("deck")}>
           <span className="ico">▣</span>Deck

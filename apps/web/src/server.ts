@@ -25,6 +25,9 @@ import {
   renameDeck,
   setCommander,
   importDecklist,
+  listCommanders,
+  getPrecons,
+  matchesFilter,
   setCardCount,
   removeTag,
   getLocalDb,
@@ -993,6 +996,159 @@ app.post("/api/decks", async (req: Request, res: Response) => {
     res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ---- browse: commanders (local mirror) + precons (MTGJSON) ----
+
+async function uniqueDeckName(base: string): Promise<string> {
+  const root = base.replace(/[\\/\0]/g, "-").trim().slice(0, 120) || "Deck";
+  for (let i = 1; ; i++) {
+    const n = i === 1 ? root : `${root} (${i})`;
+    if (!(await getDeck(n, DECKS_DIR))) return n;
+  }
+}
+
+type PreconView = Awaited<ReturnType<typeof getPrecons>>[number];
+const preconSummary = ({ cards, type, ...rest }: PreconView) => ({ ...rest, cardCount: cards.reduce((n, c) => n + c.count, 0) });
+
+app.get("/api/browse/commanders", (req: Request, res: Response) => {
+  const num = (v: unknown) => (typeof v === "string" && v !== "" ? Number(v) : undefined);
+  const r = listCommanders({
+    q: typeof req.query.q === "string" ? req.query.q : undefined,
+    colors: typeof req.query.colors === "string" ? req.query.colors : undefined,
+    limit: num(req.query.limit),
+    offset: num(req.query.offset),
+  });
+  if (!r.ok) res.status(503).json({ error: r.error });
+  else res.json(r);
+});
+
+app.get("/api/browse/precons", async (req: Request, res: Response) => {
+  try {
+    const { q, colors } = req.query as { q?: string; colors?: string };
+    const all = await getPrecons();
+    res.json({
+      precons: all
+        .filter((p) => matchesFilter(p.name + " " + p.commanders.map((c) => c.name).join(" "), [...new Set(p.commanders.flatMap((c) => c.colorIdentity))], q, colors))
+        .map(preconSummary),
+    });
+  } catch (err) {
+    res.status(502).json({ error: `MTGJSON unavailable: ${err instanceof Error ? err.message : String(err)}` });
+  }
+});
+
+app.get("/api/browse/precons/:fileName", async (req: Request, res: Response) => {
+  try {
+    const p = (await getPrecons()).find((x) => x.fileName === req.params.fileName);
+    if (!p) res.status(404).json({ error: "Precon not found" });
+    else res.json(p);
+  } catch (err) {
+    res.status(502).json({ error: `MTGJSON unavailable: ${err instanceof Error ? err.message : String(err)}` });
+  }
+});
+
+app.post("/api/browse/precons/:fileName/import", async (req: Request, res: Response) => {
+  try {
+    const p = (await getPrecons()).find((x) => x.fileName === req.params.fileName);
+    if (!p) {
+      res.status(404).json({ error: "Precon not found" });
+      return;
+    }
+    const name = await uniqueDeckName(typeof req.body?.name === "string" && req.body.name.trim() ? req.body.name.trim() : p.name);
+    if (!isValidDeckName(name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const deck = await createDeck(name, p.commanders[0].name, resolver, DECKS_DIR);
+    // Partner commanders ride along as ordinary cards (a deck holds one commander).
+    const cards = [...p.commanders.slice(1).map((c) => ({ name: c.name })), ...p.cards];
+    const result = await addCards(name, cards, resolver, DECKS_DIR);
+    logAction(`created deck "${name}" (commander ${deck.commander}) from precon "${p.name}"`, name);
+    for (const r of result.rejected) logAction(`tried to add "${r.name}" to "${name}" — rejected: ${r.reason}`, name);
+    res.json({ deck, added: result.added.length, rejected: result.rejected });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post("/api/browse/start", async (req: Request, res: Response) => {
+  try {
+    const { commander } = req.body ?? {};
+    if (typeof commander !== "string" || !commander.trim()) {
+      res.status(400).json({ error: "commander is required" });
+      return;
+    }
+    const name = await uniqueDeckName(commander.trim());
+    if (!isValidDeckName(name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const deck = await createDeck(name, commander.trim(), resolver, DECKS_DIR);
+    logAction(`created deck "${deck.name}" (commander ${deck.commander})`, deck.name);
+    res.json({ deck });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get("/api/browse/explore", async (req: Request, res: Response) => {
+  try {
+    const { q, colors } = req.query as { q?: string; colors?: string };
+    const mine = await Promise.all(
+      (await listDecks(DECKS_DIR))
+        .filter((d) => matchesFilter(d.name + " " + d.commander, d.commanderIdentity, q, colors))
+        .map(async (d) => ({
+          name: d.name,
+          commander: d.commander,
+          colorIdentity: d.commanderIdentity,
+          cardCount: d.cards.reduce((n, c) => n + (c.count ?? 1), 0),
+          image: (await resolver(d.commander))?.image ?? null,
+        }))
+    );
+    // A dead MTGJSON must not hide the user's own decks: report it beside them.
+    let precons: ReturnType<typeof preconSummary>[] = [];
+    let preconError: string | undefined;
+    try {
+      precons = (await getPrecons())
+        .filter((p) => matchesFilter(p.name + " " + p.commanders.map((c) => c.name).join(" "), [...new Set(p.commanders.flatMap((c) => c.colorIdentity))], q, colors))
+        .map(preconSummary);
+    } catch (err) {
+      preconError = `MTGJSON unavailable: ${err instanceof Error ? err.message : String(err)}`;
+    }
+    res.json({ decks: mine, precons, preconError });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Other decks sharing the given deck's commander: the user's own + matching precons.
+app.get("/api/browse/other-decks", async (req: Request, res: Response) => {
+  try {
+    const name = req.query.deck;
+    if (!isValidDeckName(name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const cur = await getDeck(name, DECKS_DIR);
+    if (!cur) {
+      res.status(404).json({ error: "Deck not found" });
+      return;
+    }
+    const cmd = cur.commander.toLowerCase();
+    const decks = (await listDecks(DECKS_DIR))
+      .filter((d) => d.name !== cur.name && d.commander.toLowerCase() === cmd)
+      .map((d) => ({ name: d.name, commander: d.commander, cardCount: d.cards.reduce((n, c) => n + (c.count ?? 1), 0) }));
+    let precons: ReturnType<typeof preconSummary>[] = [];
+    let preconError: string | undefined;
+    try {
+      precons = (await getPrecons()).filter((p) => p.commanders.some((c) => c.name.toLowerCase() === cmd)).map(preconSummary);
+    } catch (err) {
+      preconError = `MTGJSON unavailable: ${err instanceof Error ? err.message : String(err)}`;
+    }
+    res.json({ commander: cur.commander, decks, precons, preconError });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 

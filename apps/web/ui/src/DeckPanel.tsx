@@ -15,8 +15,8 @@ import { CardName } from "./CardName";
 import { renderManaSymbols } from "./markdown";
 import { CollectionSync } from "./CollectionSync";
 import { Suggestions } from "./Suggestions";
-import { stub } from "./stub";
 import { Playtest, toResolved } from "./Playtest";
+import type { BrowseTarget } from "./Browse";
 import { playtest as ptReduce, newGame } from "../../../../packages/core/src/playtest.ts";
 import type { PlaytestState } from "../../../../packages/core/src/playtest.ts";
 import "./deck.css";
@@ -178,12 +178,14 @@ export function DeckPanel({
   onDeckNames,
   defaultExportFormat,
   onOpenSettings,
+  onOpenBrowse,
 }: {
   selected: string;
   setSelected: (name: string) => void;
   onDeckNames?: (names: Set<string>) => void;
   defaultExportFormat?: ExportFormat;
   onOpenSettings?: () => void;
+  onOpenBrowse?: (t: BrowseTarget) => void;
 }) {
   const [decks, setDecks] = useState<DeckSummary[]>([]);
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -326,6 +328,10 @@ export function DeckPanel({
 
   useEffect(() => {
     refreshDecks();
+    // Browse creates decks server-side; it announces them here so the list reloads and selects the new one.
+    const onCreated = (e: Event) => void refreshDecks((e as CustomEvent<string>).detail);
+    window.addEventListener("sc:deck-created", onCreated);
+    return () => window.removeEventListener("sc:deck-created", onCreated);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1601,15 +1607,15 @@ export function DeckPanel({
 
         <div className="navsec">
           <div className="navlabel">Browse</div>
-          <button type="button" className="navitem" id="nav-explore" onClick={stub("Explore decks")}>
+          <button type="button" className="navitem" id="nav-explore" onClick={() => onOpenBrowse?.({ tab: "explore" })}>
             <span className="ico">⌸</span>
             <span>Explore decks</span>
           </button>
-          <button type="button" className="navitem" id="nav-commanders" onClick={stub("Commanders")}>
+          <button type="button" className="navitem" id="nav-commanders" onClick={() => onOpenBrowse?.({ tab: "commanders" })}>
             <span className="ico">✦</span>
             <span>Commanders</span>
           </button>
-          <button type="button" className="navitem" id="nav-precons" onClick={stub("Precons")}>
+          <button type="button" className="navitem" id="nav-precons" onClick={() => onOpenBrowse?.({ tab: "precons" })}>
             <span className="ico">▤</span>
             <span>Precons</span>
           </button>
