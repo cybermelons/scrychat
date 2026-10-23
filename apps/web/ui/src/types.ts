@@ -22,12 +22,14 @@ export type Deck = {
   budgetUsd?: number;
   strategy?: string;
   themes?: string[];
+  draft?: true;
 };
 
 export type DeckSummary = {
   name: string;
   commander: string;
   updatedAt: string;
+  draft?: true;
 };
 
 export type QuotaCheck = {

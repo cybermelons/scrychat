@@ -19,6 +19,7 @@ import { Playtest, toResolved } from "./Playtest";
 import type { BrowseTarget } from "./Browse";
 import { playtest as ptReduce, newGame } from "../../../../packages/core/src/playtest.ts";
 import type { PlaytestState } from "../../../../packages/core/src/playtest.ts";
+import { afterDiscard, draftBarText, draftSaveName } from "./draft-core";
 import "./deck.css";
 
 const CURVE_ORDER = ["0", "1", "2", "3", "4", "5", "6", "7+"];
@@ -204,11 +205,13 @@ export function DeckPanel({
   selectedRef.current = selected;
 
   // new-deck form
+  // "Import list" panel (paste-import); New deck itself opens an unsaved draft in the editor.
   const [showNewDeck, setShowNewDeck] = useState(false);
-  const [newDeckName, setNewDeckName] = useState("");
-  const [newDeckCommander, setNewDeckCommander] = useState("");
-  const [newDeckBusy, setNewDeckBusy] = useState(false);
-  const [newDeckError, setNewDeckError] = useState<string | null>(null);
+  const [draftMode, setDraftMode] = useState<null | "save" | "discard">(null);
+  const [draftName, setDraftName] = useState("");
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const prevDeckRef = useRef<string | null>(null);
 
   // add-card form
   const [addCardName, setAddCardName] = useState("");
@@ -335,38 +338,60 @@ export function DeckPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    setDraftMode(null);
+    setDraftError(null);
+  }, [selected]);
+
   // Persist selected deck for restore on next load.
   useEffect(() => {
     if (selected) localStorage.setItem(LAST_DECK_KEY, selected);
   }, [selected]);
 
-  const createDeck = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!newDeckName.trim() || !newDeckCommander.trim()) return;
-      setNewDeckBusy(true);
-      setNewDeckError(null);
-      fetch("/api/decks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newDeckName.trim(), commander: newDeckCommander.trim() }),
-      })
+  const draftCall = useCallback(
+    (url: string, init: RequestInit, done: (body: any) => void) => {
+      setDraftBusy(true);
+      setDraftError(null);
+      fetch(url, init)
         .then(async (r) => {
           const body = await r.json().catch(() => ({}));
           if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
-          return body.deck as Deck;
+          return body;
         })
-        .then((created) => {
-          setShowNewDeck(false);
-          setNewDeckName("");
-          setNewDeckCommander("");
-          refreshDecks(created.name);
+        .then((body) => {
+          setDraftMode(null);
+          done(body);
         })
-        .catch((err: Error) => setNewDeckError(err.message))
-        .finally(() => setNewDeckBusy(false));
+        .catch((err: Error) => setDraftError(err.message))
+        .finally(() => setDraftBusy(false));
     },
-    [newDeckName, newDeckCommander, refreshDecks]
+    []
   );
+
+  const startDraft = useCallback(() => {
+    const cur = decks.find((d) => d.name === selectedRef.current);
+    prevDeckRef.current = cur && !cur.draft ? cur.name : prevDeckRef.current;
+    setShowNewDeck(false);
+    draftCall("/api/decks/draft", { method: "POST" }, (b) => refreshDecks(b.deck.name));
+  }, [decks, draftCall, refreshDecks]);
+
+  const saveDraftDeck = useCallback(() => {
+    if (!selected || !draftName.trim()) return;
+    draftCall(
+      `/api/decks/${encodeURIComponent(selected)}/save-draft`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: draftName.trim() }) },
+      (b) => refreshDecks(b.deck.name)
+    );
+  }, [selected, draftName, draftCall, refreshDecks]);
+
+  const discardDraftDeck = useCallback(() => {
+    if (!selected) return;
+    draftCall(`/api/decks/${encodeURIComponent(selected)}/draft`, { method: "DELETE" }, () =>
+      fetch("/api/decks")
+        .then((r) => r.json())
+        .then((list: DeckSummary[]) => refreshDecks(afterDiscard(list, prevDeckRef.current) ?? undefined))
+    );
+  }, [selected, draftCall, refreshDecks]);
 
   const addCard = useCallback(
     (e: React.FormEvent) => {
@@ -1089,42 +1114,7 @@ export function DeckPanel({
     : 0;
 
   const newDeckForm = (
-    <form className="new-deck-form" onSubmit={createDeck}>
-      <input
-        className="text-input"
-        placeholder="Deck name"
-        value={newDeckName}
-        onChange={(e) => setNewDeckName(e.target.value)}
-        disabled={newDeckBusy}
-        aria-label="New deck name"
-      />
-      <input
-        className="text-input"
-        placeholder="Commander name"
-        value={newDeckCommander}
-        onChange={(e) => setNewDeckCommander(e.target.value)}
-        disabled={newDeckBusy}
-        aria-label="New deck commander"
-      />
-      <div className="form-row-actions">
-        <button type="submit" className="sc-btn sc-btn-primary" disabled={newDeckBusy}>
-          {newDeckBusy ? "Creating…" : "Create deck"}
-        </button>
-        {decks.length > 0 && (
-          <button
-            type="button"
-            className="sc-btn sc-btn-ghost"
-            onClick={() => {
-              setShowNewDeck(false);
-              setNewDeckError(null);
-            }}
-            disabled={newDeckBusy}
-          >
-            Cancel
-          </button>
-        )}
-      </div>
-      {newDeckError && <div className="sc-chip sc-chip-error">{newDeckError}</div>}
+    <div className="new-deck-form">
       {!showPasteImport ? (
         <button
           type="button"
@@ -1134,7 +1124,7 @@ export function DeckPanel({
             setImportResult(null);
           }}
         >
-          or paste a decklist
+          Import list
         </button>
       ) : (
         <div className="paste-import">
@@ -1209,7 +1199,7 @@ export function DeckPanel({
           )}
         </div>
       )}
-    </form>
+    </div>
   );
 
 
@@ -1598,10 +1588,15 @@ export function DeckPanel({
           type="button"
           className="newdeck"
           id="nav-newdeck"
-          onClick={() => setShowNewDeck((s) => !s)}
+          onClick={startDraft}
+          disabled={draftBusy}
         >
           <span className="ico">＋</span>
           <span>New deck</span>
+        </button>
+        <button type="button" className="navitem" id="nav-importlist" onClick={() => { setShowNewDeck((s) => !s); setShowPasteImport(true); }}>
+          <span className="ico">⇪</span>
+          <span>Import list</span>
         </button>
         {showNewDeck && decks.length > 0 && <div className="navpanel">{newDeckForm}</div>}
 
@@ -1663,6 +1658,7 @@ export function DeckPanel({
                 >
                   <span className="ico">▣</span>
                   <span>{d.name}</span>
+                  {d.draft && <span className="draft-badge">draft</span>}
                 </button>
               ))}
             </div>
@@ -1707,6 +1703,9 @@ export function DeckPanel({
           <div className="empty-state">
             <div className="empty-state-icon" aria-hidden="true">🂠</div>
             <p>No decks yet — create one to get started.</p>
+            <button type="button" className="sc-btn sc-btn-primary" onClick={startDraft} disabled={draftBusy}>
+              New deck
+            </button>
             {newDeckForm}
           </div>
         )}
@@ -1718,6 +1717,57 @@ export function DeckPanel({
 
         {deck && (
           <>
+            {deck.draft && (
+              <div className="draft-bar" role="status" id="draft-bar">
+                <b>{draftBarText(deck)}</b>
+                {draftMode === "save" ? (
+                  <span className="inline-confirm">
+                    <input
+                      className="text-input"
+                      value={draftName}
+                      autoFocus
+                      aria-label="Deck name"
+                      placeholder="Deck name"
+                      onChange={(e) => setDraftName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveDraftDeck();
+                        if (e.key === "Escape") setDraftMode(null);
+                      }}
+                    />
+                    <button type="button" className="sc-btn sc-btn-primary sc-btn-small" id="draft-save-confirm" onClick={saveDraftDeck} disabled={draftBusy || !draftName.trim()}>
+                      Save deck
+                    </button>
+                    <button type="button" className="sc-btn sc-btn-ghost sc-btn-small" onClick={() => setDraftMode(null)}>Cancel</button>
+                  </span>
+                ) : draftMode === "discard" ? (
+                  <span className="inline-confirm">
+                    Discard this draft?
+                    <button type="button" className="sc-btn sc-btn-primary sc-btn-small" id="draft-discard-confirm" onClick={discardDraftDeck} disabled={draftBusy}>
+                      Yes, discard
+                    </button>
+                    <button type="button" className="sc-btn sc-btn-ghost sc-btn-small" onClick={() => setDraftMode(null)}>Keep</button>
+                  </span>
+                ) : (
+                  <span className="inline-confirm">
+                    <button
+                      type="button"
+                      className="sc-btn sc-btn-primary sc-btn-small"
+                      id="draft-save"
+                      onClick={() => {
+                        setDraftName(draftSaveName(deck.commander));
+                        setDraftMode("save");
+                      }}
+                    >
+                      Save
+                    </button>
+                    <button type="button" className="sc-btn sc-btn-ghost sc-btn-small" id="draft-discard" onClick={() => setDraftMode("discard")}>
+                      Discard
+                    </button>
+                  </span>
+                )}
+                {draftError && <span className="sc-chip sc-chip-error">{draftError}</span>}
+              </div>
+            )}
             <header className="hero">
               {deck.commanderImage && (
                 <img className="commander-thumb" src={deck.commanderImage} alt="" loading="lazy" />
@@ -1986,7 +2036,7 @@ export function DeckPanel({
               ) : (
                 <div className="commander-line">
                   <span className="commander-label">Commander</span>{" "}
-                  <CardName name={deck.commander} image={deck.commanderImage} />
+                  {deck.commander ? <CardName name={deck.commander} image={deck.commanderImage} /> : <span className="text-dim">none yet</span>}
                   <button
                     type="button"
                     className="link change-commander-btn"
@@ -1995,7 +2045,7 @@ export function DeckPanel({
                     aria-label="Change commander"
                     title="Change commander"
                   >
-                    change
+                    {deck.commander ? "change" : "set"}
                   </button>
                 </div>
               )}
