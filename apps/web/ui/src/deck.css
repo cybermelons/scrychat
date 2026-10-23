@@ -123,23 +123,34 @@ h1.deckname[role="button"] { cursor: text; }
   padding: 1px 6px; border-radius: 8px; border: 1px solid currentColor; opacity: .75;
 }
 
-/* Flip view: sticky stacking cards + y-mandatory snap. Geometry mirrors flip-core.ts. */
-.flip-view { overflow-y: auto; scroll-snap-type: y mandatory; max-width: 100%; margin: var(--space-3, 12px) auto; width: 280px; outline-offset: 4px; overscroll-behavior: contain; }
-.flip-card { position: sticky; flex: none; width: 280px; }
+/* Riffle: drawer above the list in the deck scroller; 2 snap areas (drawer, list). */
+.deck.has-riffle { scroll-snap-type: y mandatory; }
+.riffle-drawer { scroll-snap-align: start; min-height: max(100%, 800px); box-sizing: border-box; padding: var(--space-4, 16px); display: flex; justify-content: center; align-items: flex-end; background: var(--bg-surface); border-bottom: 1px solid var(--bg-border, #333); }
+.deck-list { scroll-snap-align: start; }
+.flip-root { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 100%; }
+.flip-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: center; font-size: 12px; }
+.flip-bar select { font: inherit; background: var(--bg-elevated, #222); color: inherit; border: 1px solid var(--bg-border, #333); border-radius: 6px; padding: 2px 4px; }
+.flip-count { opacity: .6; }
+.flip-wrap { display: flex; justify-content: center; gap: 12px; align-items: flex-start; max-width: 100%; }
+.flip-view { overflow-y: auto; scroll-snap-type: y mandatory; width: 280px; max-width: 100%; outline-offset: 4px; scrollbar-width: none; }
+.flip-sizer { position: relative; }
+.flip-stage { position: sticky; top: 0; width: 280px; overflow: hidden; }
+.flip-snap { position: absolute; left: 0; width: 1px; height: 1px; scroll-snap-align: start; pointer-events: none; }
+.flip-card { position: absolute; left: 0; top: 0; width: 280px; cursor: pointer; will-change: transform; }
 .flip-card img, .flip-noimg { display: block; width: 280px; height: 100%; border-radius: 12px; box-shadow: 0 -2px 6px rgba(0,0,0,.45); background: #1b1b22; object-fit: cover; }
 .flip-noimg { padding: 12px; box-sizing: border-box; }
-.flip-wrap { display: flex; justify-content: center; gap: 12px; align-items: flex-start; margin: var(--space-3, 12px) 0; }
-.flip-wrap .flip-view { margin: 0; }
 .flip-rail { display: flex; flex-direction: column; gap: 4px; max-height: 678px; overflow-y: auto; }
-.flip-tab { text-align: left; font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 0 8px 8px 0; border: 1px solid var(--border, #333); border-left: 3px solid transparent; background: transparent; color: inherit; cursor: pointer; white-space: nowrap; }
+.flip-tab { text-align: left; font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 0 8px 8px 0; border: 1px solid var(--bg-border, #333); border-left: 3px solid transparent; background: transparent; color: inherit; cursor: pointer; white-space: nowrap; }
 .flip-tab span { opacity: .6; margin-left: 4px; }
 .flip-tab.on { border-left-color: var(--accent, #e8833a); background: rgba(232,131,58,.15); }
 .flip-handle { position: absolute; top: 6px; right: 6px; font: inherit; font-size: 11px; padding: 1px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,.4); background: rgba(20,20,26,.85); color: #fff; cursor: pointer; }
+.flip-handle.sub { top: 28px; font-size: 9px; padding: 0 6px; opacity: .85; }
 @media (max-width: 560px) {
   .flip-wrap { flex-direction: column; align-items: center; }
   .flip-rail { flex-direction: row; max-width: 100%; max-height: none; overflow-x: auto; overflow-y: visible; }
   .flip-tab { border-radius: 8px 8px 0 0; border-left-width: 1px; border-bottom: 3px solid transparent; }
-  .flip-tab.on { border-left-color: var(--border, #333); border-bottom-color: var(--accent, #e8833a); }
+  .flip-tab.on { border-left-color: var(--bg-border, #333); border-bottom-color: var(--accent, #e8833a); }
 }
-.flip-view { position: relative; }
-.flip-snap { position: absolute; left: 0; width: 1px; height: 1px; scroll-snap-align: start; pointer-events: none; }
+.flip-peek { align-self: stretch; display: flex; flex-direction: column; gap: 2px; font-size: 12px; margin-top: 4px; }
+.flip-peek div { padding: 4px 10px; border: 1px solid var(--bg-border, #333); border-radius: 6px; background: var(--bg-elevated, #222); }
+.flip-peek span { text-align: center; opacity: .5; font-size: 10px; }
