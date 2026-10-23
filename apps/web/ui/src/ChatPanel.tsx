@@ -376,6 +376,10 @@ export function ChatPanel({
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [tab, setTab] = useState<"chat" | "cards" | "history">("chat");
+  const [histView, setHistView] = useState<"edits" | "chats">("edits");
+  const [edits, setEdits] = useState<{ at: string; action: string }[]>([]);
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const tipsRef = useRef<HTMLSpanElement>(null);
   const [historyScope, setHistoryScope] = useState<"all" | "deck">("all");
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -1210,6 +1214,48 @@ export function ChatPanel({
     });
   }, [messages, deckCardNames, showInDeck, groupPopover]);
 
+  useEffect(() => {
+    if (!selected) {
+      setEdits([]);
+      return;
+    }
+    let live = true;
+    fetch(`/api/decks/${encodeURIComponent(selected)}/history`)
+      .then((r) => (r.ok ? r.json() : { entries: [] }))
+      .then((d: { entries?: { at: string; action: string }[] }) => live && setEdits(d.entries ?? []))
+      .catch(() => live && setEdits([]));
+    const san = (v: string) => v.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const es = new EventSource("/api/deck-events");
+    es.onmessage = (e) => {
+      try {
+        const m = JSON.parse(e.data) as { type?: string; deck?: string; entry?: { at: string; action: string } };
+        if (m.type === "history" && m.entry && m.deck && san(m.deck) === san(selected)) {
+          setEdits((prev) => [m.entry!, ...prev]);
+        }
+      } catch {
+        /* ignore malformed events */
+      }
+    };
+    return () => {
+      live = false;
+      es.close();
+    };
+  }, [selected]);
+
+  useEffect(() => {
+    if (!tipsOpen) return;
+    const down = (e: MouseEvent) => {
+      if (!tipsRef.current?.contains(e.target as Node)) setTipsOpen(false);
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setTipsOpen(false);
+    document.addEventListener("mousedown", down);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", down);
+      document.removeEventListener("keydown", key);
+    };
+  }, [tipsOpen]);
+
   const historyList = historyScope === "deck" && selected ? deckChats : chats;
   const pane = (name: typeof tab) => `chatpane${tab === name ? " on" : ""}`;
 
@@ -1413,6 +1459,35 @@ export function ChatPanel({
             <div className="history-bar">
               <select
                 className="chat-select"
+                value={histView}
+                onChange={(e) => setHistView(e.target.value as "edits" | "chats")}
+                aria-label="History view"
+              >
+                <option value="edits">Edits</option>
+                <option value="chats">Chats</option>
+              </select>
+            </div>
+            {histView === "edits" && (
+              <div id="edit-history">
+                {edits.length === 0 ? (
+                  <div className="empty">
+                    <b>No edit history yet</b>
+                    Cards you add, cut, or move between mainboard and sideboard will appear here.
+                  </div>
+                ) : (
+                  edits.map((en, i) => (
+                    <div className="histitem" key={`${en.at}-${i}`}>
+                      <span className="histtitle">{en.action}</span>
+                      <span className="meta">{en.at}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            {histView === "chats" && (<>
+            <div className="history-bar">
+              <select
+                className="chat-select"
                 value={historyScope}
                 onChange={(e) => setHistoryScope(e.target.value as "all" | "deck")}
                 aria-label="Chat scope"
@@ -1505,6 +1580,7 @@ export function ChatPanel({
                 )}
               </div>
             ))}
+            </>)}
           </div>
         </div>
       </div>
@@ -1576,9 +1652,37 @@ export function ChatPanel({
               >
                 &#128247;&#8288;Present
               </button>
-              <button type="button" className="mini" onClick={stub("Prompt tips")}>
-                Tips
-              </button>
+              <span ref={tipsRef} style={{ position: "relative" }}>
+                <button type="button" className="mini" aria-expanded={tipsOpen} onClick={() => setTipsOpen((o) => !o)}>
+                  Tips
+                </button>
+                {tipsOpen && (
+                  <div
+                    id="tips-popover"
+                    role="dialog"
+                    aria-label="Prompt tips"
+                    style={{
+                      position: "absolute",
+                      bottom: "100%",
+                      left: 0,
+                      zIndex: 20,
+                      width: 260,
+                      padding: "var(--space-3, 12px)",
+                      background: "var(--bg-elevated, var(--bg-surface, #222))",
+                      border: "1px solid var(--bg-border, #444)",
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                  >
+                    <ul style={{ margin: 0, paddingLeft: 16 }}>
+                      <li>[[Card]] links a card name</li>
+                      <li>![[Card]] shows the card image</li>
+                      <li>Playtest keys: A token, N next turn, D draw, V view, S shuffle, Z undo</li>
+                      <li>Esc closes popovers and dialogs</li>
+                    </ul>
+                  </div>
+                )}
+              </span>
               <span className="meta" id="deck-chip" title="active deck">
                 {selected ? `${selected}${deckCardNames.size > 0 ? ` · ${deckCardNames.size}` : ""}` : "No deck selected"}
               </span>

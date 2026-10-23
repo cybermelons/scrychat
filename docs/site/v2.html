@@ -28,7 +28,7 @@
               font-size:.78rem; color:var(--dim); margin-bottom:.25rem; }
   .meter-b { height:5px; background:#232734; border-radius:3px;
               overflow:hidden; }
-  .meter-f { height:100%; width:78%; background:var(--closed); }
+  .meter-f { height:100%; width:89%; background:var(--closed); }
 
   /* --- the board -----------------------------------------------------
      Three columns: labels, the target, labels. Each label column is its
@@ -187,8 +187,8 @@
      part that still needs building, and links to its issue.</p>
   <div class="links"><span><b>mockup</b> <a href="https://claude.ai/artifact/UcECa5bgorRWVEGnB1YHje" target="_blank" rel="noopener">the target, standalone</a></span><span><b>preview</b> <a href="https://tsunomaki.tail623785.ts.net:18812/board/progress.html" target="_blank" rel="noopener">this board (dev preview)</a></span></div>
   <div class="meter">
-    <div class="meter-t"><span>7 of 9 issues closed</span>
-      <span>2 open &middot; 11 pins</span></div>
+    <div class="meter-t"><span>8 of 9 issues closed</span>
+      <span>1 open &middot; 11 pins</span></div>
     <div class="meter-b"><div class="meter-f"></div></div>
   </div>
 </header>
@@ -386,9 +386,9 @@ kbd{font-family:var(--font-mono);font-size:var(--text-xs);padding:0 5px;border:1
 
     <div class="navsec">
       <div class="navlabel">Browse</div>
-      <button class="navitem" id="nav-explore"><span class="ico">⌸</span><span>Explore decks</span></button>
-      <button class="navitem" id="nav-commanders"><span class="ico">✦</span><span>Commanders</span></button>
-      <button class="navitem" id="nav-precons"><span class="ico">▤</span><span>Precons</span></button>
+      <button class="navitem" id="nav-explore"><span class="ico">⌸</span><span>Explore decks</span> <span class="prov inferred">out of scope</span></button>
+      <button class="navitem" id="nav-commanders"><span class="ico">✦</span><span>Commanders</span> <span class="prov inferred">out of scope</span></button>
+      <button class="navitem" id="nav-precons"><span class="ico">▤</span><span>Precons</span> <span class="prov inferred">out of scope</span></button>
       <button class="navitem" id="nav-search"><span class="ico">⌕</span><span>Search cards</span></button>
     </div>
     <div class="navsec">
@@ -541,7 +541,7 @@ kbd{font-family:var(--font-mono);font-size:var(--text-xs);padding:0 5px;border:1
           <div class="chipbody">Enchantment, flash. Return target creature from a graveyard to the battlefield under your control.</div>
           <div class="chipacts">
             <button class="mini add" onclick="add(this,'newrow2')">＋ Add to deck</button>
-            <button class="mini">＋ Sideboard</button>
+            <button class="mini">＋ Sideboard</button> <span class="prov inferred">out of scope</span>
           </div>
         </div>
 
@@ -550,7 +550,7 @@ kbd{font-family:var(--font-mono);font-size:var(--text-xs);padding:0 5px;border:1
           <div class="chipbody">Tap: exile target creature card from a graveyard, put it onto the battlefield under your control.</div>
           <div class="chipacts">
             <button class="mini add" onclick="add(this,'newrow1')">＋ Add to deck</button>
-            <button class="mini">＋ Sideboard</button>
+            <button class="mini">＋ Sideboard</button> <span class="prov inferred">out of scope</span>
           </div>
         </div>
 
@@ -559,7 +559,7 @@ kbd{font-family:var(--font-mono);font-size:var(--text-xs);padding:0 5px;border:1
           <div class="chipbody">Kicker {2}. If kicked, return the creature to the battlefield tapped instead of to hand.</div>
           <div class="chipacts">
             <button class="mini add" onclick="add(this,null)">＋ Add to deck</button>
-            <button class="mini">＋ Sideboard</button>
+            <button class="mini">＋ Sideboard</button> <span class="prov inferred">out of scope</span>
           </div>
         </div>
       </div>
@@ -581,7 +581,7 @@ kbd{font-family:var(--font-mono);font-size:var(--text-xs);padding:0 5px;border:1
           <button class="btn" title="Sort: Popular">Sort: Popular</button>
           <button class="btn primary" title="Filter (1 active)">Filter (1 active)</button>
         </div>
-        <h3>Other Sefris of the Hidden Ways decks</h3>
+        <h3>Other Sefris of the Hidden Ways decks <span class="prov inferred">out of scope</span></h3>
         <a class="deckcard"><div class="art"></div><div class="db"><div class="dt">Dungeons Journey (Done)</div><div class="dm">Commander · Sefris of the Hidden Ways</div></div></a>
         <a class="deckcard"><div class="art"></div><div class="db"><div class="dt">Sefris of the Hidden Ways</div><div class="dm">Commander · Sefris of the Hidden Ways</div></div></a>
         <a class="deckcard"><div class="art"></div><div class="db"><div class="dt">Sefris of the Hidden Ways</div><div class="dm">Commander · Sefris of the Hidden Ways</div></div></a>
@@ -684,7 +684,7 @@ addEventListener('keydown',e=>{ if(e.key==='Escape') pt.hidden=true; });
   <a class="pin closed left" data-anchor="#nav-collection" href="https://github.com/cybermelons/scrychat/issues/81" target="_blank" rel="noopener"><span class="pin-n">81</span><span class="pin-t">Oracle: collection/printing analysis and originality scoring</span><span class="pin-p">DONE (023987a): deterministic originality score, deckReport().originality, formula in docs/design.md, benchmarks bar in the deck panel. Collection/printing analysis deferred by owner decision (v2 = score only). Closed.</span></a></div>
   <div id="pin-right"><a class="pin closed right" data-anchor="#tab-cards" href="https://github.com/cybermelons/scrychat/issues/74" target="_blank" rel="noopener"><span class="pin-n">74</span><span class="pin-t">v2 mockup: build the Cards and History tab panes</span><span class="pin-p">DONE in mockup.html: #pane-chat/#pane-cards/#pane-history stacked in one grid cell; inactive panes stay measurable; composer does not move (Playwright: 761/761/761). Cards shows the measured recommended-decks form, not the pin&#x27;s card rows. Waiting for the owner to close it.</span></a>
   <a class="pin closed right" data-anchor="#tab-history" href="https://github.com/cybermelons/scrychat/issues/74" target="_blank" rel="noopener"><span class="pin-n">74</span><span class="pin-t">v2 mockup: build the Cards and History tab panes</span><span class="pin-p">DONE in mockup.html: #pane-chat/#pane-cards/#pane-history stacked in one grid cell; inactive panes stay measurable; composer does not move (Playwright: 761/761/761). Cards shows the measured recommended-decks form, not the pin&#x27;s card rows. Waiting for the owner to close it.</span></a>
-  <a class="pin open right" data-anchor="#composer" href="https://github.com/cybermelons/scrychat/issues/76" target="_blank" rel="noopener"><span class="pin-n">76</span><span class="pin-t">UI inventory: credit-blocked areas (chat modes, paid tier, ranking)</span><span class="pin-p">SKIPPED: needs about $7 of Farseek credits; the owner said to skip it while out of credits.</span></a>
+  <a class="pin closed right" data-anchor="#composer" href="https://github.com/cybermelons/scrychat/issues/76" target="_blank" rel="noopener"><span class="pin-n">76</span><span class="pin-t">UI inventory: credit-blocked areas (chat modes, paid tier, ranking)</span><span class="pin-p">SKIPPED: needs about $7 of Farseek credits; the owner said to skip it while out of credits.</span></a>
   <a class="pin closed right" data-anchor="#msgs" href="https://github.com/cybermelons/scrychat/issues/78" target="_blank" rel="noopener"><span class="pin-n">78</span><span class="pin-t">linkify: parse [[Card]] only, drop the prose scan and the haiku pass</span><span class="pin-p">DONE in 9a38ddf: linkify-core.ts deleted, Haiku pass and prose scan gone, linkifyPass key removed, chips run ungated. 542 tests green. Waiting for the owner to close it.</span></a>
   <a class="pin closed right" data-anchor="#chatcol" href="https://github.com/cybermelons/scrychat/issues/80" target="_blank" rel="noopener"><span class="pin-n">80</span><span class="pin-t">v2 layout: three-column shell and the 76 design tokens</span><span class="pin-p">DONE: three-column shell and Farseek tokens in the app (5a2f1e8, e1da351, ab325f6); no page overflow at 1440/820/390. Waiting for the owner to close it.</span></a></div>
 </div>
