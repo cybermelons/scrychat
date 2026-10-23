@@ -19,7 +19,7 @@
       "n": 73,
       "anchor": "#sidebar",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "v2 mockup: add element ids to every pinnable region",
       "pin": "DONE: mockup ids 4 -> 32, and the app carries them (waves 3-4). Waiting for the owner to close it (gh issue close is blocked for the loop)."
     },
@@ -27,7 +27,7 @@
       "n": 74,
       "anchor": "#tab-cards",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "v2 mockup: build the Cards and History tab panes",
       "pin": "DONE in mockup.html: #pane-chat/#pane-cards/#pane-history stacked in one grid cell; inactive panes stay measurable; composer does not move (Playwright: 761/761/761). Cards shows the measured recommended-decks form, not the pin's card rows. Waiting for the owner to close it."
     },
@@ -35,7 +35,7 @@
       "n": 74,
       "anchor": "#tab-history",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "v2 mockup: build the Cards and History tab panes",
       "pin": "DONE in mockup.html: #pane-chat/#pane-cards/#pane-history stacked in one grid cell; inactive panes stay measurable; composer does not move (Playwright: 761/761/761). Cards shows the measured recommended-decks form, not the pin's card rows. Waiting for the owner to close it."
     },
@@ -43,7 +43,7 @@
       "n": 75,
       "anchor": "#tb-playtest",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "v2 mockup: playtest overlay",
       "pin": "DONE in mockup.html: #playtest fixed overlay, #pt-topbar/#pt-battlefield/#pt-hand/#pt-piles, opened by #tb-playtest, Back/Esc close, no URL change. Empty shape marked UNVERIFIED, kbd hints STATED. Waiting for the owner to close it."
     },
@@ -67,7 +67,7 @@
       "n": 78,
       "anchor": "#msgs",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "linkify: parse [[Card]] only, drop the prose scan and the haiku pass",
       "pin": "DONE in 9a38ddf: linkify-core.ts deleted, Haiku pass and prose scan gone, linkifyPass key removed, chips run ungated. 542 tests green. Waiting for the owner to close it."
     },
@@ -75,7 +75,7 @@
       "n": 79,
       "anchor": "#strategy",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "Promote function-first deckbuilding from prompt text into UI + API schema",
       "pin": "DONE in 0d89735: wincon quota role, Deck.bracket/budgetUsd, priceUsd + contractViolations in deckReport, deck_set_meta tool, deck_present refuses while violations exist; SKILL.md prose moved to the contract. Bracket is stored, not rule-checked. Waiting for the owner to close it."
     },
@@ -83,7 +83,7 @@
       "n": 80,
       "anchor": "#deckcol",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "v2 layout: three-column shell and the 76 design tokens",
       "pin": "DONE: three-column shell and Farseek tokens in the app (5a2f1e8, e1da351, ab325f6); no page overflow at 1440/820/390. Waiting for the owner to close it."
     },
@@ -91,7 +91,7 @@
       "n": 80,
       "anchor": "#chatcol",
       "side": "right",
-      "state": "open",
+      "state": "closed",
       "title": "v2 layout: three-column shell and the 76 design tokens",
       "pin": "DONE: three-column shell and Farseek tokens in the app (5a2f1e8, e1da351, ab325f6); no page overflow at 1440/820/390. Waiting for the owner to close it."
     },
