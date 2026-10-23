@@ -47,3 +47,36 @@ h1.deckname[role="button"] { cursor: text; }
 #benchmarks .curve { margin-top: var(--space-4); max-width: 620px; }
 .benchnote { margin-top: var(--space-3); cursor: default; }
 .benchnote:hover { text-decoration: none; }
+
+/* ---- playtest overlay ---- */
+.playtest{position:fixed;inset:0;z-index:100;background:rgb(26,24,22);display:grid;grid-template-rows:49px 1fr 240px}
+#pt-topbar{display:flex;align-items:center;gap:var(--space-2);padding:0 12px;border-bottom:1px solid var(--bg-border)}
+#pt-topbar .sp{flex:1}
+#pt-topbar .pill{padding:2px var(--space-4);border:1px solid var(--bg-border);border-radius:var(--radius-full);font-size:var(--text-sm)}
+#pt-battlefield{display:flex;flex-wrap:wrap;align-content:flex-start;gap:var(--space-3);padding:var(--space-4);color:var(--text-muted);min-height:0;overflow:auto}
+#pt-bottom{display:flex;border-top:1px solid var(--bg-border);min-height:0}
+#pt-hand{flex:1;padding:var(--space-2) var(--space-3);color:var(--text-muted);font-size:var(--text-xs);letter-spacing:.08em;min-width:0}
+.ptrow{display:flex;gap:6px;overflow-x:auto;padding-top:6px}
+#pt-piles{display:flex;gap:8px;padding:var(--space-2) var(--space-3)}
+#pt-piles .pile{width:132px;display:flex;flex-direction:column;gap:var(--space-2);font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em}
+#pt-piles .slot,.ptstack{width:110px;height:154px;border:1px dashed var(--bg-border);border-radius:var(--radius-sm);overflow:hidden;display:flex;align-items:center;justify-content:center;text-align:center}
+.slot img{width:100%;height:100%;object-fit:cover}
+.ptback{color:var(--text-secondary)}
+.ptcard{position:relative;flex:none;width:110px;height:154px;border:1px solid var(--bg-border);border-radius:var(--radius-sm);background:var(--bg-elevated);color:var(--text-primary);font-size:var(--text-xs);display:flex;align-items:center;justify-content:center;text-align:center;cursor:pointer;transition:transform .15s}
+.ptcard img{width:100%;height:100%;border-radius:inherit;object-fit:cover}
+.ptcard.tapped{transform:rotate(90deg);margin:22px}
+.ptmore{position:absolute;top:2px;right:2px;padding:0 5px;border:0;border-radius:var(--radius-sm);background:#000a;color:#fff;cursor:pointer}
+.ptmenu{position:fixed;z-index:110;display:flex;flex-direction:column;background:var(--bg-elevated);border:1px solid var(--bg-border);border-radius:var(--radius-sm)}
+.ptmenu button{background:none;border:0;color:var(--text-primary);padding:6px 12px;text-align:left;cursor:pointer}
+.ptmenu button:hover{background:var(--bg-hover)}
+.ptlib{position:fixed;z-index:105;right:12px;top:60px;bottom:250px;width:260px;overflow:auto;background:var(--bg-elevated);border:1px solid var(--bg-border);padding:var(--space-3);font-size:var(--text-sm)}
+#pt-topbar{gap:6px;min-width:0}
+#pt-topbar .btn,#pt-topbar .pill{white-space:nowrap}
+.ptmoredd{position:relative}
+.ptmoredd summary{list-style:none;cursor:pointer}
+.ptmorem{position:absolute;right:0;top:100%;z-index:120;white-space:nowrap}
+#pt-bottom{overflow:hidden}
+#pt-piles{flex:none;gap:6px;padding:var(--space-2)}
+#pt-piles .pile{width:92px}
+#pt-piles .slot,.ptstack{width:88px;height:123px}
+#pt-piles .ptcard{width:88px;height:123px}

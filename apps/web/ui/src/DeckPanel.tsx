@@ -16,6 +16,9 @@ import { renderManaSymbols } from "./markdown";
 import { CollectionSync } from "./CollectionSync";
 import { Suggestions } from "./Suggestions";
 import { stub } from "./stub";
+import { Playtest, toResolved } from "./Playtest";
+import { playtest as ptReduce, newGame } from "../../../../packages/core/src/playtest.ts";
+import type { PlaytestState } from "../../../../packages/core/src/playtest.ts";
 import "./deck.css";
 
 const CURVE_ORDER = ["0", "1", "2", "3", "4", "5", "6", "7+"];
@@ -185,6 +188,9 @@ export function DeckPanel({
   const [decks, setDecks] = useState<DeckSummary[]>([]);
   const [deck, setDeck] = useState<Deck | null>(null);
   const [report, setReport] = useState<DeckReport | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [sample, setSample] = useState<PlaytestState | null>(null);
+  const newSample = () => deck && setSample(newGame(toResolved(deck, false), [], Date.now() + Math.floor(Math.random() * 1e6)));
   const [collectionInfo, setCollectionInfo] = useState<
     { importedAt: string; ownedCount: number; missingCount: number } | null
   >(null);
@@ -2134,7 +2140,7 @@ export function DeckPanel({
                   </button>
                 </>
               )}
-              <button type="button" className="btn" id="tb-playtest" onClick={stub("Playtest")}>
+              <button type="button" className="btn" id="tb-playtest" onClick={() => setPlaying(true)}>
                 Playtest
               </button>
               <div className="tbspacer" />
@@ -2248,22 +2254,29 @@ export function DeckPanel({
 
             <Suggestions deckName={deck.name} onApplied={onSuggestionApplied} />
 
+            {playing && <Playtest deck={deck} onClose={() => setPlaying(false)} />}
             <section className="section" id="samplehand">
               <div className="sechead">
                 <div className="sectitle">Sample hand</div>
                 <div style={{ display: "flex", gap: "var(--space-2)" }}>
-                  <button type="button" className="btn" onClick={stub("Sample hand")}>
+                  <button type="button" className="btn" onClick={newSample}>
                     New hand
                   </button>
-                  <button type="button" className="btn" onClick={stub("Sample hand")}>
+                  <button type="button" className="btn" onClick={() => (sample ? setSample(ptReduce(sample, { type: "draw" })) : newSample())}>
                     Draw
                   </button>
                 </div>
               </div>
               <div className="hand" id="hand">
-                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                  <div className="hcard" key={i}>—</div>
-                ))}
+                {sample
+                  ? sample.hand.map((c) => (
+                      <div className="hcard" key={c.id} title={c.name}>
+                        {c.image ? <img src={c.image} alt={c.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} /> : c.name}
+                      </div>
+                    ))
+                  : [0, 1, 2, 3, 4, 5, 6].map((i) => (
+                      <div className="hcard" key={i}>—</div>
+                    ))}
               </div>
             </section>
 
