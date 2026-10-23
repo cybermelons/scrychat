@@ -1,6 +1,6 @@
 # Riffle view (spec)
 
-Status: in build, 2026-10-23. Owner requests are quoted; decisions made
+Status: sections 1-3 built and deployed (c07f2ce, 6fb6f15), 2026-10-23. Sections 4 (piles) and 5 (stable state) are NOT built; the owner closed the work without them. Owner requests are quoted; decisions made
 without the owner are marked **(guess)**. Change a guess by editing this file.
 
 ## Idea
