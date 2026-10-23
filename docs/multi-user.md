@@ -1,6 +1,6 @@
 # Multi-user scrychat (draft plan)
 
-Status: Phases 1-2 built (lockdown, per-user storage). Phase 3 not yet. Phases 4-5 are owner actions on the NAS.
+Status: Phases 1-3 built (lockdown, per-user storage, limits). Phases 4-5 are owner actions on the NAS.
 
 Goal: a few friends use scrychat at `scrychat.evangelista.moe`, each with
 their own decks and chats, all on the owner's Claude subscription. Private
@@ -100,7 +100,7 @@ a CSRF token (the app reads no auth cookie).
 | 2 (built) | `packages/core/src/collection.ts` | Callers pass the collection path. Keep the default only for the CLI. |
 | 2 (built) | `packages/mcp/src/tools.ts` | `ROOT` from `SCRYCHAT_ROOT`. Use it at lines 56, 59, 70, 93. Pass `join(ROOT,"collection.json")` to `getOwnedIndex` at 205, 229, 293. |
 | 2 (built) | `apps/web/src/deck-history-core.ts` | No change; callers key by `user/deck`. |
-| 3 | `apps/web/src/server.ts` | Turn semaphore, daily budget, `pausedUntil`, `GET /api/admin/usage`. Pure helpers in a `*-core.ts` with tests. |
+| 3 (built) | `apps/web/src/server.ts` | Turn semaphore, daily budget, `pausedUntil`, `GET /api/admin/usage`. Pure helpers in a `limits-core.ts` with tests. |
 | 1-3 | `docs/deploy-nas.md` | New mounts, env, tunnel route, security gate record. |
 
 ## Phases and exit checks

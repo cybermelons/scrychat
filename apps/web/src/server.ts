@@ -57,6 +57,7 @@ import { getCollectionHealth, getDbHealth } from "./health-core.js";
 import { isValidDeckName } from "./deck-name-core.js";
 import { ALLOWED_TOOLS, DISALLOWED_TOOLS } from "./tools-core.js";
 import { createRequireUser } from "./auth.js";
+import { createTurnLimiter, isUsageLimitError, pauseUntilFromError, REFUSAL_MESSAGE } from "./limits-core.js";
 import { userIdFromEmail, userPaths, chatFileFor, deckEventFor, migrateLegacy, type UserPaths } from "./users-core.js";
 import { parseConfig, applyConfigPatch, DEFAULT_CONFIG, type ScrychatConfig } from "./config-core.js";
 
@@ -124,6 +125,10 @@ function cfgOf(req: Request): ScrychatConfig {
   }
   return c;
 }
+
+// Shared-subscription limits (docs/multi-user.md decision 9): 2 concurrent turns
+// for everyone, a daily budget per non-owner, a pause on a usage-limit error.
+const limiter = createTurnLimiter({ ownerId: OWNER_ID });
 
 const app = express();
 
@@ -348,6 +353,15 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     Connection: "keep-alive",
   });
 
+  const slot = limiter.tryAcquire(req.user as string);
+  if (!slot.ok) {
+    sseWrite(res, { type: "done", error: REFUSAL_MESSAGE[slot.reason] });
+    res.end();
+    return;
+  }
+  // "close" fires when the response ends or the client drops: the slot cannot leak.
+  res.on("close", slot.release);
+
   const clientSessionId: string = typeof sessionId === "string" ? sessionId : crypto.randomUUID();
 
   const user = req.user as string;
@@ -536,7 +550,11 @@ app.post("/api/chat", async (req: Request, res: Response) => {
         if (msg.type === "result") {
           // A resume whose transcript is gone comes back as an error result with no output:
           // retry once as a fresh session instead of surfacing it (the chat JSON is kept).
-          if (resumeId && msg.is_error && segments.length === 0) throw new ResumeFailed(String((msg as any).result ?? ""));
+          if (msg.is_error) {
+          const text = String((msg as any).result ?? "");
+          if (isUsageLimitError(text)) limiter.pause(pauseUntilFromError(text, Date.now()));
+        }
+        if (resumeId && msg.is_error && segments.length === 0) throw new ResumeFailed(String((msg as any).result ?? ""));
           setSession(sessionKey, msg.session_id);
           chat.sdkSessionId = msg.session_id;
           sseWrite(res, {
@@ -549,6 +567,8 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       }
       break;
     } catch (err) {
+      const errText = err instanceof Error ? err.message : String(err);
+      if (isUsageLimitError(errText)) limiter.pause(pauseUntilFromError(errText, Date.now()));
       if (resumeId && attempt === 0 && segments.length === 0 && !res.writableEnded) {
         console.warn(`resume of ${resumeId} failed (${err instanceof Error ? err.message : String(err)}); starting a fresh session`);
         resumeId = undefined;
@@ -782,6 +802,15 @@ app.patch("/api/chats/:id", async (req: Request, res: Response) => {
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+// Owner-only: counts, pause and active turns of the shared subscription.
+app.get("/api/admin/usage", (req: Request, res: Response) => {
+  if (!OWNER_ID || req.user !== OWNER_ID) {
+    res.status(403).json({ error: "owner only" });
+    return;
+  }
+  res.json(limiter.usage());
 });
 
 // ---- UI action log: recent deck CRUD, surfaced to chat as context ----
