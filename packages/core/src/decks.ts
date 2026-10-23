@@ -46,6 +46,8 @@ export type Deck = {
   strategy?: string;
   /** Short theme labels (≤12, 1-40 chars, unique case-insensitively). */
   themes?: string[];
+  /** Unsaved "New deck" draft: a real file so every editor/chat/MCP op works, flagged until saved. */
+  draft?: true;
 };
 
 export type ResolvedCard = {
@@ -269,6 +271,33 @@ export async function createDeck(
   return deck;
 }
 
+/** Empty draft deck (no commander yet) under a generated `untitled-xxxxxx` name. */
+export async function createDraftDeck(decksDir: string = DEFAULT_DECKS_DIR()): Promise<Deck> {
+  const name = `untitled-${Math.random().toString(16).slice(2, 8)}`;
+  const deck: Deck = { name, commander: "", commanderIdentity: [], cards: [], updatedAt: new Date().toISOString(), draft: true };
+  await writeDeckFile(decksDir, deck);
+  return deck;
+}
+
+/** Rename a draft to its real name (refuses collisions / invalid names) and clear the flag. */
+export async function saveDraft(name: string, newName: string, decksDir: string = DEFAULT_DECKS_DIR()): Promise<Deck> {
+  const cur = await getDeck(name, decksDir);
+  if (!cur) throw new Error(`Deck not found: ${name}`);
+  if (!cur.draft) throw new Error(`Not a draft: ${name}`);
+  const deck = await renameDeck(name, newName, decksDir);
+  delete deck.draft;
+  await writeDeckFile(decksDir, deck);
+  return deck;
+}
+
+/** Delete a draft. Refuses saved decks. */
+export async function discardDraft(name: string, decksDir: string = DEFAULT_DECKS_DIR()): Promise<void> {
+  const cur = await getDeck(name, decksDir);
+  if (!cur) throw new Error(`Deck not found: ${name}`);
+  if (!cur.draft) throw new Error(`Not a draft: ${name}`);
+  await deleteDeck(name, decksDir);
+}
+
 export async function deleteDeck(
   name: string,
   decksDir: string = DEFAULT_DECKS_DIR()
@@ -402,7 +431,7 @@ export async function addCards(
       rejected.push({ name: card.name, reason: "Card is not legal in Commander" });
       continue;
     }
-    if (!isSubsetIdentity(resolved.colorIdentity, deck.commanderIdentity)) {
+    if (deck.commander && !isSubsetIdentity(resolved.colorIdentity, deck.commanderIdentity)) {
       rejected.push({
         name: card.name,
         reason: `Color identity [${resolved.colorIdentity.join(
@@ -861,7 +890,7 @@ export async function deckReport(
     if (typeof resolved?.usd === "number") priceTotal += resolved.usd * count;
     else unpriced += count;
     if (resolved) {
-      if (!isSubsetIdentity(resolved.colorIdentity, deck.commanderIdentity)) {
+      if (deck.commander && !isSubsetIdentity(resolved.colorIdentity, deck.commanderIdentity)) {
         identityViolations.push(card.name);
       }
       const isLand = resolved.typeLine.includes("Land");

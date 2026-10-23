@@ -112,3 +112,13 @@ h1.deckname[role="button"] { cursor: text; }
 .otherdecks .deckcard:hover{background:var(--bg-hover)}
 .otherdecks .dm{font-size:var(--text-xs);color:var(--text-muted)}
 .otherdecks .dt{overflow-wrap:anywhere}
+
+.draft-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  padding: 8px 14px; margin-bottom: 8px;
+  border: 1px dashed var(--accent, #c9a227); border-radius: 8px;
+}
+.draft-badge {
+  margin-left: auto; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+  padding: 1px 6px; border-radius: 8px; border: 1px solid currentColor; opacity: .75;
+}

@@ -15,6 +15,9 @@ import {
   deckReport,
   exportDeck,
   createDeck,
+  createDraftDeck,
+  saveDraft,
+  discardDraft,
   addCards,
   removeCards,
   moveCardBoard,
@@ -933,7 +936,7 @@ app.get("/api/card-images", async (req: Request, res: Response) => {
 app.get("/api/decks", async (req: Request, res: Response) => {
   try {
     const decks = await listDecks(me(req).decks);
-    res.json(decks.map((d) => ({ name: d.name, commander: d.commander, updatedAt: d.updatedAt })));
+    res.json(decks.map((d) => ({ name: d.name, commander: d.commander, updatedAt: d.updatedAt, draft: d.draft })));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -961,7 +964,7 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
       return owned.names.has(frontFace);
     }
 
-    const commanderResolved = await resolver(deck.commander);
+    const commanderResolved = deck.commander ? await resolver(deck.commander) : null;
     const cardsWithImages = await Promise.all(
       deck.cards.map(async (c) => {
         const resolved = await resolver(c.name);
@@ -1041,6 +1044,28 @@ app.post("/api/decks", async (req: Request, res: Response) => {
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+// Unsaved "New deck" drafts: a real flagged file; Save renames + clears the flag, Discard deletes it.
+app.post("/api/decks/draft", async (req: Request, res: Response) => {
+  try { res.json({ deck: await createDraftDeck(me(req).decks) }); } catch (err) { res.status(400).json({ error: String(err instanceof Error ? err.message : err) }); }
+});
+app.post("/api/decks/:name/save-draft", async (req: Request, res: Response) => {
+  try {
+    const to = req.body?.name;
+    if (!isValidDeckName(req.params.name) || !isValidDeckName(to)) { res.status(400).json({ error: "invalid deck name" }); return; }
+    const deck = await saveDraft(req.params.name, to, me(req).decks);
+    deckHistory.rename(historyKey(req.user as string, req.params.name), historyKey(req.user as string, to));
+    res.json({ deck });
+  } catch (err) { res.status(400).json({ error: String(err instanceof Error ? err.message : err) }); }
+});
+app.delete("/api/decks/:name/draft", async (req: Request, res: Response) => {
+  try {
+    if (!isValidDeckName(req.params.name)) { res.status(400).json({ error: "invalid deck name" }); return; }
+    await discardDraft(req.params.name, me(req).decks);
+    deckHistory.delete(historyKey(req.user as string, req.params.name));
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: String(err instanceof Error ? err.message : err) }); }
 });
 
 // ---- browse: commanders (local mirror) + precons (MTGJSON) ----
