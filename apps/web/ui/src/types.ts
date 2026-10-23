@@ -19,6 +19,8 @@ export type Deck = {
   commanderImage?: string | null;
   bracket?: 1 | 2 | 3 | 4 | 5;
   budgetUsd?: number;
+  strategy?: string;
+  themes?: string[];
 };
 
 export type DeckSummary = {

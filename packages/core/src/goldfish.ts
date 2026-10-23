@@ -32,7 +32,7 @@ export type GoldfishResult = {
 };
 
 // mulberry32: small seeded PRNG, returns [0,1).
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -43,7 +43,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function shuffle<T>(a: T[], rnd: () => number): void {
+export function shuffle<T>(a: T[], rnd: () => number): void {
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(rnd() * (i + 1));
     [a[i], a[j]] = [a[j]!, a[i]!];

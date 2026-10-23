@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { DeckPanel } from "./DeckPanel";
 import { ChatPanel } from "./ChatPanel";
-import { stub } from "./stub";
 import type { AppConfig } from "./types";
 
 export function App() {
@@ -35,6 +34,11 @@ export function App() {
     goTab("deck");
     // #benchmarks is added by a later unit; wait a frame for the pane to show.
     requestAnimationFrame(() => document.getElementById("benchmarks")?.scrollIntoView());
+  };
+  // Cards pane lives inside ChatPanel: show it, then click its tab.
+  const openCards = () => {
+    goTab("chat");
+    requestAnimationFrame(() => document.getElementById("tab-cards")?.click());
   };
   const mtab = (_id: string, active: boolean) => `mtab${active ? " active" : ""}`;
 
@@ -72,7 +76,7 @@ export function App() {
         <button type="button" className={mtab("chat", tab === "chat" && !moreOpen)} id="mtab-chat" onClick={() => goTab("chat")}>
           <span className="ico">✦</span>Chat
         </button>
-        <button type="button" className="mtab" id="mtab-cards" onClick={stub("Cards search")}>
+        <button type="button" className="mtab" id="mtab-cards" onClick={openCards}>
           <span className="ico">⌕</span>Cards
         </button>
         <button type="button" className="mtab" id="mtab-analysis" onClick={goAnalysis}>

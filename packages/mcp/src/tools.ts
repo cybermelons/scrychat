@@ -124,6 +124,8 @@ const tuple = z.tuple([z.number(), z.number()]);
 const DECK_META = {
   bracket: z.number().int().min(1).max(5).optional().describe("Commander bracket 1-5 (stored, not rule-checked)"),
   budget_usd: z.number().positive().optional().describe("Whole-deck price ceiling in USD"),
+  strategy: z.string().max(2000).optional().describe("Free-text deck strategy"),
+  themes: z.array(z.string().min(1).max(40)).max(12).optional().describe("Theme labels; [] clears"),
   quota_targets: z
     .object({
       lands: tuple.optional(),

@@ -40,6 +40,10 @@ export type Deck = {
   bracket?: 1 | 2 | 3 | 4 | 5;
   /** Whole-deck price ceiling in USD. */
   budgetUsd?: number;
+  /** Free-text plan for the deck (≤2000 chars). */
+  strategy?: string;
+  /** Short theme labels (≤12, 1-40 chars, unique case-insensitively). */
+  themes?: string[];
 };
 
 export type ResolvedCard = {
@@ -689,6 +693,8 @@ export type DeckMeta = {
   bracket?: number;
   budget_usd?: number;
   quota_targets?: Partial<QuotaTargets>;
+  strategy?: string;
+  themes?: string[];
 };
 
 /** Sets bracket / budget / per-deck quota targets. Only given fields change. */
@@ -706,6 +712,24 @@ export async function setDeckMeta(
   if (meta.budget_usd !== undefined) {
     if (!(meta.budget_usd > 0)) throw new Error(`budget_usd must be positive: ${meta.budget_usd}`);
     deck.budgetUsd = meta.budget_usd;
+  }
+  if (meta.strategy !== undefined) {
+    if (meta.strategy.length > 2000) throw new Error("strategy must be at most 2000 chars");
+    deck.strategy = meta.strategy;
+  }
+  if (meta.themes !== undefined) {
+    const seen = new Set<string>();
+    const themes: string[] = [];
+    for (const raw of meta.themes) {
+      const t = raw.trim();
+      if (t.length < 1 || t.length > 40) throw new Error(`theme must be 1-40 chars: "${raw}"`);
+      if (seen.has(t.toLowerCase())) continue;
+      seen.add(t.toLowerCase());
+      themes.push(t);
+    }
+    if (themes.length > 12) throw new Error("at most 12 themes");
+    if (themes.length) deck.themes = themes;
+    else delete deck.themes;
   }
   for (const field of QUOTA_TARGET_FIELDS) {
     const v = meta.quota_targets?.[field];

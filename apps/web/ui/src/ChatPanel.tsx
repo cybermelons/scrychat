@@ -283,10 +283,14 @@ function AssistantBody({
   msg,
   deckCardNames,
   showInDeck,
+  vote,
+  onVote,
 }: {
   msg: ChatMessage;
   deckCardNames: Set<string>;
   showInDeck: boolean;
+  vote: number;
+  onVote: (v: 1 | -1) => void;
 }) {
   return (
     <>
@@ -345,8 +349,8 @@ function AssistantBody({
         {msg.interrupted && <span className="msg-interrupted">stopped</span>}
         <div className="feedback">
           <span>Helpful?</span>
-          <button type="button" className="mini" onClick={stub("Feedback")}>▲</button>
-          <button type="button" className="mini" onClick={stub("Feedback")}>▼</button>
+          <button type="button" className={`mini${vote === 1 ? " active" : ""}`} aria-pressed={vote === 1} onClick={() => onVote(1)}>▲</button>
+          <button type="button" className={`mini${vote === -1 ? " active" : ""}`} aria-pressed={vote === -1} onClick={() => onVote(-1)}>▼</button>
         </div>
       </div>
     </>
@@ -380,6 +384,29 @@ export function ChatPanel({
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [deckChats, setDeckChats] = useState<ChatSummary[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
+  // Per-message vote keyed by message index (messages carry no stable id).
+  const [feedback, setFeedback] = useState<Record<string, number>>({});
+  const cardsSearchRef = useRef<HTMLInputElement>(null);
+  const vote = (idx: number, v: 1 | -1) => {
+    const id = chatIdRef.current;
+    if (!id) return;
+    const key = String(idx);
+    const prev = feedback[key] ?? 0;
+    const next = prev === v ? 0 : v;
+    setFeedback((f) => ({ ...f, [key]: next }));
+    fetch(`/api/chats/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feedback: { [key]: next } }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      })
+      .catch((e) => {
+        console.error("feedback save failed", e);
+        setFeedback((f) => ({ ...f, [key]: prev }));
+      });
+  };
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatsRefreshFailed, setChatsRefreshFailed] = useState(false);
   const [deckChatsRefreshFailed, setDeckChatsRefreshFailed] = useState(false);
@@ -495,6 +522,7 @@ export function ChatPanel({
         chatIdRef.current = id;
         setChatId(id);
         sessionIdRef.current = null; // resume is driven server-side by the chat file now
+        setFeedback((file as { feedback?: Record<string, number> }).feedback ?? {});
         setMessages(
           file.messages.map((m) => ({
             role: m.role,
@@ -817,6 +845,16 @@ export function ChatPanel({
       setTimeout(() => textareaRef.current?.focus(), 0);
     }
   }, [input, streaming, updateLastAssistant, selected, refreshChats, pendingImages, clearPendingImages]);
+
+  // Cards-pane search: no card-search endpoint exists, so hand the query to the chat agent.
+  const searchCards = () => {
+    const el = cardsSearchRef.current;
+    const q = el?.value.trim();
+    if (!el || !q || streaming) return;
+    setTab("chat");
+    el.value = "";
+    void send(`Search Scryfall for: ${q}`);
+  };
 
   const retry = useCallback(() => {
     const last = lastUserMessageRef.current;
@@ -1259,7 +1297,7 @@ export function ChatPanel({
                   <div className="umsg" key={i}>{m.text}</div>
                 ) : (
                   <Fragment key={i}>
-                    <AssistantBody msg={m} deckCardNames={deckCardNames} showInDeck={showInDeck} />
+                    <AssistantBody msg={m} deckCardNames={deckCardNames} showInDeck={showInDeck} vote={feedback[String(i)] ?? 0} onVote={(v) => vote(i, v)} />
                   </Fragment>
                 )
               )}
@@ -1352,16 +1390,17 @@ export function ChatPanel({
             </div>
             <div className="inputbox">
               <input
+                ref={cardsSearchRef}
                 className="cards-search-input"
                 placeholder="Search cards…"
                 aria-label="Search cards"
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") stub("Cards search")(e as unknown as { currentTarget: Element });
+                  if (e.key === "Enter") searchCards();
                 }}
               />
               <div className="cfoot">
                 <span className="meta">Scryfall syntax</span>
-                <button type="button" className="send" onClick={stub("Cards search")}>
+                <button type="button" className="send" onClick={searchCards}>
                   Search
                 </button>
               </div>

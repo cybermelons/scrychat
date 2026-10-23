@@ -148,6 +148,18 @@ describe("decks", () => {
     expect(fetched?.name).toBe("Selesnya Value");
   });
 
+  it("setDeckMeta: themes dedupe, strategy round-trip, 13 themes throws", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await setDeckMeta("Selesnya Value", { strategy: "Go wide", themes: ["Tokens", "tokens", "Counters"] }, decksDir);
+    const d = await getDeck("Selesnya Value", decksDir);
+    expect(d?.strategy).toBe("Go wide");
+    expect(d?.themes).toEqual(["Tokens", "Counters"]);
+    const many = Array.from({ length: 13 }, (_, i) => `t${i}`);
+    await expect(setDeckMeta("Selesnya Value", { themes: many }, decksDir)).rejects.toThrow();
+    await setDeckMeta("Selesnya Value", { themes: [] }, decksDir);
+    expect((await getDeck("Selesnya Value", decksDir))?.themes).toBeUndefined();
+  });
+
   it("contract violations: budget and wincon, cleared by setDeckMeta", async () => {
     const priced: CardResolver = async (n) => {
       const c = await resolver(n);

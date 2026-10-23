@@ -19,6 +19,7 @@ import {
   removeCards,
   deleteDeck,
   setCardTags,
+  setDeckMeta,
   renameTag,
   renameDeck,
   setCommander,
@@ -48,6 +49,7 @@ import {
   type CategoryResolver,
 } from "./group-chips-core.js";
 import { parseCollectionBody, buildImportResult } from "./collection-core.js";
+import { createDeckHistory, mergeFeedback, unknownMetaField } from "./deck-history-core.js";
 import { getCollectionHealth, getDbHealth } from "./health-core.js";
 import { isValidDeckName } from "./deck-name-core.js";
 import { parseConfig, applyConfigPatch, DEFAULT_CONFIG, type ScrychatConfig } from "./config-core.js";
@@ -185,6 +187,7 @@ type ChatFile = {
   lastSeenActionIdx: number;
   messages: ChatMsg[];
   deckRefs?: string[];
+  feedback?: Record<string, 1 | -1>;
 };
 
 // mirrors packages/core/src/decks.ts sanitizeName (not exported there)
@@ -733,9 +736,15 @@ app.patch("/api/chats/:id", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid chat id" });
     return;
   }
-  const { title } = req.body ?? {};
-  if (typeof title !== "string" || title.trim().length === 0 || title.length > 200) {
-    res.status(400).json({ error: "invalid title" });
+  const { title, feedback } = req.body ?? {};
+  if (title !== undefined || feedback === undefined) {
+    if (typeof title !== "string" || title.trim().length === 0 || title.length > 200) {
+      res.status(400).json({ error: "invalid title" });
+      return;
+    }
+  }
+  if (feedback !== undefined && mergeFeedback(undefined, feedback) === null) {
+    res.status(400).json({ error: "invalid feedback" });
     return;
   }
   try {
@@ -744,10 +753,11 @@ app.patch("/api/chats/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Chat not found" });
       return;
     }
-    chat.title = title.trim();
+    if (typeof title === "string") chat.title = title.trim();
+    if (feedback !== undefined) chat.feedback = mergeFeedback(chat.feedback, feedback)!;
     chat.updatedAt = new Date().toISOString();
     await writeChatFile(chat);
-    res.json({ ok: true, title: chat.title });
+    res.json({ ok: true, title: chat.title, feedback: chat.feedback ?? {} });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -761,10 +771,19 @@ const actionLog: { t: number; text: string }[] = [];
 let pushed = 0; // total entries ever logged
 const lastSeenMap = new Map<string, number>(); // clientSessionId -> absolute index seen so far
 
-function logAction(text: string): void {
+// Per-deck edit history; also pushed live over /api/deck-events.
+// ponytail: in-memory ring, lost on restart; persist to JSONL in core when users ask
+const deckHistory = createDeckHistory();
+const historyListeners = new Set<(deck: string, entry: { at: string; action: string }) => void>();
+
+function logAction(text: string, deck?: string): void {
   actionLog.push({ t: Date.now(), text });
   pushed++;
   if (actionLog.length > ACTION_LOG_MAX) actionLog.shift();
+  if (deck) {
+    const entry = deckHistory.record(deck, text);
+    for (const fn of historyListeners) fn(deck, entry);
+  }
 }
 
 function recentActionsFor(clientSessionId: string): string[] {
@@ -969,7 +988,7 @@ app.post("/api/decks", async (req: Request, res: Response) => {
       return;
     }
     const deck = await createDeck(name, commander, resolver, DECKS_DIR);
-    logAction(`created deck "${deck.name}" (commander ${deck.commander})`);
+    logAction(`created deck "${deck.name}" (commander ${deck.commander})`, deck.name);
     res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -989,10 +1008,10 @@ app.post("/api/decks/:name/cards", async (req: Request, res: Response) => {
     }
     const result = await addCards(req.params.name, cards, resolver, DECKS_DIR);
     for (const c of result.added) {
-      logAction(`added "${c.name}"${c.tags?.length ? ` (${c.tags.join(", ")})` : ""} to "${req.params.name}"`);
+      logAction(`added "${c.name}"${c.tags?.length ? ` (${c.tags.join(", ")})` : ""} to "${req.params.name}"`, req.params.name);
     }
     for (const r of result.rejected) {
-      logAction(`tried to add "${r.name}" to "${req.params.name}" — rejected: ${r.reason}`);
+      logAction(`tried to add "${r.name}" to "${req.params.name}" — rejected: ${r.reason}`, req.params.name);
     }
     res.json(result);
   } catch (err) {
@@ -1025,7 +1044,7 @@ app.patch("/api/decks/:name/cards", async (req: Request, res: Response) => {
     }
     const deck = await setCardTags(req.params.name, cards, DECKS_DIR);
     for (const c of cards) {
-      logAction(`tagged "${c.name}" [${(c.tags ?? []).join(", ")}]`);
+      logAction(`tagged "${c.name}" [${(c.tags ?? []).join(", ")}] in "${req.params.name}"`, req.params.name);
     }
     res.json({ deck });
   } catch (err) {
@@ -1045,7 +1064,7 @@ app.patch("/api/decks/:name/tags", async (req: Request, res: Response) => {
       return;
     }
     const deck = await renameTag(req.params.name, from, to, DECKS_DIR);
-    logAction(`renamed tag "${from}" → "${to}" in "${req.params.name}"`);
+    logAction(`renamed tag "${from}" → "${to}" in "${req.params.name}"`, req.params.name);
     res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1065,7 +1084,7 @@ app.delete("/api/decks/:name/cards", async (req: Request, res: Response) => {
     }
     const deck = await removeCards(req.params.name, cards, DECKS_DIR);
     for (const name of cards) {
-      logAction(`removed "${name}" from "${req.params.name}"`);
+      logAction(`removed "${name}" from "${req.params.name}"`, req.params.name);
     }
     res.json({ deck });
   } catch (err) {
@@ -1084,7 +1103,8 @@ app.delete("/api/decks/:name", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Deck not found" });
       return;
     }
-    logAction(`deleted deck "${req.params.name}"`);
+    logAction(`deleted deck "${req.params.name}"`, req.params.name);
+    deckHistory.delete(req.params.name);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1116,9 +1136,9 @@ app.post("/api/decks/import", async (req: Request, res: Response) => {
       added?: { name: string }[];
     };
     if (result.created) {
-      logAction(`imported decklist into new deck "${result.created.name}"`);
+      logAction(`imported decklist into new deck "${result.created.name}"`, result.created.name);
     } else if (result.added && result.added.length > 0) {
-      logAction(`imported ${result.added.length} card(s) into "${deckName}"`);
+      logAction(`imported ${result.added.length} card(s) into "${deckName}"`, deckName);
     }
     res.json(result);
   } catch (err) {
@@ -1138,7 +1158,8 @@ app.patch("/api/decks/:name", async (req: Request, res: Response) => {
       return;
     }
     const deck = await renameDeck(req.params.name, name, DECKS_DIR);
-    logAction(`renamed deck "${req.params.name}" → "${name}"`);
+    logAction(`renamed deck "${req.params.name}" → "${name}"`, req.params.name);
+    deckHistory.rename(req.params.name, name);
     res.json({ deck });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -1164,7 +1185,8 @@ app.patch("/api/decks/:name/commander", async (req: Request, res: Response) => {
     const result = await setCommander(req.params.name, commander, resolver, DECKS_DIR);
     logAction(
       `set commander of "${req.params.name}" to "${result.deck.commander}"` +
-        (result.nowIllegal.length > 0 ? ` (${result.nowIllegal.length} card(s) now illegal)` : "")
+        (result.nowIllegal.length > 0 ? ` (${result.nowIllegal.length} card(s) now illegal)` : ""),
+      req.params.name
     );
     res.json({ deck: result.deck, changed: result.changed, nowIllegal: result.nowIllegal });
   } catch (err) {
@@ -1194,7 +1216,7 @@ app.patch("/api/decks/:name/cards/count", async (req: Request, res: Response) =>
     }
     const result = await setCardCount(req.params.name, card, count, resolver, DECKS_DIR);
     if (result.updated) {
-      logAction(`set "${result.updated.name}" count to ${result.updated.count} in "${req.params.name}"`);
+      logAction(`set "${result.updated.name}" count to ${result.updated.count} in "${req.params.name}"`, req.params.name);
     }
     res.json({ deck: result.deck, updated: result.updated, rejected: result.rejected });
   } catch (err) {
@@ -1215,7 +1237,7 @@ app.delete("/api/decks/:name/tags/:tag", async (req: Request, res: Response) => 
     }
     const tag = req.params.tag;
     const result = await removeTag(req.params.name, tag, DECKS_DIR);
-    logAction(`removed tag "${tag}" from ${result.affected} card(s) in "${req.params.name}"`);
+    logAction(`removed tag "${tag}" from ${result.affected} card(s) in "${req.params.name}"`, req.params.name);
     res.json({ deck: result.deck, affected: result.affected });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -1225,6 +1247,36 @@ app.delete("/api/decks/:name/tags/:tag", async (req: Request, res: Response) => 
       res.status(400).json({ error: message });
     }
   }
+});
+
+app.patch("/api/decks/:name/meta", async (req: Request, res: Response) => {
+  try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const body = req.body ?? {};
+    const bad = unknownMetaField(body);
+    if (bad) {
+      res.status(400).json({ error: bad });
+      return;
+    }
+    // writing the deck file triggers the /api/deck-events watcher event
+    const deck = await setDeckMeta(req.params.name, body, DECKS_DIR);
+    logAction(`set meta (${Object.keys(body).join(", ")}) of "${req.params.name}"`, req.params.name);
+    res.json({ deck });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(/not found/i.test(message) ? 404 : 400).json({ error: message });
+  }
+});
+
+app.get("/api/decks/:name/history", (req: Request, res: Response) => {
+  if (!isValidDeckName(req.params.name)) {
+    res.status(400).json({ error: "invalid deck name" });
+    return;
+  }
+  res.json({ entries: deckHistory.list(req.params.name) });
 });
 
 // ---- deck-events SSE: watch decks/ dir for changes ----
@@ -1242,8 +1294,13 @@ app.get("/api/deck-events", (req: Request, res: Response) => {
     sseWrite(res, { name });
   });
 
+  const onHistory = (deck: string, entry: { at: string; action: string }) =>
+    sseWrite(res, { type: "history", deck, entry });
+  historyListeners.add(onHistory);
+
   req.on("close", () => {
     watcher.close();
+    historyListeners.delete(onHistory);
   });
 });
 
@@ -1408,6 +1465,10 @@ app.post("/api/decks/:name/suggestions/:id/:verdict", async (req: Request, res: 
         );
       }
     }
+    logAction(
+      `${status} suggestion ${suggestion.in ? `+"${suggestion.in}"` : ""}${suggestion.out ? ` -"${suggestion.out}"` : ""} in "${name}"`,
+      name,
+    );
     res.json({ deck: name, suggestion, applied });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });

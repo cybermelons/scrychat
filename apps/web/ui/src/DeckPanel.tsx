@@ -726,6 +726,103 @@ export function DeckPanel({
     [selected]
   );
 
+  // --- bulk select, view mode, meta popovers, strategy/themes ---
+  const [selectMode, setSelectMode] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "grid">(() => {
+    try {
+      return localStorage.getItem("deckViewMode") === "grid" ? "grid" : "list";
+    } catch {
+      return "list";
+    }
+  });
+  const [metaPop, setMetaPop] = useState<"bracket" | "rules" | "price" | null>(null);
+  const [strategyOpen, setStrategyOpen] = useState(false);
+  const [strategyDraft, setStrategyDraft] = useState<string | null>(null);
+  const [themeDraft, setThemeDraft] = useState<string | null>(null);
+
+  const toggleViewMode = () =>
+    setViewMode((v) => {
+      const n = v === "list" ? "grid" : "list";
+      try {
+        localStorage.setItem("deckViewMode", n);
+      } catch {
+        /* storage unavailable */
+      }
+      return n;
+    });
+
+  const exitSelect = () => {
+    setSelectMode(false);
+    setPicked(new Set());
+  };
+
+  const patchMeta = (meta: Record<string, unknown>) => {
+    if (!selected) return Promise.resolve();
+    setActionError(null);
+    return fetch(`/api/decks/${encodeURIComponent(selected)}/meta`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(meta),
+    })
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${r.status}`);
+        }
+        loadDeck(selected);
+      })
+      .catch((e: Error) => setActionError(e.message));
+  };
+
+  const bulkRemove = () => {
+    if (!selected || picked.size === 0) return;
+    setBulkBusy(true);
+    setActionError(null);
+    fetch(`/api/decks/${encodeURIComponent(selected)}/cards`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cards: [...picked] }),
+    })
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${r.status}`);
+        }
+        exitSelect();
+        loadDeck(selected);
+      })
+      .catch((e: Error) => setActionError(e.message))
+      .finally(() => setBulkBusy(false));
+  };
+
+  const bulkTag = () => {
+    if (!selected || !deck || picked.size === 0) return;
+    const tag = window.prompt("Tag to add to selected cards")?.trim().toLowerCase();
+    if (!tag) return;
+    const cards = deck.cards
+      .filter((c) => picked.has(c.name))
+      .map((c) => ({ name: c.name, tags: [...new Set([...(c.tags ?? []), tag])] }));
+    setBulkBusy(true);
+    setActionError(null);
+    fetch(`/api/decks/${encodeURIComponent(selected)}/cards`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cards }),
+    })
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${r.status}`);
+        }
+        exitSelect();
+        loadDeck(selected);
+      })
+      .catch((e: Error) => setActionError(e.message))
+      .finally(() => setBulkBusy(false));
+  };
+
   const copyExport = useCallback(() => {
     if (!selected) return;
     fetch(`/api/decks/${encodeURIComponent(selected)}/export?format=${exportFormat}`)
@@ -816,6 +913,14 @@ export function DeckPanel({
         setManualCopyText(null);
         return;
       }
+      if (metaPop) {
+        setMetaPop(null);
+        return;
+      }
+      if (selectMode) {
+        exitSelect();
+        return;
+      }
       if (shareOpen || moreOpen) {
         setShareOpen(false);
         setMoreOpen(false);
@@ -843,7 +948,10 @@ export function DeckPanel({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    metaPop,
+    selectMode,
     manualCopyText,
     shareOpen,
     moreOpen,
@@ -1083,6 +1191,30 @@ export function DeckPanel({
       : c.manaCost;
     const toggleEditor = (trigger: HTMLButtonElement | null) =>
       editingCard === editKey ? closeTagEditor() : openTagEditor(editKey, c.tags, trigger);
+    if (viewMode === "grid") {
+      return (
+        <div
+          key={c.name}
+          className="grid-tile"
+          style={{ display: "inline-block", width: 120, margin: 4, textAlign: "center", fontSize: "var(--text-xs)", cursor: selectMode ? "pointer" : "default", outline: picked.has(c.name) ? "2px solid var(--accent, #7aa2f7)" : "none" }}
+          onClick={() =>
+            selectMode &&
+            setPicked((p) => {
+              const n = new Set(p);
+              if (!n.delete(c.name)) n.add(c.name);
+              return n;
+            })
+          }
+        >
+          {c.image ? (
+            <img src={c.image} alt={c.name} loading="lazy" style={{ width: "100%", borderRadius: 6 }} />
+          ) : (
+            <div style={{ height: 160, display: "grid", placeItems: "center" }}>{c.name}</div>
+          )}
+          <div>{c.count > 1 ? `${c.count}× ` : ""}{c.name}</div>
+        </div>
+      );
+    }
     return (
       <Fragment key={c.name}>
         <div
@@ -1091,6 +1223,21 @@ export function DeckPanel({
             toggleEditor(e.currentTarget.querySelector<HTMLButtonElement>(".edit-tags-btn"))
           }
         >
+          {selectMode && (
+            <input
+              type="checkbox"
+              checked={picked.has(c.name)}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() =>
+                setPicked((p) => {
+                  const n = new Set(p);
+                  if (!n.delete(c.name)) n.add(c.name);
+                  return n;
+                })
+              }
+              aria-label={`Select ${c.name}`}
+            />
+          )}
           <div className={isBasic ? "qty has-stepper" : "qty"} onClick={(e) => e.stopPropagation()}>
             {isBasic ? (
               <span className="count-stepper">
@@ -1136,17 +1283,16 @@ export function DeckPanel({
               />
             )}
           </div>
-          <button
-            type="button"
+          <a
             className="price"
-            onClick={(e) => {
-              e.stopPropagation();
-              stub("Card prices")(e);
-            }}
-            title="Card price"
+            href={`https://scryfall.com/search?q=${encodeURIComponent(`!"${c.name}"`)}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title="Prices on Scryfall"
           >
-            —
-          </button>
+            $
+          </a>
           <button
             type="button"
             className="edit-tags-btn"
@@ -1417,7 +1563,7 @@ export function DeckPanel({
             <span className="ico">▤</span>
             <span>Precons</span>
           </button>
-          <button type="button" className="navitem" id="nav-search" onClick={stub("Search cards")}>
+          <button type="button" className="navitem" id="nav-search" onClick={() => document.getElementById("tab-cards")?.click()}>
             <span className="ico">⌕</span>
             <span>Search cards</span>
           </button>
@@ -1521,13 +1667,65 @@ export function DeckPanel({
                 <img className="commander-thumb" src={deck.commanderImage} alt="" loading="lazy" />
               )}
               <div className="heroactions">
-                <button type="button" className="chip bracket" onClick={stub("Commander bracket")}>
-                  <span className="dot" />
-                  Bracket {deck.bracket ?? "—"}
-                </button>
-                <button type="button" className="chip" onClick={stub("Deckbuilding rules")}>
-                  Deckbuilding rules
-                </button>
+                <span className="popwrap">
+                  <button
+                    type="button"
+                    className="chip bracket"
+                    onClick={() => setMetaPop((p) => (p === "bracket" ? null : "bracket"))}
+                    aria-expanded={metaPop === "bracket"}
+                  >
+                    <span className="dot" />
+                    Bracket {deck.bracket ?? "—"}
+                  </button>
+                  {metaPop === "bracket" && (
+                    <div className="pop">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          className={n === deck.bracket ? "sc-btn sc-btn-primary sc-btn-small" : "sc-btn sc-btn-ghost sc-btn-small"}
+                          onClick={() => {
+                            setMetaPop(null);
+                            patchMeta({ bracket: n });
+                          }}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </span>
+                <span className="popwrap">
+                  <button
+                    type="button"
+                    className="chip"
+                    onClick={() => setMetaPop((p) => (p === "rules" ? null : "rules"))}
+                    aria-expanded={metaPop === "rules"}
+                  >
+                    Deckbuilding rules
+                  </button>
+                  {metaPop === "rules" && (
+                    <div className="pop">
+                      {report && report.violations.length > 0 ? (
+                        <ul style={{ margin: 0, paddingLeft: "1.2em" }}>
+                          {report.violations.map((v) => (
+                            <li key={v}>{v}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div>All rules met</div>
+                      )}
+                      {report && (
+                        <div style={{ marginTop: "var(--space-2)", fontSize: "var(--text-xs)", opacity: 0.8 }}>
+                          Targets:{" "}
+                          {Object.entries(report.quotaCheck)
+                            .map(([k, q]) => `${k} ${q.want}`)
+                            .join(" · ")}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </span>
                 <span className="popwrap">
                   <button
                     type="button"
@@ -1601,6 +1799,16 @@ export function DeckPanel({
                   </button>
                   {moreOpen && (
                     <div className="pop">
+                      <button
+                        type="button"
+                        className="sc-btn sc-btn-ghost sc-btn-small"
+                        onClick={() => {
+                          setMoreOpen(false);
+                          openDeckRename();
+                        }}
+                      >
+                        Rename
+                      </button>
                       {confirmingDeleteDeck ? (
                         <span
                           className="inline-confirm"
@@ -1765,9 +1973,30 @@ export function DeckPanel({
                   )}
                   {" · "}
                 </span>
-                <button type="button" className="link" onClick={stub("Deck price")}>
-                  {report ? `$${report.priceUsd.total.toFixed(2)}${report.priceUsd.unpriced > 0 ? ` (${report.priceUsd.unpriced} unpriced)` : ""}` : "$—"}
-                </button>
+                <span className="popwrap">
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => setMetaPop((p) => (p === "price" ? null : "price"))}
+                    aria-expanded={metaPop === "price"}
+                  >
+                    {report ? `$${report.priceUsd.total.toFixed(2)}${report.priceUsd.unpriced > 0 ? ` (${report.priceUsd.unpriced} unpriced)` : ""}` : "$—"}
+                  </button>
+                  {metaPop === "price" && (
+                    <div className="pop">
+                      {/* ponytail: per-card usd is not in panel data; link out. Add a priced-cards list when the deck response carries usd. */}
+                      <div>Total {report ? `$${report.priceUsd.total.toFixed(2)}` : "—"}</div>
+                      {deck.budgetUsd != null && <div>Budget ${deck.budgetUsd}</div>}
+                      <a
+                        href={`https://scryfall.com/search?q=${encodeURIComponent(`!"${deck.commander}"`)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Commander prices on Scryfall →
+                      </a>
+                    </div>
+                  )}
+                </span>
                 {loading && <span className="refreshing"> · refreshing…</span>}
               </div>
             </header>
@@ -1800,18 +2029,86 @@ export function DeckPanel({
             <section className="section" id="strategy">
               <div className="sechead">
                 <div className="sectitle">Strategy</div>
-                <button type="button" className="link" onClick={stub("Deck strategy")}>
-                  Read strategy →
+                <button type="button" className="link" onClick={() => setStrategyOpen((o) => !o)}>
+                  {strategyOpen ? "Hide strategy ←" : "Read strategy →"}
                 </button>
               </div>
-              <div className="strategy">—</div>
+              {strategyDraft !== null ? (
+                <div>
+                  <textarea
+                    className="text-input"
+                    style={{ width: "100%", minHeight: 100 }}
+                    maxLength={2000}
+                    value={strategyDraft}
+                    onChange={(e) => setStrategyDraft(e.target.value)}
+                    aria-label="Deck strategy"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="sc-btn sc-btn-primary sc-btn-small"
+                    onClick={() => patchMeta({ strategy: strategyDraft }).then(() => setStrategyDraft(null))}
+                  >
+                    Save
+                  </button>{" "}
+                  <button type="button" className="sc-btn sc-btn-ghost sc-btn-small" onClick={() => setStrategyDraft(null)}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="strategy" style={strategyOpen ? { whiteSpace: "pre-wrap" } : undefined}>
+                  {deck.strategy
+                    ? strategyOpen || deck.strategy.length <= 160
+                      ? deck.strategy
+                      : `${deck.strategy.slice(0, 160)}…`
+                    : "—"}
+                  {strategyOpen && (
+                    <>
+                      {" "}
+                      <button type="button" className="link" onClick={() => setStrategyDraft(deck.strategy ?? "")}>
+                        Edit
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="tags">
-                <span className="tag">
-                  — <button type="button" className="x" onClick={stub("Deck themes")}>✕</button>
-                </span>
-                <button type="button" className="tag add" onClick={stub("Deck themes")}>
-                  ＋ Add a theme
-                </button>
+                {(deck.themes ?? []).map((t) => (
+                  <span className="tag" key={t}>
+                    {t}{" "}
+                    <button
+                      type="button"
+                      className="x"
+                      aria-label={`Remove theme ${t}`}
+                      onClick={() => patchMeta({ themes: (deck.themes ?? []).filter((x) => x !== t) })}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+                {themeDraft !== null ? (
+                  <input
+                    className="text-input"
+                    style={{ width: 160 }}
+                    maxLength={40}
+                    value={themeDraft}
+                    autoFocus
+                    aria-label="New theme"
+                    onChange={(e) => setThemeDraft(e.target.value)}
+                    onBlur={() => setThemeDraft(null)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setThemeDraft(null);
+                      if (e.key === "Enter" && themeDraft.trim()) {
+                        patchMeta({ themes: [...(deck.themes ?? []), themeDraft.trim()] });
+                        setThemeDraft(null);
+                      }
+                    }}
+                  />
+                ) : (
+                  <button type="button" className="tag add" onClick={() => setThemeDraft("")}>
+                    ＋ Add a theme
+                  </button>
+                )}
               </div>
             </section>
 
@@ -1824,9 +2121,19 @@ export function DeckPanel({
               >
                 ＋ Add card
               </button>
-              <button type="button" className="btn" id="tb-bulk" onClick={stub("Bulk actions")}>
-                Bulk actions
+              <button type="button" className="btn" id="tb-bulk" onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}>
+                {selectMode ? "Done" : "Bulk actions"}
               </button>
+              {selectMode && (
+                <>
+                  <button type="button" className="btn" onClick={bulkRemove} disabled={bulkBusy || picked.size === 0}>
+                    Remove selected ({picked.size})
+                  </button>
+                  <button type="button" className="btn" onClick={bulkTag} disabled={bulkBusy || picked.size === 0}>
+                    Tag selected
+                  </button>
+                </>
+              )}
               <button type="button" className="btn" id="tb-playtest" onClick={stub("Playtest")}>
                 Playtest
               </button>
@@ -1847,8 +2154,8 @@ export function DeckPanel({
               >
                 Sort: {sortBy === "name" ? "Name" : "Cost"} ▾
               </button>
-              <button type="button" className="btn" onClick={stub("List view options")}>
-                View: List ▾
+              <button type="button" className="btn" onClick={toggleViewMode}>
+                View: {viewMode === "list" ? "List" : "Grid"} ▾
               </button>
               {actionError && (
                 <div className="sc-chip sc-chip-error sc-chip-dismissible">
@@ -1963,10 +2270,15 @@ export function DeckPanel({
             <section className="section" id="benchmarks">
               <div className="sechead">
                 <div className="sectitle">Benchmarks</div>
-                <button type="button" className="link" onClick={stub("Benchmark help")}>
-                  What are these?
-                </button>
               </div>
+              <details className="benchhelp">
+                <summary className="link">What are these?</summary>
+                <ul style={{ margin: "var(--space-2) 0", paddingLeft: "1.2em", fontSize: "var(--text-sm)" }}>
+                  <li>Lands, Ramp, Card draw, Removal, Wipes, Win cons: tagged cards counted against the deck's target range.</li>
+                  <li>Avg. mana value: mean mana value of nonland cards.</li>
+                  <li>Originality: 100 × mean of min(1, log10(EDHREC rank)/4) over nonbasic cards; higher = less staple-heavy.</li>
+                </ul>
+              </details>
               {report ? (
                 <>
                   <div className="bars">
