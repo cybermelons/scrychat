@@ -6,6 +6,7 @@ import {
   createDeck,
   setDeckMeta,
   addCards,
+  moveCardBoard,
   removeCards,
   getDeck,
   listDecks,
@@ -878,5 +879,32 @@ describe("originalityScore", () => {
       ]),
     ).toEqual({ score: 50, ranked: 3, unranked: 1 });
     expect(originalityScore([])).toEqual({ score: null, ranked: 0, unranked: 0 });
+  });
+
+  it("sideboard: add to side, excluded from report, move to main, exported", async () => {
+    await createDeck("Selesnya Value", "Trostani, Selesnya's Voice", resolver, decksDir);
+    await addCards("Selesnya Value", [{ name: "Forest", role: "land", count: 3 }], resolver, decksDir);
+    await addCards("Selesnya Value", [{ name: "Sol Ring", role: "ramp" }], resolver, decksDir, { board: "side" });
+
+    const deck = await getDeck("Selesnya Value", decksDir);
+    expect(deck!.cards.find((c) => c.name === "Sol Ring")!.board).toBe("side");
+    expect(deck!.cards.find((c) => c.name === "Forest")!.board).toBeUndefined();
+
+    let report = await deckReport("Selesnya Value", resolver, decksDir);
+    expect(report.total).toBe(3);
+    expect(report.byTag.ramp).toBeUndefined();
+    expect(report.curve["1"]).toBe(0);
+    expect(report.sideboard).toEqual([{ name: "Sol Ring", count: 1 }]);
+
+    const plain = await exportDeck("Selesnya Value", "plain", decksDir);
+    expect(plain).toContain("\nSideboard\n1 Sol Ring");
+    expect(plain.split("\nSideboard")[0]).not.toContain("Sol Ring");
+
+    await moveCardBoard("Selesnya Value", "sol ring", "main", decksDir);
+    report = await deckReport("Selesnya Value", resolver, decksDir);
+    expect(report.total).toBe(4);
+    expect(report.sideboard).toEqual([]);
+    expect(await exportDeck("Selesnya Value", "plain", decksDir)).not.toContain("Sideboard");
+    await expect(moveCardBoard("Selesnya Value", "Nope", "side", decksDir)).rejects.toThrow();
   });
 });

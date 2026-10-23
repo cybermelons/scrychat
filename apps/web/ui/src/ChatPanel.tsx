@@ -13,7 +13,6 @@ import {
 import { PRESENT_PROMPT } from "./present-prompt-core";
 import { renderMarkdown } from "./markdown";
 import { SettingsDrawer } from "./SettingsDrawer";
-import { stub } from "./stub";
 import "./chat.css";
 
 const LAST_CHAT_KEY = "scrychat.lastChat";
@@ -235,12 +234,30 @@ function GroupModule({
   names,
   deckCardNames,
   showInDeck,
+  deck,
 }: {
   label: string;
   names: string[];
   deckCardNames: Set<string>;
   showInDeck: boolean;
+  deck: string;
 }) {
+  const [sideNote, setSideNote] = useState<Record<string, string>>({});
+  const addSide = (name: string) => {
+    const note = (m: string) => setSideNote((p) => ({ ...p, [name]: m }));
+    if (!deck) return note("no deck selected");
+    fetch(`/api/decks/${encodeURIComponent(deck)}/cards`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cards: [{ name }], board: "side" }),
+    })
+      .then(async (r) => {
+        const b = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(b.error ?? `HTTP ${r.status}`);
+        note(b.rejected?.[0]?.reason ?? "✓ Sideboard");
+      })
+      .catch((e: Error) => note(e.message));
+  };
   return (
     <div className="module">
       <div className="modhead">
@@ -268,8 +285,8 @@ function GroupModule({
               >
                 {inDeck ? "✓ In deck" : "＋ Add to deck"}
               </button>
-              <button type="button" className="mini" onClick={stub("Sideboard")}>
-                ＋ Sideboard
+              <button type="button" className="mini" onClick={() => addSide(name)}>
+                {sideNote[name] ?? "＋ Sideboard"}
               </button>
             </div>
           </div>
@@ -283,12 +300,14 @@ function AssistantBody({
   msg,
   deckCardNames,
   showInDeck,
+  deck,
   vote,
   onVote,
 }: {
   msg: ChatMessage;
   deckCardNames: Set<string>;
   showInDeck: boolean;
+  deck: string;
   vote: number;
   onVote: (v: 1 | -1) => void;
 }) {
@@ -309,6 +328,7 @@ function AssistantBody({
                   names={part.names}
                   deckCardNames={deckCardNames}
                   showInDeck={showInDeck}
+                  deck={deck}
                 />
               )
             )}
@@ -1343,7 +1363,7 @@ export function ChatPanel({
                   <div className="umsg" key={i}>{m.text}</div>
                 ) : (
                   <Fragment key={i}>
-                    <AssistantBody msg={m} deckCardNames={deckCardNames} showInDeck={showInDeck} vote={feedback[String(i)] ?? 0} onVote={(v) => vote(i, v)} />
+                    <AssistantBody msg={m} deckCardNames={deckCardNames} showInDeck={showInDeck} deck={selected} vote={feedback[String(i)] ?? 0} onVote={(v) => vote(i, v)} />
                   </Fragment>
                 )
               )}

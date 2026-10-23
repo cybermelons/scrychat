@@ -491,11 +491,12 @@ export function registerTools(server: McpServer): void {
             }),
           )
           .describe("Cards to add"),
+        board: z.enum(["main", "side"]).optional().describe("Add to the mainboard (default) or the sideboard"),
       },
     },
-    async ({ name, cards }) => {
+    async ({ name, cards, board }) => {
       return safe(async () => {
-        const result = await addCards(name, cards as CardEntry[], resolveCard, decksDir);
+        const result = await addCards(name, cards as CardEntry[], resolveCard, decksDir, { board });
         const summary = await deckSummary(name, resolveCard, decksDir, globalQuotaTargets);
         return { ...result, summary };
       });

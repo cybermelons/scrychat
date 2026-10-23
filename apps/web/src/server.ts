@@ -17,6 +17,7 @@ import {
   createDeck,
   addCards,
   removeCards,
+  moveCardBoard,
   deleteDeck,
   setCardTags,
   setDeckMeta,
@@ -1001,14 +1002,14 @@ app.post("/api/decks/:name/cards", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid deck name" });
       return;
     }
-    const { cards } = req.body ?? {};
+    const { cards, board } = req.body ?? {};
     if (!Array.isArray(cards)) {
       res.status(400).json({ error: "cards array is required" });
       return;
     }
-    const result = await addCards(req.params.name, cards, resolver, DECKS_DIR);
+    const result = await addCards(req.params.name, cards, resolver, DECKS_DIR, { board: board === "side" ? "side" : "main" });
     for (const c of result.added) {
-      logAction(`added "${c.name}"${c.tags?.length ? ` (${c.tags.join(", ")})` : ""} to "${req.params.name}"`, req.params.name);
+      logAction(`added "${c.name}"${c.tags?.length ? ` (${c.tags.join(", ")})` : ""} to ${c.board === "side" ? "sideboard of " : ""}"${req.params.name}"`, req.params.name);
     }
     for (const r of result.rejected) {
       logAction(`tried to add "${r.name}" to "${req.params.name}" — rejected: ${r.reason}`, req.params.name);
@@ -1065,6 +1066,25 @@ app.patch("/api/decks/:name/tags", async (req: Request, res: Response) => {
     }
     const deck = await renameTag(req.params.name, from, to, DECKS_DIR);
     logAction(`renamed tag "${from}" → "${to}" in "${req.params.name}"`, req.params.name);
+    res.json({ deck });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.patch("/api/decks/:name/board", async (req: Request, res: Response) => {
+  try {
+    if (!isValidDeckName(req.params.name)) {
+      res.status(400).json({ error: "invalid deck name" });
+      return;
+    }
+    const { card, board } = req.body ?? {};
+    if (typeof card !== "string" || (board !== "main" && board !== "side")) {
+      res.status(400).json({ error: "card (string) and board (main|side) are required" });
+      return;
+    }
+    const deck = await moveCardBoard(req.params.name, card, board, DECKS_DIR);
+    logAction(`Moved ${card} to ${board === "side" ? "sideboard" : "mainboard"}`, req.params.name);
     res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });

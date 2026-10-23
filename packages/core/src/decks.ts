@@ -5,6 +5,8 @@ export type CardEntry = {
   name: string;
   tags?: string[];
   count?: number;
+  /** Absent = mainboard. */
+  board?: "side";
 };
 
 export type CardInput = CardEntry & {
@@ -76,6 +78,7 @@ export type QuotaCheck = {
 };
 
 export type DeckReport = {
+  sideboard: { name: string; count: number }[];
   total: number;
   targetTotal: number;
   overUnder: number;
@@ -135,9 +138,10 @@ async function atomicWrite(filePath: string, data: string): Promise<void> {
 
 function migrateCardEntry(c: any): CardEntry {
   if (c && typeof c === "object") {
-    if (Array.isArray(c.tags)) return { name: c.name, tags: c.tags, count: c.count };
-    if (typeof c.role === "string" && c.role.length > 0) return { name: c.name, tags: [c.role], count: c.count };
-    return { name: c.name, count: c.count };
+    const b = c.board === "side" ? { board: "side" as const } : {};
+    if (Array.isArray(c.tags)) return { name: c.name, tags: c.tags, count: c.count, ...b };
+    if (typeof c.role === "string" && c.role.length > 0) return { name: c.name, tags: [c.role], count: c.count, ...b };
+    return { name: c.name, count: c.count, ...b };
   }
   return c;
 }
@@ -206,9 +210,15 @@ export async function exportDeck(
     throw new Error(`Deck not found: ${name}`);
   }
 
+  const main = deck.cards.filter((c) => c.board !== "side");
+  const side = deck.cards.filter((c) => c.board === "side");
+  const sideSection = side.length ? ["", "Sideboard", ...side.map((c) => cardLine(c))] : [];
+
   switch (format) {
     case "mtga": {
-      const cardLines = deck.cards.map((c) => cardLine(c, true));
+      // ponytail: Arena sideboard section omitted (importer treats it as a
+      // 60-card sideboard, wrong for Commander); add if Arena support is confirmed.
+      const cardLines = main.map((c) => cardLine(c, true));
       return [
         "Commander",
         `1 ${frontFace(deck.commander)}`,
@@ -218,13 +228,13 @@ export async function exportDeck(
       ].join("\n");
     }
     case "moxfield": {
-      const cardLines = deck.cards.map((c) => cardLine(c));
-      return [`1 ${deck.commander} *CMDR*`, ...cardLines].join("\n");
+      const cardLines = main.map((c) => cardLine(c));
+      return [`1 ${deck.commander} *CMDR*`, ...cardLines, ...sideSection].join("\n");
     }
     case "plain":
     default: {
-      const cardLines = deck.cards.map((c) => cardLine(c));
-      return [`1 ${deck.commander} *CMDR*`, "", ...cardLines].join("\n");
+      const cardLines = main.map((c) => cardLine(c));
+      return [`1 ${deck.commander} *CMDR*`, "", ...cardLines, ...sideSection].join("\n");
     }
   }
 }
@@ -369,7 +379,8 @@ export async function addCards(
   name: string,
   cards: CardInput[],
   resolver: CardResolver,
-  decksDir: string = DEFAULT_DECKS_DIR()
+  decksDir: string = DEFAULT_DECKS_DIR(),
+  opts: { board?: "main" | "side" } = {}
 ): Promise<AddCardsResult> {
   const deck = await getDeck(name, decksDir);
   if (!deck) {
@@ -425,6 +436,7 @@ export async function addCards(
       name: resolved.name,
       tags,
       count: card.count ?? 1,
+      ...(opts.board === "side" ? { board: "side" as const } : {}),
     };
     deck.cards.push(entry);
     existingNamesLower.add(resolved.name.toLowerCase());
@@ -435,6 +447,23 @@ export async function addCards(
   await writeDeckFile(decksDir, deck);
 
   return { added, rejected };
+}
+
+export async function moveCardBoard(
+  deckName: string,
+  cardName: string,
+  board: "main" | "side",
+  decksDir: string = DEFAULT_DECKS_DIR()
+): Promise<Deck> {
+  const deck = await getDeck(deckName, decksDir);
+  if (!deck) throw new Error(`Deck not found: ${deckName}`);
+  const card = deck.cards.find((c) => c.name.toLowerCase() === cardName.toLowerCase());
+  if (!card) throw new Error(`Card not in deck: ${cardName}`);
+  if (board === "side") card.board = "side";
+  else delete card.board;
+  deck.updatedAt = new Date().toISOString();
+  await writeDeckFile(decksDir, deck);
+  return deck;
 }
 
 export async function removeCards(
@@ -771,6 +800,10 @@ export async function deckReport(
   }
 
   const effectiveTargets = resolveQuotaTargets(targets, deck.quotaTargets);
+  const sideboard = deck.cards
+    .filter((c) => c.board === "side")
+    .map((c) => ({ name: c.name, count: c.count ?? 1 }));
+  const mainCards = deck.cards.filter((c) => c.board !== "side");
 
   const byTag: Record<string, number> = {};
   const curve: Record<string, number> = {
@@ -799,12 +832,12 @@ export async function deckReport(
   // for a full Commander deck. Duplicate names are resolved once.
   const resolvedByName = new Map<string, ResolvedCard | null>();
   await Promise.all(
-    [...new Set(deck.cards.map((c) => c.name))].map(async (name) => {
+    [...new Set(mainCards.map((c) => c.name))].map(async (name) => {
       resolvedByName.set(name, await resolver(name));
     }),
   );
 
-  for (const card of deck.cards) {
+  for (const card of mainCards) {
     const count = card.count ?? 1;
     total += count;
 
@@ -867,6 +900,7 @@ export async function deckReport(
   const priceUsd = { total: Math.round(priceTotal * 100) / 100, unpriced };
 
   return {
+    sideboard,
     total,
     targetTotal: EDH_TARGET_TOTAL,
     overUnder: total - EDH_TARGET_TOTAL,

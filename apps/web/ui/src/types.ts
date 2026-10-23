@@ -2,6 +2,7 @@ export type CardEntry = {
   name: string;
   tags?: string[];
   count?: number;
+  board?: "side";
   image?: string | null;
   manaCost?: string | null;
   producedMana?: string[] | null;

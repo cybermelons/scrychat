@@ -239,6 +239,7 @@ export function DeckPanel({
   const [addOpen, setAddOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [rowMenu, setRowMenu] = useState<string | null>(null);
   const [decksOpen, setDecksOpen] = useState(true);
   const [collOpen, setCollOpen] = useState(false);
   const [collState, setCollState] = useState<"none" | "fresh" | "stale">("none");
@@ -411,6 +412,22 @@ export function DeckPanel({
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     };
   }, []);
+
+  const moveBoard = (name: string, board: "main" | "side") => {
+    if (!selected) return;
+    setRowMenu(null);
+    setActionError(null);
+    fetch(`/api/decks/${encodeURIComponent(selected)}/board`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card: name, board }),
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `HTTP ${r.status}`);
+        loadDeck(selected);
+      })
+      .catch((e: Error) => setActionError(e.message));
+  };
 
   const removeCard = useCallback(
     (name: string, tags: string[], count: number) => {
@@ -1002,6 +1019,7 @@ export function DeckPanel({
     arena?: boolean | null;
   };
   const tagGroups: [string, CardRow[]][] = [];
+  const sideRows: CardRow[] = [];
   const typeMap = new Map<string, CardRow[]>();
   const allDeckTags: string[] = [];
   if (deck) {
@@ -1020,6 +1038,10 @@ export function DeckPanel({
         owned: c.owned,
         arena: c.arena,
       };
+      if (c.board === "side") {
+        sideRows.push(row);
+        continue;
+      }
       const pt = primaryType(c.typeLine);
       if (!typeMap.has(pt)) typeMap.set(pt, []);
       typeMap.get(pt)!.push(row);
@@ -1057,7 +1079,7 @@ export function DeckPanel({
   const avgMV = report ? avgManaValue(report.curve) : null;
 
   const totalCards = deck
-    ? deck.cards.reduce((n, c) => n + (c.count ?? 1), 0)
+    ? deck.cards.reduce((n, c) => n + (c.board === "side" ? 0 : c.count ?? 1), 0)
     : 0;
 
   const newDeckForm = (
@@ -1311,6 +1333,28 @@ export function DeckPanel({
           >
             ✎
           </button>
+          <span className="popwrap" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="chip"
+              onClick={() => setRowMenu((m) => (m === editKey ? null : editKey))}
+              aria-expanded={rowMenu === editKey}
+              aria-label={`More actions for ${c.name}`}
+            >
+              ⋯
+            </button>
+            {rowMenu === editKey && (
+              <div className="pop">
+                <button
+                  type="button"
+                  className="sc-btn sc-btn-ghost sc-btn-small"
+                  onClick={() => moveBoard(c.name, "side")}
+                >
+                  Move to sideboard
+                </button>
+              </div>
+            )}
+          </span>
           <button
             type="button"
             className="remove-card-btn"
@@ -2245,7 +2289,35 @@ export function DeckPanel({
                 {sortRows(cards).map((c) => renderRow(key, c))}
               </Fragment>
             ))}
-            {groups.length === 0 && (
+            {sideRows.length > 0 && (
+              <section className="section" id="sideboard">
+                <div className="sechead">
+                  <div className="sectitle">Sideboard ({sideRows.reduce((n, c) => n + c.count, 0)})</div>
+                </div>
+                {sortRows(sideRows).map((c) => (
+                  <div className="row card-row" key={c.name}>
+                    <div className="qty">{c.count}</div>
+                    <div className="cname">
+                      <CardName name={c.name} image={c.image} />
+                    </div>
+                    <button type="button" className="mini" onClick={() => moveBoard(c.name, "main")}>
+                      → Main
+                    </button>
+                    <button
+                      type="button"
+                      className="remove-card-btn"
+                      onClick={() => removeCard(c.name, c.tags, c.count)}
+                      disabled={removeBusy === c.name}
+                      aria-label={`Remove ${c.name}`}
+                      title={`Remove ${c.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </section>
+            )}
+            {groups.length === 0 && sideRows.length === 0 && (
               <div className="empty-state empty-state-inline">
                 <div className="empty-state-icon" aria-hidden="true">🃏</div>
                 <p>No cards yet — add one above or ask the chat.</p>
@@ -2254,7 +2326,7 @@ export function DeckPanel({
 
             <Suggestions deckName={deck.name} onApplied={onSuggestionApplied} />
 
-            {playing && <Playtest deck={deck} onClose={() => setPlaying(false)} />}
+            {playing && <Playtest deck={{ ...deck, cards: deck.cards.filter((c) => c.board !== "side") }} onClose={() => setPlaying(false)} />}
             <section className="section" id="samplehand">
               <div className="sechead">
                 <div className="sectitle">Sample hand</div>
