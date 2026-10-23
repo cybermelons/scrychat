@@ -20,6 +20,7 @@ import type { BrowseTarget } from "./Browse";
 import { playtest as ptReduce, newGame } from "../../../../packages/core/src/playtest.ts";
 import type { PlaytestState } from "../../../../packages/core/src/playtest.ts";
 import { afterDiscard, draftBarText, draftSaveName } from "./draft-core";
+import { frontIndex, groupOf, groupStarts, jumpGroupStart, snapTop, stackOffset } from "./flip-core";
 import "./deck.css";
 
 const CURVE_ORDER = ["0", "1", "2", "3", "4", "5", "6", "7+"];
@@ -168,6 +169,107 @@ function DeckSkeleton() {
             <div className="skeleton-block skeleton-shimmer" style={{ height: 12, flex: 1 }} />
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+type CardRow = {
+  name: string;
+  tags: string[];
+  count: number;
+  image?: string | null;
+  manaCost?: string | null;
+  producedMana?: string[] | null;
+  typeLine?: string | null;
+  owned?: boolean;
+  arena?: boolean | null;
+};
+
+const FLIP_HDR = 48; // px of each card's name bar that stays visible in the cascade (~12% of 390)
+const FLIP_CARD_H = 390; // 280px wide card at 488:680
+const FLIP_CAP = 6; // headers shown before older ones collapse under
+
+/**
+ * Flip view: one deck, cut into the panel's current groups (same order, sort).
+ * Passed cards leave only their header strip; each group's first card carries a
+ * handle chip (name + count) in that strip. A side rail lists the groups.
+ */
+function FlipView({ groups }: { groups: { key: string; cards: CardRow[] }[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [front, setFront] = useState(0);
+  const cards = groups.flatMap((g) => g.cards);
+  const starts = groupStarts(groups.map((g) => g.cards.length));
+  const multi = groups.length > 1;
+  const cur = groupOf(front, starts);
+  const goto = (i: number) =>
+    ref.current?.scrollTo({ top: snapTop(i, FLIP_CARD_H, FLIP_HDR, FLIP_CAP), behavior: "smooth" });
+  const onScroll = () => {
+    const el = ref.current;
+    if (el) setFront(frontIndex(el.scrollTop, FLIP_CARD_H, FLIP_HDR, FLIP_CAP, cards.length));
+  };
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const arrow = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+    const page = e.key === "PageDown" ? 1 : e.key === "PageUp" ? -1 : 0;
+    if (!arrow && !page) return;
+    e.preventDefault();
+    if (page || e.shiftKey) goto(jumpGroupStart(front, starts, (page || arrow) as 1 | -1));
+    else goto(Math.min(cards.length - 1, Math.max(0, front + arrow)));
+  };
+  return (
+    <div className="flip-wrap">
+      {multi && (
+        <div className="flip-rail" role="tablist" aria-label="Groups">
+          {groups.map((g, k) => (
+            <button
+              key={g.key}
+              type="button"
+              role="tab"
+              aria-selected={k === cur}
+              className={k === cur ? "flip-tab on" : "flip-tab"}
+              onClick={() => goto(starts[k])}
+            >
+              {g.key} <span>{g.cards.length}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div
+        ref={ref}
+        className="flip-view"
+        tabIndex={0}
+        aria-label="Deck flip view; arrows flip cards, PageUp/PageDown or Shift+arrow jump groups"
+        onKeyDown={onKeyDown}
+        onScroll={onScroll}
+        style={{ height: FLIP_CARD_H + FLIP_CAP * FLIP_HDR }}
+      >
+        {/* snap points: sticky cards report their stuck position to scroll-snap, so snap on plain markers */}
+        {cards.map((c, i) => (
+          <i key={`snap:${i}`} className="flip-snap" style={{ top: snapTop(i, FLIP_CARD_H, FLIP_HDR, FLIP_CAP) }} />
+        ))}
+        {groups.flatMap((g, k) =>
+          g.cards.map((c, j) => {
+            const i = starts[k] + j;
+            return (
+              <div
+                key={`${g.key}:${c.name}`}
+                className="flip-card"
+                title={c.name}
+                style={{
+                  top: stackOffset(i, FLIP_HDR, FLIP_CAP),
+                  height: FLIP_CARD_H,
+                }}
+              >
+                {c.image ? <img src={c.image} alt={c.name} loading="lazy" draggable={false} /> : <div className="flip-noimg">{c.name}</div>}
+                {multi && j === 0 && (
+                  <button type="button" className="flip-handle" onClick={() => goto(i)}>
+                    {g.key} · {g.cards.length}
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -784,9 +886,10 @@ export function DeckPanel({
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "grid">(() => {
+  const [viewMode, setViewMode] = useState<"list" | "grid" | "flip">(() => {
     try {
-      return localStorage.getItem("deckViewMode") === "grid" ? "grid" : "list";
+      const v = localStorage.getItem("deckViewMode");
+      return v === "grid" || v === "flip" ? v : "list";
     } catch {
       return "list";
     }
@@ -798,7 +901,7 @@ export function DeckPanel({
 
   const toggleViewMode = () =>
     setViewMode((v) => {
-      const n = v === "list" ? "grid" : "list";
+      const n = v === "list" ? "grid" : v === "grid" ? "flip" : "list";
       try {
         localStorage.setItem("deckViewMode", n);
       } catch {
@@ -1038,17 +1141,6 @@ export function DeckPanel({
   }, [loadDeck]);
 
   const UNTAGGED = "untagged";
-  type CardRow = {
-    name: string;
-    tags: string[];
-    count: number;
-    image?: string | null;
-    manaCost?: string | null;
-    producedMana?: string[] | null;
-    typeLine?: string | null;
-    owned?: boolean;
-    arena?: boolean | null;
-  };
   const tagGroups: [string, CardRow[]][] = [];
   const sideRows: CardRow[] = [];
   const typeMap = new Map<string, CardRow[]>();
@@ -2261,7 +2353,7 @@ export function DeckPanel({
                 Sort: {sortBy === "name" ? "Name" : "Cost"} ▾
               </button>
               <button type="button" className="btn" onClick={toggleViewMode}>
-                View: {viewMode === "list" ? "List" : "Grid"} ▾
+                View: {viewMode === "list" ? "List" : viewMode === "grid" ? "Grid" : "Flip"} ▾
               </button>
               {actionError && (
                 <div className="sc-chip sc-chip-error sc-chip-dismissible">
@@ -2339,7 +2431,10 @@ export function DeckPanel({
               </div>
             )}
 
-            {groups.map(([key, cards]) => (
+            {viewMode === "flip" && groups.length > 0 && (
+              <FlipView groups={groups.map(([key, cs]) => ({ key, cards: sortRows(cs) }))} />
+            )}
+            {viewMode !== "flip" && groups.map(([key, cards]) => (
               <Fragment key={`${groupBy}:${key}`}>
                 {renderGroupHead(key, cards)}
                 {sortRows(cards).map((c) => renderRow(key, c))}

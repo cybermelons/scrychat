@@ -122,3 +122,24 @@ h1.deckname[role="button"] { cursor: text; }
   margin-left: auto; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
   padding: 1px 6px; border-radius: 8px; border: 1px solid currentColor; opacity: .75;
 }
+
+/* Flip view: sticky stacking cards + y-mandatory snap. Geometry mirrors flip-core.ts. */
+.flip-view { overflow-y: auto; scroll-snap-type: y mandatory; max-width: 100%; margin: var(--space-3, 12px) auto; width: 280px; outline-offset: 4px; overscroll-behavior: contain; }
+.flip-card { position: sticky; flex: none; width: 280px; }
+.flip-card img, .flip-noimg { display: block; width: 280px; height: 100%; border-radius: 12px; box-shadow: 0 -2px 6px rgba(0,0,0,.45); background: #1b1b22; object-fit: cover; }
+.flip-noimg { padding: 12px; box-sizing: border-box; }
+.flip-wrap { display: flex; justify-content: center; gap: 12px; align-items: flex-start; margin: var(--space-3, 12px) 0; }
+.flip-wrap .flip-view { margin: 0; }
+.flip-rail { display: flex; flex-direction: column; gap: 4px; max-height: 678px; overflow-y: auto; }
+.flip-tab { text-align: left; font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 0 8px 8px 0; border: 1px solid var(--border, #333); border-left: 3px solid transparent; background: transparent; color: inherit; cursor: pointer; white-space: nowrap; }
+.flip-tab span { opacity: .6; margin-left: 4px; }
+.flip-tab.on { border-left-color: var(--accent, #e8833a); background: rgba(232,131,58,.15); }
+.flip-handle { position: absolute; top: 6px; right: 6px; font: inherit; font-size: 11px; padding: 1px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,.4); background: rgba(20,20,26,.85); color: #fff; cursor: pointer; }
+@media (max-width: 560px) {
+  .flip-wrap { flex-direction: column; align-items: center; }
+  .flip-rail { flex-direction: row; max-width: 100%; max-height: none; overflow-x: auto; overflow-y: visible; }
+  .flip-tab { border-radius: 8px 8px 0 0; border-left-width: 1px; border-bottom: 3px solid transparent; }
+  .flip-tab.on { border-left-color: var(--border, #333); border-bottom-color: var(--accent, #e8833a); }
+}
+.flip-view { position: relative; }
+.flip-snap { position: absolute; left: 0; width: 1px; height: 1px; scroll-snap-align: start; pointer-events: none; }
