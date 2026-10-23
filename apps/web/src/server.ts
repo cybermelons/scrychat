@@ -33,7 +33,6 @@ import {
   getLocalDb,
   categoryTagMembersLocal,
   parseCiMask,
-  COLLECTION_PATH,
   writeCollectionFile,
   mapArenaIdsToOracle,
   parseArenaLog,
@@ -58,6 +57,7 @@ import { getCollectionHealth, getDbHealth } from "./health-core.js";
 import { isValidDeckName } from "./deck-name-core.js";
 import { ALLOWED_TOOLS, DISALLOWED_TOOLS } from "./tools-core.js";
 import { createRequireUser } from "./auth.js";
+import { userIdFromEmail, userPaths, chatFileFor, deckEventFor, migrateLegacy, type UserPaths } from "./users-core.js";
 import { parseConfig, applyConfigPatch, DEFAULT_CONFIG, type ScrychatConfig } from "./config-core.js";
 
 // CRITICAL: strip stale ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the
@@ -73,38 +73,57 @@ delete SDK_ENV.ANTHROPIC_AUTH_TOKEN;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../../");
-const DECKS_DIR = path.join(REPO_ROOT, "decks");
-// Sibling of decks/, never inside it: listDecks reads every *.json under
-// decks/ and would parse a suggestions file as a malformed deck.
-const SUGGESTIONS_DIR = path.join(REPO_ROOT, "suggestions");
-const CHATS_DIR = path.join(REPO_ROOT, "chats");
+// Per-user storage root: users/<email>/{decks,chats,suggestions,collection.json,
+// scrychat.config.json}. Only data/ (the Scryfall mirror) stays shared.
+const USERS_DIR = path.resolve(process.env.SCRYCHAT_USERS_DIR || path.join(REPO_ROOT, "users"));
+const OWNER_ID = userIdFromEmail(process.env.OWNER_EMAIL);
 const MCP_SERVER_PATH = path.join(REPO_ROOT, "packages/mcp/dist/index.js");
-const CONFIG_PATH = path.join(REPO_ROOT, "scrychat.config.json");
 
 const PORT = Number(process.env.PORT) || 8787;
 
-// ---- config: scrychat.config.json at repo root, tolerate absent file ----
+// ---- per-user paths ----
+const ensured = new Set<string>();
+/** Storage paths of the authenticated caller (requireUser ran first), dirs created. */
+function me(req: Request): UserPaths {
+  const p = userPaths(USERS_DIR, req.user as string);
+  if (!ensured.has(p.root)) {
+    for (const d of [p.decks, p.chats, p.suggestions]) fs.mkdirSync(d, { recursive: true });
+    ensured.add(p.root);
+  }
+  return p;
+}
+
+// ---- config: users/<email>/scrychat.config.json, tolerate absent file ----
 // Parsing/validation lives in config-core.ts (pure, unit-tested); this just
-// owns the fs read/write. `config` is a single mutable object reused for the
-// process lifetime so per-request reads (e.g. config.defaultExportFormat) hot-apply
-// as soon as a PATCH mutates it in place — never reassign `config`.
-function loadConfig(): ScrychatConfig {
+// owns the fs read/write. One mutable object per user, reused for the process
+// lifetime so per-request reads (e.g. cfg.defaultExportFormat) hot-apply as soon
+// as a PATCH mutates it in place -- never reassign it.
+function loadConfig(configPath: string): ScrychatConfig {
   try {
-    const raw = fs.readFileSync(CONFIG_PATH, "utf8");
+    const raw = fs.readFileSync(configPath, "utf8");
     return parseConfig(JSON.parse(raw));
   } catch {
     return { ...DEFAULT_CONFIG };
   }
 }
 
-function persistConfig(cfg: ScrychatConfig): void {
-  const dir = path.dirname(CONFIG_PATH);
-  const tmpPath = path.join(dir, `.${path.basename(CONFIG_PATH)}.tmp-${process.pid}-${Date.now()}`);
+function persistConfig(configPath: string, cfg: ScrychatConfig): void {
+  const dir = path.dirname(configPath);
+  const tmpPath = path.join(dir, `.${path.basename(configPath)}.tmp-${process.pid}-${Date.now()}`);
+  fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(tmpPath, JSON.stringify(cfg, null, 2), "utf8");
-  fs.renameSync(tmpPath, CONFIG_PATH);
+  fs.renameSync(tmpPath, configPath);
 }
 
-const config = loadConfig();
+const configs = new Map<string, ScrychatConfig>();
+function cfgOf(req: Request): ScrychatConfig {
+  let c = configs.get(req.user as string);
+  if (!c) {
+    c = loadConfig(me(req).config);
+    configs.set(req.user as string, c);
+  }
+  return c;
+}
 
 const app = express();
 
@@ -128,18 +147,22 @@ app.use(express.json({ limit: "30mb" }));
 
 // ---- session management: sessionId -> SDK session id for resume ----
 const SESSION_MAP_MAX = 100;
+// Keys are `${user}/${clientSessionId}`: the client picks the id, so it must not be shared across users.
 const sessionMap = new Map<string, string>();
+
+class ResumeFailed extends Error {}
 
 // chat.id -> in-flight turn, so POST /api/chats/:id/stop can interrupt it.
 // `q` starts null: the turn is registered before the SDK query is
 // constructed (see /api/chat) so a Stop click can't race ahead of
 // registration; `interrupted` may be set before `q` lands, in which case
 // the query is interrupted as soon as it's assigned.
+// Keys are `${user}/${chat.id}`.
 const activeTurns = new Map<string, { q: ReturnType<typeof query> | null; interrupted: boolean }>();
 
-function setSession(clientSessionId: string, sdkSessionId: string): void {
-  sessionMap.delete(clientSessionId); // reinsert at newest position
-  sessionMap.set(clientSessionId, sdkSessionId);
+function setSession(key: string, sdkSessionId: string): void {
+  sessionMap.delete(key); // reinsert at newest position
+  sessionMap.set(key, sdkSessionId);
   if (sessionMap.size > SESSION_MAP_MAX) {
     const oldest = sessionMap.keys().next().value;
     if (oldest !== undefined) sessionMap.delete(oldest);
@@ -230,13 +253,13 @@ function nameWords(name: string): string[] {
 // deck whose name or commander is mentioned (case-insensitively, word-level)
 // in any user message's text. Cheap: called on every append against the small
 // deck list.
-async function updateDeckRefs(chat: ChatFile): Promise<void> {
+async function updateDeckRefs(chat: ChatFile, decksDir: string): Promise<void> {
   const refs = new Set<string>();
   for (const m of chat.messages) {
     if (m.activeDeck) refs.add(sanitizeName(m.activeDeck));
   }
   try {
-    const decks = await listDecks(DECKS_DIR);
+    const decks = await listDecks(decksDir);
     const userWords = new Set(
       chat.messages
         .filter((m) => m.role === "user")
@@ -271,16 +294,9 @@ function isValidChatId(id: unknown): id is string {
   return typeof id === "string" && id.length > 0 && id.length <= 128 && VALID_CHAT_ID.test(id);
 }
 
-function chatFilePath(id: string): string {
-  if (!isValidChatId(id)) {
-    throw new Error("invalid chat id");
-  }
-  return path.join(CHATS_DIR, `${id}.json`);
-}
-
-async function readChatFile(id: string): Promise<ChatFile | null> {
+async function readChatFile(chatsDir: string, id: string): Promise<ChatFile | null> {
   try {
-    const raw = await fs.promises.readFile(chatFilePath(id), "utf8");
+    const raw = await fs.promises.readFile(chatFileFor(chatsDir, id), "utf8");
     return JSON.parse(raw) as ChatFile;
   } catch (err: any) {
     if (err?.code === "ENOENT") return null;
@@ -288,9 +304,9 @@ async function readChatFile(id: string): Promise<ChatFile | null> {
   }
 }
 
-async function writeChatFile(chat: ChatFile): Promise<void> {
-  await fs.promises.mkdir(CHATS_DIR, { recursive: true });
-  await atomicWrite(chatFilePath(chat.id), JSON.stringify(chat, null, 2));
+async function writeChatFile(chatsDir: string, chat: ChatFile): Promise<void> {
+  await fs.promises.mkdir(chatsDir, { recursive: true });
+  await atomicWrite(chatFileFor(chatsDir, chat.id), JSON.stringify(chat, null, 2));
 }
 
 function newChatId(): string {
@@ -334,8 +350,13 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
   const clientSessionId: string = typeof sessionId === "string" ? sessionId : crypto.randomUUID();
 
+  const user = req.user as string;
+  const paths = me(req);
+  const sessionKey = `${user}/${clientSessionId}`;
+  const state = stateOf(user);
+
   let chat: ChatFile | null =
-    typeof reqChatId === "string" && reqChatId.length > 0 ? await readChatFile(reqChatId) : null;
+    typeof reqChatId === "string" && reqChatId.length > 0 ? await readChatFile(paths.chats, reqChatId) : null;
   const isNewChat = !chat;
   const now = new Date().toISOString();
   if (!chat) {
@@ -344,32 +365,33 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       title: titleFromMessage(message),
       createdAt: now,
       updatedAt: now,
-      lastSeenActionIdx: pushed - Math.min(pushed, 5),
+      lastSeenActionIdx: state.pushed - Math.min(state.pushed, 5),
       messages: [],
     };
   }
   const msgActiveDeck = typeof activeDeck === "string" && activeDeck.length > 0 ? activeDeck : undefined;
   chat.messages.push({ role: "user", text: message, activeDeck: msgActiveDeck, at: now });
   chat.updatedAt = now;
-  await updateDeckRefs(chat);
-  await writeChatFile(chat);
+  await updateDeckRefs(chat, paths.decks);
+  await writeChatFile(paths.chats, chat);
 
   // Register the turn as stoppable before the client can possibly see the
   // chat id (the "chat" SSE event below): otherwise a Stop click that races
   // the async deck/query setup below would hit activeTurns.get() finding
   // nothing (404, silently swallowed by the client) until `q` exists.
   const turnEntry: { q: ReturnType<typeof query> | null; interrupted: boolean } = { q: null, interrupted: false };
-  activeTurns.set(chat.id, turnEntry);
+  const turnKey = `${user}/${chat.id}`;
+  activeTurns.set(turnKey, turnEntry);
 
   if (isNewChat) {
     sseWrite(res, { type: "chat", chatId: chat.id });
   }
 
   // file wins for resume; sessionMap is a fallback for legacy/no-file clients
-  const resumeSdkSessionId = chat.sdkSessionId ?? sessionMap.get(clientSessionId);
+  const resumeSdkSessionId = chat.sdkSessionId ?? sessionMap.get(sessionKey);
 
   let prompt = message;
-  const recentActions = recentActionsForChat(chat);
+  const recentActions = recentActionsForChat(state, chat);
   let contextLine: string | null = null;
   // Captured alongside contextLine for the group-chip population post-pass
   // (issue #20/#21): filters chip-completion members to the active deck's
@@ -377,7 +399,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   let activeDeckIdentity: string[] | null = null;
   if (typeof activeDeck === "string" && activeDeck.length > 0) {
     try {
-      const deck = await getDeck(activeDeck, DECKS_DIR);
+      const deck = await getDeck(activeDeck, paths.decks);
       if (deck) {
         const cardCount = deck.cards.reduce((n, c) => n + (c.count ?? 1), 0) + 1; // +1 for commander
         contextLine = `[UI context: the user has deck "${deck.name}" (commander: ${deck.commander}, ${cardCount} cards) open in the deck panel. Treat ambiguous references — "my deck", the commander's name, "my payoffs" — as referring to this deck; call deck_get "${deck.name}" for its current list before answering deck-specific questions. The user may still ask about unrelated cards/decks; this is context, not a restriction.`;
@@ -403,120 +425,140 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   const toolSegmentByUseId = new Map<string, number>();
   let turnInterrupted = false;
 
-  // Text-only turns keep the plain-string prompt they have always used, so a
-  // regression here can only reach image turns. Only when the turn carries an
-  // image do we switch to the AsyncIterable form, which is the only way to
-  // send an image content block (`prompt: string | AsyncIterable<SDKUserMessage>`).
-  const sdkPrompt: string | AsyncIterable<SDKUserMessage> =
-    images.length === 0 ? prompt : imageTurnPrompt(prompt, images, resumeSdkSessionId ?? "");
-
+  // The resume id can point at a transcript that no longer exists (container
+  // layer lost on recreate, or the one-time migration). Retry once without it.
+  let resumeId = resumeSdkSessionId;
   try {
-    const q = query({
-      prompt: sdkPrompt,
-      options: {
-        cwd: REPO_ROOT,
-        env: SDK_ENV,
-        resume: resumeSdkSessionId,
-        settingSources: ["project"],
-        mcpServers: {
-          scrychat: {
-            type: "stdio",
-            command: "node",
-            args: [MCP_SERVER_PATH],
+  for (let attempt = 0; ; attempt++) {
+    // Text-only turns keep the plain-string prompt they have always used, so a
+    // regression here can only reach image turns. Only when the turn carries an
+    // image do we switch to the AsyncIterable form, which is the only way to
+    // send an image content block (`prompt: string | AsyncIterable<SDKUserMessage>`).
+    const sdkPrompt: string | AsyncIterable<SDKUserMessage> =
+      images.length === 0 ? prompt : imageTurnPrompt(prompt, images, resumeId ?? "");
+
+    try {
+      const q = query({
+        prompt: sdkPrompt,
+        options: {
+          cwd: REPO_ROOT,
+          env: SDK_ENV,
+          resume: resumeId,
+          settingSources: ["project"],
+          mcpServers: {
+            scrychat: {
+              type: "stdio",
+              command: "node",
+              args: [MCP_SERVER_PATH],
+              // The MCP child resolves decks, suggestions, collection and config under this root.
+              env: { ...SDK_ENV, SCRYCHAT_ROOT: paths.root } as Record<string, string>,
+            },
+          },
+          allowedTools: [...ALLOWED_TOOLS],
+          disallowedTools: [...DISALLOWED_TOOLS],
+          permissionMode: "dontAsk",
+          systemPrompt: {
+            type: "preset",
+            preset: "claude_code",
+            append:
+              "Card-image rubric: embed ![[Card]] only for a FOCAL card (the single headline recommendation, the commander under discussion, or a 2-3 card side-by-side comparison), capped at 2-3 per reply, never inside tables or bullet lists. Use hover [[Card]] for everything enumerable (lists, tables, passing or repeat mentions). Group chips [[group:...]] stay for categories.",
           },
         },
-        allowedTools: [...ALLOWED_TOOLS],
-        disallowedTools: [...DISALLOWED_TOOLS],
-        permissionMode: "dontAsk",
-        systemPrompt: {
-          type: "preset",
-          preset: "claude_code",
-          append:
-            "Card-image rubric: embed ![[Card]] only for a FOCAL card (the single headline recommendation, the commander under discussion, or a 2-3 card side-by-side comparison), capped at 2-3 per reply, never inside tables or bullet lists. Use hover [[Card]] for everything enumerable (lists, tables, passing or repeat mentions). Group chips [[group:...]] stay for categories.",
-        },
-      },
-    });
+      });
 
-    // Fill in the placeholder registered above (pre-query) now that `q`
-    // exists; preserve any interrupt already requested while we were
-    // building the query (see /api/chats/:id/stop).
-    turnEntry.q = q;
-    if (turnEntry.interrupted) void q.interrupt();
+      // Fill in the placeholder registered above (pre-query) now that `q`
+      // exists; preserve any interrupt already requested while we were
+      // building the query (see /api/chats/:id/stop).
+      turnEntry.q = q;
+      if (turnEntry.interrupted) void q.interrupt();
 
-    res.on("close", () => {
-      if (!res.writableEnded) {
-        void q.interrupt();
-      }
-    });
-
-    for await (const msg of q) {
-      if (res.writableEnded) break;
-      if (msg.type === "system" && msg.subtype === "init") {
-        setSession(clientSessionId, msg.session_id);
-        chat.sdkSessionId = msg.session_id;
-      }
-
-      if (msg.type === "assistant") {
-        for (const block of msg.message.content) {
-          if (block.type === "text") {
-            assistantText += block.text;
-            const last = segments[segments.length - 1];
-            if (last && last.type === "text") {
-              last.text += block.text;
-            } else {
-              segments.push({ type: "text", text: block.text });
-            }
-            sseWrite(res, { type: "text-delta", text: block.text });
-          } else if (block.type === "tool_use") {
-            assistantTools.push({ name: block.name, input: block.input });
-            segments.push({ type: "tool", name: block.name, input: block.input });
-            toolSegmentByUseId.set(block.id, segments.length - 1);
-            sseWrite(res, { type: "tool-use", name: block.name, input: block.input });
-          }
+      res.on("close", () => {
+        if (!res.writableEnded) {
+          void q.interrupt();
         }
-      }
+      });
 
-      // tool_result blocks arrive on a subsequent "user" message; match by
-      // tool_use_id back to the segment created above.
-      if (msg.type === "user") {
-        const content = (msg.message as { content?: unknown }).content;
-        if (Array.isArray(content)) {
-          for (const block of content) {
-            if (block && typeof block === "object" && (block as any).type === "tool_result") {
-              const toolUseId = (block as any).tool_use_id as string | undefined;
-              if (!toolUseId) continue;
-              const idx = toolSegmentByUseId.get(toolUseId);
-              if (idx === undefined) continue;
-              // #70: store and stream the result WHOLE. The 2048-char cap
-              // that used to be applied here is a display bound (it keeps a
-              // blob out of data-result and the hover popover) and is now
-              // applied at render time instead. Cutting at capture made the
-              // stored JSON invalid, which silently disabled every
-              // parse*Spec component and hid card names from the grounding
-              // check -- measured on the real deck, 29 of 76 names survived.
-              // See truncate-core.ts.
-              const result = stringifyToolResultContent((block as any).content);
-              const seg = segments[idx];
-              if (seg && seg.type === "tool") seg.result = result;
-              sseWrite(res, { type: "tool-result", toolIndex: idx, result });
+      for await (const msg of q) {
+        if (res.writableEnded) break;
+        if (msg.type === "system" && msg.subtype === "init") {
+          setSession(sessionKey, msg.session_id);
+          chat.sdkSessionId = msg.session_id;
+        }
+
+        if (msg.type === "assistant") {
+          for (const block of msg.message.content) {
+            if (block.type === "text") {
+              assistantText += block.text;
+              const last = segments[segments.length - 1];
+              if (last && last.type === "text") {
+                last.text += block.text;
+              } else {
+                segments.push({ type: "text", text: block.text });
+              }
+              sseWrite(res, { type: "text-delta", text: block.text });
+            } else if (block.type === "tool_use") {
+              assistantTools.push({ name: block.name, input: block.input });
+              segments.push({ type: "tool", name: block.name, input: block.input });
+              toolSegmentByUseId.set(block.id, segments.length - 1);
+              sseWrite(res, { type: "tool-use", name: block.name, input: block.input });
             }
           }
         }
-      }
 
-      if (msg.type === "result") {
-        setSession(clientSessionId, msg.session_id);
-        chat.sdkSessionId = msg.session_id;
-        sseWrite(res, {
-          type: "done",
-          sessionId: clientSessionId,
-          result: msg.subtype === "success" ? msg.result : null,
-          isError: msg.is_error,
-        });
+        // tool_result blocks arrive on a subsequent "user" message; match by
+        // tool_use_id back to the segment created above.
+        if (msg.type === "user") {
+          const content = (msg.message as { content?: unknown }).content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block && typeof block === "object" && (block as any).type === "tool_result") {
+                const toolUseId = (block as any).tool_use_id as string | undefined;
+                if (!toolUseId) continue;
+                const idx = toolSegmentByUseId.get(toolUseId);
+                if (idx === undefined) continue;
+                // #70: store and stream the result WHOLE. The 2048-char cap
+                // that used to be applied here is a display bound (it keeps a
+                // blob out of data-result and the hover popover) and is now
+                // applied at render time instead. Cutting at capture made the
+                // stored JSON invalid, which silently disabled every
+                // parse*Spec component and hid card names from the grounding
+                // check -- measured on the real deck, 29 of 76 names survived.
+                // See truncate-core.ts.
+                const result = stringifyToolResultContent((block as any).content);
+                const seg = segments[idx];
+                if (seg && seg.type === "tool") seg.result = result;
+                sseWrite(res, { type: "tool-result", toolIndex: idx, result });
+              }
+            }
+          }
+        }
+
+        if (msg.type === "result") {
+          // A resume whose transcript is gone comes back as an error result with no output:
+          // retry once as a fresh session instead of surfacing it (the chat JSON is kept).
+          if (resumeId && msg.is_error && segments.length === 0) throw new ResumeFailed(String((msg as any).result ?? ""));
+          setSession(sessionKey, msg.session_id);
+          chat.sdkSessionId = msg.session_id;
+          sseWrite(res, {
+            type: "done",
+            sessionId: clientSessionId,
+            result: msg.subtype === "success" ? msg.result : null,
+            isError: msg.is_error,
+          });
+        }
       }
+      break;
+    } catch (err) {
+      if (resumeId && attempt === 0 && segments.length === 0 && !res.writableEnded) {
+        console.warn(`resume of ${resumeId} failed (${err instanceof Error ? err.message : String(err)}); starting a fresh session`);
+        resumeId = undefined;
+        chat.sdkSessionId = undefined;
+        continue;
+      }
+      sseWrite(res, { type: "done", sessionId: clientSessionId, error: err instanceof Error ? err.message : String(err) });
+      break;
     }
-  } catch (err) {
-    sseWrite(res, { type: "done", sessionId: clientSessionId, error: err instanceof Error ? err.message : String(err) });
+  }
   } finally {
     // Read/delete via the LOCAL `turnEntry` reference captured at
     // registration, not a fresh activeTurns.get(chat.id) lookup: a second
@@ -528,8 +570,8 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     // still points at this stream's turnEntry (i.e. no newer turn replaced
     // it in the meantime).
     turnInterrupted = turnEntry.interrupted;
-    if (activeTurns.get(chat.id) === turnEntry) {
-      activeTurns.delete(chat.id);
+    if (activeTurns.get(turnKey) === turnEntry) {
+      activeTurns.delete(turnKey);
     }
     // Group-chip post-pass (issues #20/#21): runs after "done" has already
     // streamed (the reply is final either way), so a slow/failed pass never
@@ -622,7 +664,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       at: new Date().toISOString(),
     });
     chat.updatedAt = new Date().toISOString();
-    await writeChatFile(chat);
+    await writeChatFile(paths.chats, chat);
     if (turnInterrupted && !res.writableEnded) {
       sseWrite(res, { type: "done", sessionId: clientSessionId, interrupted: true });
     }
@@ -633,12 +675,12 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 app.get("/api/chats", async (req: Request, res: Response) => {
   try {
     const deckFilter = typeof req.query.deck === "string" ? sanitizeName(req.query.deck) : null;
-    await fs.promises.mkdir(CHATS_DIR, { recursive: true });
-    const files = await fs.promises.readdir(CHATS_DIR);
+    const chatsDir = me(req).chats;
+    const files = await fs.promises.readdir(chatsDir);
     const summaries: { id: string; title: string; updatedAt: string; messageCount: number }[] = [];
     for (const file of files) {
       if (!file.endsWith(".json") || file.startsWith(".tmp-")) continue;
-      const chat = await readChatFile(file.replace(/\.json$/, ""));
+      const chat = await readChatFile(chatsDir, file.replace(/\.json$/, ""));
       if (chat) {
         // backfill tolerance: old chat files without deckRefs are unlinked
         if (deckFilter && !(chat.deckRefs ?? []).includes(deckFilter)) continue;
@@ -663,7 +705,7 @@ app.get("/api/chats/:id", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const chat = await readChatFile(req.params.id);
+    const chat = await readChatFile(me(req).chats, req.params.id);
     if (!chat) {
       res.status(404).json({ error: "Chat not found" });
       return;
@@ -680,7 +722,7 @@ app.delete("/api/chats/:id", async (req: Request, res: Response) => {
     return;
   }
   try {
-    await fs.promises.unlink(chatFilePath(req.params.id));
+    await fs.promises.unlink(chatFileFor(me(req).chats, req.params.id));
     res.json({ ok: true });
   } catch (err: any) {
     if (err?.code === "ENOENT") {
@@ -696,7 +738,7 @@ app.post("/api/chats/:id/stop", (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid chat id" });
     return;
   }
-  const entry = activeTurns.get(req.params.id);
+  const entry = activeTurns.get(`${req.user}/${req.params.id}`);
   if (!entry) {
     res.status(404).json({ error: "no active turn" });
     return;
@@ -727,7 +769,7 @@ app.patch("/api/chats/:id", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const chat = await readChatFile(req.params.id);
+    const chat = await readChatFile(me(req).chats, req.params.id);
     if (!chat) {
       res.status(404).json({ error: "Chat not found" });
       return;
@@ -735,7 +777,7 @@ app.patch("/api/chats/:id", async (req: Request, res: Response) => {
     if (typeof title === "string") chat.title = title.trim();
     if (feedback !== undefined) chat.feedback = mergeFeedback(chat.feedback, feedback)!;
     chat.updatedAt = new Date().toISOString();
-    await writeChatFile(chat);
+    await writeChatFile(me(req).chats, chat);
     res.json({ ok: true, title: chat.title, feedback: chat.feedback ?? {} });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -743,46 +785,44 @@ app.patch("/api/chats/:id", async (req: Request, res: Response) => {
 });
 
 // ---- UI action log: recent deck CRUD, surfaced to chat as context ----
-// Indices are absolute (monotonic `pushed` count), not array positions, so
-// trimming the array to ACTION_LOG_MAX entries never desyncs lastSeenMap.
+// Per user, so one user's edits never reach another's prompt. Indices are
+// absolute (monotonic `pushed` count), not array positions, so trimming the
+// array to ACTION_LOG_MAX entries never desyncs lastSeenActionIdx.
 const ACTION_LOG_MAX = 50;
-const actionLog: { t: number; text: string }[] = [];
-let pushed = 0; // total entries ever logged
-const lastSeenMap = new Map<string, number>(); // clientSessionId -> absolute index seen so far
+type UserState = { actionLog: { t: number; text: string }[]; pushed: number };
+const userStates = new Map<string, UserState>();
+function stateOf(user: string): UserState {
+  let st = userStates.get(user);
+  if (!st) userStates.set(user, (st = { actionLog: [], pushed: 0 }));
+  return st;
+}
 
-// Per-deck edit history; also pushed live over /api/deck-events.
+// Per-deck edit history keyed `${user}/${deck}`; also pushed live over /api/deck-events.
 // ponytail: in-memory ring, lost on restart; persist to JSONL in core when users ask
 const deckHistory = createDeckHistory();
-const historyListeners = new Set<(deck: string, entry: { at: string; action: string }) => void>();
+const historyKey = (user: string, deck: string) => `${user}/${deck}`;
+const historyListeners = new Set<(user: string, deck: string, entry: { at: string; action: string }) => void>();
 
-function logAction(text: string, deck?: string): void {
-  actionLog.push({ t: Date.now(), text });
-  pushed++;
-  if (actionLog.length > ACTION_LOG_MAX) actionLog.shift();
+function logAction(req: Request, text: string, deck?: string): void {
+  const user = req.user as string;
+  const st = stateOf(user);
+  st.actionLog.push({ t: Date.now(), text });
+  st.pushed++;
+  if (st.actionLog.length > ACTION_LOG_MAX) st.actionLog.shift();
   if (deck) {
-    const entry = deckHistory.record(deck, text);
-    for (const fn of historyListeners) fn(deck, entry);
+    const entry = deckHistory.record(historyKey(user, deck), text);
+    for (const fn of historyListeners) fn(user, deck, entry);
   }
 }
 
-function recentActionsFor(clientSessionId: string): string[] {
-  const oldestIndex = pushed - actionLog.length;
-  const defaultSeen = Math.max(oldestIndex, pushed - 5);
-  const seen = lastSeenMap.get(clientSessionId) ?? defaultSeen;
+// Chat-file-backed: lastSeenActionIdx lives in the chat file so
+// action context survives server restarts.
+function recentActionsForChat(st: UserState, chat: ChatFile): string[] {
+  const oldestIndex = st.pushed - st.actionLog.length;
+  const seen = chat.lastSeenActionIdx ?? Math.max(oldestIndex, st.pushed - 5);
   const fromIdx = Math.max(0, seen - oldestIndex);
-  const entries = actionLog.slice(fromIdx).map((e) => e.text);
-  lastSeenMap.set(clientSessionId, pushed);
-  return entries;
-}
-
-// Chat-file-backed variant: lastSeenActionIdx lives in the chat file so
-// action context survives server restarts (mirrors recentActionsFor above).
-function recentActionsForChat(chat: ChatFile): string[] {
-  const oldestIndex = pushed - actionLog.length;
-  const seen = chat.lastSeenActionIdx ?? Math.max(oldestIndex, pushed - 5);
-  const fromIdx = Math.max(0, seen - oldestIndex);
-  const entries = actionLog.slice(fromIdx).map((e) => e.text);
-  chat.lastSeenActionIdx = pushed;
+  const entries = st.actionLog.slice(fromIdx).map((e) => e.text);
+  chat.lastSeenActionIdx = st.pushed;
   return entries;
 }
 
@@ -861,9 +901,9 @@ app.get("/api/card-images", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/api/decks", async (_req: Request, res: Response) => {
+app.get("/api/decks", async (req: Request, res: Response) => {
   try {
-    const decks = await listDecks(DECKS_DIR);
+    const decks = await listDecks(me(req).decks);
     res.json(decks.map((d) => ({ name: d.name, commander: d.commander, updatedAt: d.updatedAt })));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -876,14 +916,14 @@ app.get("/api/decks/:name", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid deck name" });
       return;
     }
-    const deck = await getDeck(req.params.name, DECKS_DIR);
+    const deck = await getDeck(req.params.name, me(req).decks);
     if (!deck) {
       res.status(404).json({ error: "Deck not found" });
       return;
     }
-    const report = await deckReport(req.params.name, resolver, DECKS_DIR, config.quotaTargets);
+    const report = await deckReport(req.params.name, resolver, me(req).decks, cfgOf(req).quotaTargets);
 
-    const owned = getOwnedIndex();
+    const owned = getOwnedIndex(me(req).collection);
     function isOwnedName(name: string): boolean {
       if (!owned) return false;
       const lower = name.toLowerCase();
@@ -942,8 +982,8 @@ app.get("/api/decks/:name/export", async (req: Request, res: Response) => {
     const rawFormat = req.query.format;
     const format = allowedFormats.includes(rawFormat as (typeof allowedFormats)[number])
       ? (rawFormat as (typeof allowedFormats)[number])
-      : config.defaultExportFormat;
-    const text = await exportDeck(req.params.name, format, DECKS_DIR);
+      : cfgOf(req).defaultExportFormat;
+    const text = await exportDeck(req.params.name, format, me(req).decks);
     res.type("text/plain").send(text);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -966,8 +1006,8 @@ app.post("/api/decks", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid deck name" });
       return;
     }
-    const deck = await createDeck(name, commander, resolver, DECKS_DIR);
-    logAction(`created deck "${deck.name}" (commander ${deck.commander})`, deck.name);
+    const deck = await createDeck(name, commander, resolver, me(req).decks);
+    logAction(req, `created deck "${deck.name}" (commander ${deck.commander})`, deck.name);
     res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -976,11 +1016,11 @@ app.post("/api/decks", async (req: Request, res: Response) => {
 
 // ---- browse: commanders (local mirror) + precons (MTGJSON) ----
 
-async function uniqueDeckName(base: string): Promise<string> {
+async function uniqueDeckName(base: string, decksDir: string): Promise<string> {
   const root = base.replace(/[\\/\0]/g, "-").trim().slice(0, 120) || "Deck";
   for (let i = 1; ; i++) {
     const n = i === 1 ? root : `${root} (${i})`;
-    if (!(await getDeck(n, DECKS_DIR))) return n;
+    if (!(await getDeck(n, decksDir))) return n;
   }
 }
 
@@ -1030,17 +1070,17 @@ app.post("/api/browse/precons/:fileName/import", async (req: Request, res: Respo
       res.status(404).json({ error: "Precon not found" });
       return;
     }
-    const name = await uniqueDeckName(typeof req.body?.name === "string" && req.body.name.trim() ? req.body.name.trim() : p.name);
+    const name = await uniqueDeckName(typeof req.body?.name === "string" && req.body.name.trim() ? req.body.name.trim() : p.name, me(req).decks);
     if (!isValidDeckName(name)) {
       res.status(400).json({ error: "invalid deck name" });
       return;
     }
-    const deck = await createDeck(name, p.commanders[0].name, resolver, DECKS_DIR);
+    const deck = await createDeck(name, p.commanders[0].name, resolver, me(req).decks);
     // Partner commanders ride along as ordinary cards (a deck holds one commander).
     const cards = [...p.commanders.slice(1).map((c) => ({ name: c.name })), ...p.cards];
-    const result = await addCards(name, cards, resolver, DECKS_DIR);
-    logAction(`created deck "${name}" (commander ${deck.commander}) from precon "${p.name}"`, name);
-    for (const r of result.rejected) logAction(`tried to add "${r.name}" to "${name}" — rejected: ${r.reason}`, name);
+    const result = await addCards(name, cards, resolver, me(req).decks);
+    logAction(req, `created deck "${name}" (commander ${deck.commander}) from precon "${p.name}"`, name);
+    for (const r of result.rejected) logAction(req, `tried to add "${r.name}" to "${name}" — rejected: ${r.reason}`, name);
     res.json({ deck, added: result.added.length, rejected: result.rejected });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1054,13 +1094,13 @@ app.post("/api/browse/start", async (req: Request, res: Response) => {
       res.status(400).json({ error: "commander is required" });
       return;
     }
-    const name = await uniqueDeckName(commander.trim());
+    const name = await uniqueDeckName(commander.trim(), me(req).decks);
     if (!isValidDeckName(name)) {
       res.status(400).json({ error: "invalid deck name" });
       return;
     }
-    const deck = await createDeck(name, commander.trim(), resolver, DECKS_DIR);
-    logAction(`created deck "${deck.name}" (commander ${deck.commander})`, deck.name);
+    const deck = await createDeck(name, commander.trim(), resolver, me(req).decks);
+    logAction(req, `created deck "${deck.name}" (commander ${deck.commander})`, deck.name);
     res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1071,7 +1111,7 @@ app.get("/api/browse/explore", async (req: Request, res: Response) => {
   try {
     const { q, colors } = req.query as { q?: string; colors?: string };
     const mine = await Promise.all(
-      (await listDecks(DECKS_DIR))
+      (await listDecks(me(req).decks))
         .filter((d) => matchesFilter(d.name + " " + d.commander, d.commanderIdentity, q, colors))
         .map(async (d) => ({
           name: d.name,
@@ -1105,13 +1145,13 @@ app.get("/api/browse/other-decks", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid deck name" });
       return;
     }
-    const cur = await getDeck(name, DECKS_DIR);
+    const cur = await getDeck(name, me(req).decks);
     if (!cur) {
       res.status(404).json({ error: "Deck not found" });
       return;
     }
     const cmd = cur.commander.toLowerCase();
-    const decks = (await listDecks(DECKS_DIR))
+    const decks = (await listDecks(me(req).decks))
       .filter((d) => d.name !== cur.name && d.commander.toLowerCase() === cmd)
       .map((d) => ({ name: d.name, commander: d.commander, cardCount: d.cards.reduce((n, c) => n + (c.count ?? 1), 0) }));
     let precons: ReturnType<typeof preconSummary>[] = [];
@@ -1138,12 +1178,12 @@ app.post("/api/decks/:name/cards", async (req: Request, res: Response) => {
       res.status(400).json({ error: "cards array is required" });
       return;
     }
-    const result = await addCards(req.params.name, cards, resolver, DECKS_DIR, { board: board === "side" ? "side" : "main" });
+    const result = await addCards(req.params.name, cards, resolver, me(req).decks, { board: board === "side" ? "side" : "main" });
     for (const c of result.added) {
-      logAction(`added "${c.name}"${c.tags?.length ? ` (${c.tags.join(", ")})` : ""} to ${c.board === "side" ? "sideboard of " : ""}"${req.params.name}"`, req.params.name);
+      logAction(req, `added "${c.name}"${c.tags?.length ? ` (${c.tags.join(", ")})` : ""} to ${c.board === "side" ? "sideboard of " : ""}"${req.params.name}"`, req.params.name);
     }
     for (const r of result.rejected) {
-      logAction(`tried to add "${r.name}" to "${req.params.name}" — rejected: ${r.reason}`, req.params.name);
+      logAction(req, `tried to add "${r.name}" to "${req.params.name}" — rejected: ${r.reason}`, req.params.name);
     }
     res.json(result);
   } catch (err) {
@@ -1174,9 +1214,9 @@ app.patch("/api/decks/:name/cards", async (req: Request, res: Response) => {
       res.status(400).json({ error: "each card must be {name: string, tags: string[]}" });
       return;
     }
-    const deck = await setCardTags(req.params.name, cards, DECKS_DIR);
+    const deck = await setCardTags(req.params.name, cards, me(req).decks);
     for (const c of cards) {
-      logAction(`tagged "${c.name}" [${(c.tags ?? []).join(", ")}] in "${req.params.name}"`, req.params.name);
+      logAction(req, `tagged "${c.name}" [${(c.tags ?? []).join(", ")}] in "${req.params.name}"`, req.params.name);
     }
     res.json({ deck });
   } catch (err) {
@@ -1195,8 +1235,8 @@ app.patch("/api/decks/:name/tags", async (req: Request, res: Response) => {
       res.status(400).json({ error: "from and to are required non-empty strings" });
       return;
     }
-    const deck = await renameTag(req.params.name, from, to, DECKS_DIR);
-    logAction(`renamed tag "${from}" → "${to}" in "${req.params.name}"`, req.params.name);
+    const deck = await renameTag(req.params.name, from, to, me(req).decks);
+    logAction(req, `renamed tag "${from}" → "${to}" in "${req.params.name}"`, req.params.name);
     res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1214,8 +1254,8 @@ app.patch("/api/decks/:name/board", async (req: Request, res: Response) => {
       res.status(400).json({ error: "card (string) and board (main|side) are required" });
       return;
     }
-    const deck = await moveCardBoard(req.params.name, card, board, DECKS_DIR);
-    logAction(`Moved ${card} to ${board === "side" ? "sideboard" : "mainboard"}`, req.params.name);
+    const deck = await moveCardBoard(req.params.name, card, board, me(req).decks);
+    logAction(req, `Moved ${card} to ${board === "side" ? "sideboard" : "mainboard"}`, req.params.name);
     res.json({ deck });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1233,9 +1273,9 @@ app.delete("/api/decks/:name/cards", async (req: Request, res: Response) => {
       res.status(400).json({ error: "cards array is required" });
       return;
     }
-    const deck = await removeCards(req.params.name, cards, DECKS_DIR);
+    const deck = await removeCards(req.params.name, cards, me(req).decks);
     for (const name of cards) {
-      logAction(`removed "${name}" from "${req.params.name}"`, req.params.name);
+      logAction(req, `removed "${name}" from "${req.params.name}"`, req.params.name);
     }
     res.json({ deck });
   } catch (err) {
@@ -1249,13 +1289,13 @@ app.delete("/api/decks/:name", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid deck name" });
       return;
     }
-    const ok = await deleteDeck(req.params.name, DECKS_DIR);
+    const ok = await deleteDeck(req.params.name, me(req).decks);
     if (!ok) {
       res.status(404).json({ error: "Deck not found" });
       return;
     }
-    logAction(`deleted deck "${req.params.name}"`, req.params.name);
-    deckHistory.delete(req.params.name);
+    logAction(req, `deleted deck "${req.params.name}"`, req.params.name);
+    deckHistory.delete(historyKey(req.user as string, req.params.name));
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1279,17 +1319,17 @@ app.post("/api/decks/import", async (req: Request, res: Response) => {
     }
     const result = (await importDecklist(
       text,
-      { deckName, mode, targets: config.quotaTargets },
+      { deckName, mode, targets: cfgOf(req).quotaTargets },
       resolver,
-      DECKS_DIR
+      me(req).decks
     )) as {
       created?: { name: string };
       added?: { name: string }[];
     };
     if (result.created) {
-      logAction(`imported decklist into new deck "${result.created.name}"`, result.created.name);
+      logAction(req, `imported decklist into new deck "${result.created.name}"`, result.created.name);
     } else if (result.added && result.added.length > 0) {
-      logAction(`imported ${result.added.length} card(s) into "${deckName}"`, deckName);
+      logAction(req, `imported ${result.added.length} card(s) into "${deckName}"`, deckName);
     }
     res.json(result);
   } catch (err) {
@@ -1308,9 +1348,9 @@ app.patch("/api/decks/:name", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid deck name" });
       return;
     }
-    const deck = await renameDeck(req.params.name, name, DECKS_DIR);
-    logAction(`renamed deck "${req.params.name}" → "${name}"`, req.params.name);
-    deckHistory.rename(req.params.name, name);
+    const deck = await renameDeck(req.params.name, name, me(req).decks);
+    logAction(req, `renamed deck "${req.params.name}" → "${name}"`, req.params.name);
+    deckHistory.rename(historyKey(req.user as string, req.params.name), historyKey(req.user as string, name));
     res.json({ deck });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -1333,8 +1373,8 @@ app.patch("/api/decks/:name/commander", async (req: Request, res: Response) => {
       res.status(400).json({ error: "commander is required" });
       return;
     }
-    const result = await setCommander(req.params.name, commander, resolver, DECKS_DIR);
-    logAction(
+    const result = await setCommander(req.params.name, commander, resolver, me(req).decks);
+    logAction(req, 
       `set commander of "${req.params.name}" to "${result.deck.commander}"` +
         (result.nowIllegal.length > 0 ? ` (${result.nowIllegal.length} card(s) now illegal)` : ""),
       req.params.name
@@ -1365,9 +1405,9 @@ app.patch("/api/decks/:name/cards/count", async (req: Request, res: Response) =>
       res.status(400).json({ error: "count must be a number" });
       return;
     }
-    const result = await setCardCount(req.params.name, card, count, resolver, DECKS_DIR);
+    const result = await setCardCount(req.params.name, card, count, resolver, me(req).decks);
     if (result.updated) {
-      logAction(`set "${result.updated.name}" count to ${result.updated.count} in "${req.params.name}"`, req.params.name);
+      logAction(req, `set "${result.updated.name}" count to ${result.updated.count} in "${req.params.name}"`, req.params.name);
     }
     res.json({ deck: result.deck, updated: result.updated, rejected: result.rejected });
   } catch (err) {
@@ -1387,8 +1427,8 @@ app.delete("/api/decks/:name/tags/:tag", async (req: Request, res: Response) => 
       return;
     }
     const tag = req.params.tag;
-    const result = await removeTag(req.params.name, tag, DECKS_DIR);
-    logAction(`removed tag "${tag}" from ${result.affected} card(s) in "${req.params.name}"`, req.params.name);
+    const result = await removeTag(req.params.name, tag, me(req).decks);
+    logAction(req, `removed tag "${tag}" from ${result.affected} card(s) in "${req.params.name}"`, req.params.name);
     res.json({ deck: result.deck, affected: result.affected });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -1413,8 +1453,8 @@ app.patch("/api/decks/:name/meta", async (req: Request, res: Response) => {
       return;
     }
     // writing the deck file triggers the /api/deck-events watcher event
-    const deck = await setDeckMeta(req.params.name, body, DECKS_DIR);
-    logAction(`set meta (${Object.keys(body).join(", ")}) of "${req.params.name}"`, req.params.name);
+    const deck = await setDeckMeta(req.params.name, body, me(req).decks);
+    logAction(req, `set meta (${Object.keys(body).join(", ")}) of "${req.params.name}"`, req.params.name);
     res.json({ deck });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -1427,10 +1467,24 @@ app.get("/api/decks/:name/history", (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid deck name" });
     return;
   }
-  res.json({ entries: deckHistory.list(req.params.name) });
+  res.json({ entries: deckHistory.list(historyKey(req.user as string, req.params.name)) });
 });
 
-// ---- deck-events SSE: watch decks/ dir for changes ----
+// ---- deck-events SSE: one recursive watch over users/, filtered per connection ----
+// Recursive so a user dir created after boot (first request) is covered with no
+// re-watch. The filter (deckEventFor) lets a connection see only its own decks.
+const deckEventListeners = new Set<(rel: string | null) => void>();
+let usersWatcher: fs.FSWatcher | null = null;
+function ensureUsersWatcher(): void {
+  if (usersWatcher) return;
+  fs.mkdirSync(USERS_DIR, { recursive: true });
+  usersWatcher = fs.watch(USERS_DIR, { recursive: true }, (_eventType, filename) => {
+    const rel = filename ? String(filename) : null;
+    for (const fn of deckEventListeners) fn(rel);
+  });
+  usersWatcher.on("error", (err) => console.error("users watcher error:", err));
+}
+
 app.get("/api/deck-events", (req: Request, res: Response) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -1438,19 +1492,22 @@ app.get("/api/deck-events", (req: Request, res: Response) => {
     Connection: "keep-alive",
   });
 
-  fs.mkdirSync(DECKS_DIR, { recursive: true });
-  const watcher = fs.watch(DECKS_DIR, (_eventType, filename) => {
-    if (!filename || !filename.endsWith(".json") || filename.startsWith(".tmp-")) return;
-    const name = filename.replace(/\.json$/, "");
-    sseWrite(res, { name });
-  });
+  const user = req.user as string;
+  me(req); // make sure the user's dirs exist before any change lands
+  ensureUsersWatcher();
+  const onFile = (rel: string | null) => {
+    const name = deckEventFor(user, rel);
+    if (name) sseWrite(res, { name });
+  };
+  deckEventListeners.add(onFile);
 
-  const onHistory = (deck: string, entry: { at: string; action: string }) =>
-    sseWrite(res, { type: "history", deck, entry });
+  const onHistory = (u: string, deck: string, entry: { at: string; action: string }) => {
+    if (u === user) sseWrite(res, { type: "history", deck, entry });
+  };
   historyListeners.add(onHistory);
 
   req.on("close", () => {
-    watcher.close();
+    deckEventListeners.delete(onFile);
     historyListeners.delete(onHistory);
   });
 });
@@ -1489,7 +1546,7 @@ app.post("/api/collection", express.text({ type: "text/plain", limit: "64mb" }),
       importedAt,
       source: parsed.kind === "log" ? "player-log" : "parsed",
       cards,
-    });
+    }, me(req).collection);
 
     res.json({ ok: true, stats: { ...buildImportResult(cards, mapResult), importedAt } });
   } catch (err) {
@@ -1497,9 +1554,9 @@ app.post("/api/collection", express.text({ type: "text/plain", limit: "64mb" }),
   }
 });
 
-app.get("/api/collection", async (_req: Request, res: Response) => {
+app.get("/api/collection", async (req: Request, res: Response) => {
   try {
-    const stats = collectionStats(COLLECTION_PATH);
+    const stats = collectionStats(me(req).collection);
     if (!stats.exists) {
       res.json({ exists: false });
       return;
@@ -1528,7 +1585,7 @@ app.get("/api/decks/:name/suggestions", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid deck name" });
       return;
     }
-    const all = await listSuggestions(req.params.name, SUGGESTIONS_DIR);
+    const all = await listSuggestions(req.params.name, me(req).suggestions);
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
     const suggestions = status ? all.filter((s) => s.status === status) : all;
     res.json({
@@ -1552,7 +1609,7 @@ app.post("/api/decks/:name/suggestions", async (req: Request, res: Response) => 
       res.status(400).json({ error: "expected a non-empty 'suggestions' array" });
       return;
     }
-    const all = await addSuggestions(req.params.name, proposals, SUGGESTIONS_DIR);
+    const all = await addSuggestions(req.params.name, proposals, me(req).suggestions);
     res.json({ deck: req.params.name, added: proposals.length, suggestions: all });
   } catch (err) {
     // Validation failures (missing 'in'/'out'/'why') are client errors.
@@ -1579,10 +1636,10 @@ app.post("/api/decks/:name/suggestions/:id/:verdict", async (req: Request, res: 
     // retry. Check the deck can take the change, then record, then apply.
     let outCard: string | undefined;
     if (status === "accepted") {
-      const pendingList = await listSuggestions(name, SUGGESTIONS_DIR);
+      const pendingList = await listSuggestions(name, me(req).suggestions);
       const target = pendingList.find((s) => s.id === id);
       if (target?.out) {
-        const current = await getDeck(name, DECKS_DIR);
+        const current = await getDeck(name, me(req).decks);
         const present = current?.cards.some(
           (c) => c.name.toLowerCase() === target.out!.toLowerCase(),
         );
@@ -1597,7 +1654,7 @@ app.post("/api/decks/:name/suggestions/:id/:verdict", async (req: Request, res: 
       }
     }
 
-    const suggestion = await decideSuggestion(name, id, status, req.body?.note, SUGGESTIONS_DIR);
+    const suggestion = await decideSuggestion(name, id, status, req.body?.note, me(req).suggestions);
 
     // Accepting records intent AND applies the card change, so the mobile
     // surface is one tap. decideSuggestion never writes the deck file itself,
@@ -1605,18 +1662,18 @@ app.post("/api/decks/:name/suggestions/:id/:verdict", async (req: Request, res: 
     let applied: unknown = null;
     if (status === "accepted") {
       if (outCard) {
-        await removeCards(name, [outCard], DECKS_DIR);
+        await removeCards(name, [outCard], me(req).decks);
       }
       if (suggestion.in) {
         applied = await addCards(
           name,
           [{ name: suggestion.in, ...(suggestion.role ? { tags: [suggestion.role] } : {}) }],
           resolver,
-          DECKS_DIR,
+          me(req).decks,
         );
       }
     }
-    logAction(
+    logAction(req, 
       `${status} suggestion ${suggestion.in ? `+"${suggestion.in}"` : ""}${suggestion.out ? ` -"${suggestion.out}"` : ""} in "${name}"`,
       name,
     );
@@ -1632,7 +1689,7 @@ app.delete("/api/decks/:name/suggestions", async (req: Request, res: Response) =
       res.status(400).json({ error: "invalid deck name" });
       return;
     }
-    const removed = await clearDecided(req.params.name, SUGGESTIONS_DIR);
+    const removed = await clearDecided(req.params.name, me(req).suggestions);
     res.json({ deck: req.params.name, removed });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1640,7 +1697,8 @@ app.delete("/api/decks/:name/suggestions", async (req: Request, res: Response) =
 });
 
 // ---- settings surface: scrychat.config.json read/write over HTTP (issue #37) ----
-app.get("/api/config", (_req: Request, res: Response) => {
+app.get("/api/config", (req: Request, res: Response) => {
+  const config = cfgOf(req);
   res.json({
     ...config,
     recognizedQuotaTags: RECOGNIZED_QUOTA_TAGS,
@@ -1649,6 +1707,7 @@ app.get("/api/config", (_req: Request, res: Response) => {
 });
 
 app.patch("/api/config", (req: Request, res: Response) => {
+  const config = cfgOf(req);
   const { config: next, errors } = applyConfigPatch(config, req.body);
   if (errors.length > 0) {
     res.status(400).json({ errors });
@@ -1662,7 +1721,7 @@ app.patch("/api/config", (req: Request, res: Response) => {
     delete config.quotaTargets;
   }
   try {
-    persistConfig(config);
+    persistConfig(me(req).config, config);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     return;
@@ -1675,7 +1734,7 @@ app.patch("/api/config", (req: Request, res: Response) => {
 });
 
 // ---- health check: diagnose skill-loading / DB-staleness issues (issue #40) ----
-app.get("/api/health", (_req: Request, res: Response) => {
+app.get("/api/health", (req: Request, res: Response) => {
   const skillPath = path.join(REPO_ROOT, ".claude/skills/edh-deck-builder/SKILL.md");
   let skillLoaded = false;
   try {
@@ -1700,7 +1759,7 @@ app.get("/api/health", (_req: Request, res: Response) => {
     skillLoaded,
     skillPath,
     db: dbHealth,
-    collection: getCollectionHealth(COLLECTION_PATH),
+    collection: getCollectionHealth(me(req).collection),
   });
 });
 
@@ -1712,14 +1771,14 @@ app.get("/api/health", (_req: Request, res: Response) => {
 app.get("/suggestions", async (req: Request, res: Response) => {
   const deckParam = typeof req.query.deck === "string" ? req.query.deck : undefined;
   try {
-    const decks = await listDecks(DECKS_DIR);
+    const decks = await listDecks(me(req).decks);
     const deckName = deckParam && isValidDeckName(deckParam) ? deckParam : decks[0]?.name;
     if (!deckName) {
       res.type("html").send(renderSuggestionsPage(null, [], [], ""));
       return;
     }
-    const suggestions = await listSuggestions(deckName, SUGGESTIONS_DIR);
-    const deck = await getDeck(deckName, DECKS_DIR);
+    const suggestions = await listSuggestions(deckName, me(req).suggestions);
+    const deck = await getDeck(deckName, me(req).decks);
     res.type("html").send(
       renderSuggestionsPage(deck, suggestions, decks.map((d) => d.name), deckName),
     );
@@ -1872,11 +1931,22 @@ const UI_DIST = path.resolve(__dirname, "../ui/dist");
 app.use(express.static(UI_DIST));
 
 // SPA fallback: serve index.html for any non-API GET
-app.get(/^\/(?!api\/).*/, (_req: Request, res: Response) => {
+app.get(/^\/(?!api\/).*/, (req: Request, res: Response) => {
   res.sendFile(path.join(UI_DIST, "index.html"), (err) => {
     if (err) res.status(404).send("UI not built. Run: pnpm --filter @scrychat/web build");
   });
 });
+
+// One-time move of the pre-multi-user data (REPO_ROOT/decks, chats, ...) into
+// users/<OWNER_EMAIL>. Runs only when OWNER_EMAIL is set and that dir is absent.
+if (OWNER_ID) {
+  try {
+    const moved = migrateLegacy(REPO_ROOT, USERS_DIR, OWNER_ID);
+    if (moved) console.log(`migration: copied ${moved.join(", ")} into ${path.join(USERS_DIR, OWNER_ID)} (legacy copies left in place)`);
+  } catch (err) {
+    console.error("migration failed:", err);
+  }
+}
 
 app.listen(PORT, () => {
   // Every non-loopback IPv4 this host answers on. `app.listen(PORT)` with no

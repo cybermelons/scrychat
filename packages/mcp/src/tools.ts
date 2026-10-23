@@ -53,10 +53,18 @@ import type { NewSuggestion } from "@scrychat/core";
 import type { CardResolver, CardEntry, QuotaTargets } from "@scrychat/core";
 import type { Card, ChartSpec } from "@scrychat/core";
 
-const decksDir = path.resolve(process.cwd(), "decks");
+/**
+ * Per-user storage root. The web app spawns one MCP child per chat turn with
+ * SCRYCHAT_ROOT=users/<email>, so every tool below is scoped to that user. The
+ * terminal session (.mcp.json) sets nothing and falls back to the repo cwd.
+ */
+export const ROOT = path.resolve(process.env.SCRYCHAT_ROOT ?? process.cwd());
+const decksDir = path.join(ROOT, "decks");
 // Sibling of decks/, never inside it: listDecks reads every *.json under
 // decks/ and would parse a suggestions file as a malformed deck.
-const suggestionsDir = path.resolve(process.cwd(), "suggestions");
+const suggestionsDir = path.join(ROOT, "suggestions");
+const collectionPath = path.join(ROOT, "collection.json");
+const configPath = path.join(ROOT, "scrychat.config.json");
 
 /**
  * Loads `quotaTargets` from scrychat.config.json (repo root, cwd-relative) once
@@ -67,7 +75,6 @@ const suggestionsDir = path.resolve(process.cwd(), "suggestions");
  */
 function loadGlobalQuotaTargets(): Partial<QuotaTargets> | undefined {
   try {
-    const configPath = path.resolve(process.cwd(), "scrychat.config.json");
     const raw = fs.readFileSync(configPath, "utf8");
     const config = JSON.parse(raw);
     if (config && typeof config === "object" && config.quotaTargets && typeof config.quotaTargets === "object") {
@@ -90,7 +97,6 @@ const globalQuotaTargets = loadGlobalQuotaTargets();
  */
 function loadGlobalSeed(): number | undefined {
   try {
-    const configPath = path.resolve(process.cwd(), "scrychat.config.json");
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     if (config && typeof config === "object" && Number.isInteger(config.goldfishSeed)) {
       return config.goldfishSeed as number;
@@ -202,7 +208,7 @@ export function registerTools(server: McpServer): void {
       return safe(async () => {
         const q = query.includes("legal:") ? query : `${query} legal:commander`;
         const result = await searchCards(q, { limit, order });
-        const idx = getOwnedIndex();
+        const idx = getOwnedIndex(collectionPath);
         return {
           total: result.total,
           cards: result.cards.map((c) => shortCard(c, idx)),
@@ -226,7 +232,7 @@ export function registerTools(server: McpServer): void {
       return safe(async () => {
         const card = await getCard(name);
         if (!card) return { error: `Card not found: ${name}` };
-        const idx = getOwnedIndex();
+        const idx = getOwnedIndex(collectionPath);
         return {
           name: card.name,
           manaCost: card.manaCost,
@@ -290,7 +296,7 @@ export function registerTools(server: McpServer): void {
     },
     async ({ card, color_identity_within, max_price, limit_per_role, owned_only }) => {
       return safe(async () => {
-        const idx = getOwnedIndex();
+        const idx = getOwnedIndex(collectionPath);
         if (owned_only && !idx) {
           return { error: "no collection imported" };
         }
@@ -705,7 +711,7 @@ export function registerTools(server: McpServer): void {
     },
     async () => {
       return safe(async () => {
-        const stats = collectionStats();
+        const stats = collectionStats(collectionPath);
         if (!stats.exists) {
           return { exists: false, hint: "import via web UI: link Arena log folder or drag-drop Player.log" };
         }
@@ -1039,4 +1045,4 @@ export function registerTools(server: McpServer): void {
 }
 
 /** Exposed for tests/tools that need to clean up a throwaway deck. */
-export { deleteDeck, decksDir };
+export { deleteDeck, decksDir, suggestionsDir, collectionPath, configPath };

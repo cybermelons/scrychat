@@ -1,6 +1,6 @@
 # Multi-user scrychat (draft plan)
 
-Status: Phase 1 built (lockdown). Phases 2-3 not yet. Phases 4-5 are owner actions on the NAS.
+Status: Phases 1-2 built (lockdown, per-user storage). Phase 3 not yet. Phases 4-5 are owner actions on the NAS.
 
 Goal: a few friends use scrychat at `scrychat.evangelista.moe`, each with
 their own decks and chats, all on the owner's Claude subscription. Private
@@ -94,12 +94,12 @@ a CSRF token (the app reads no auth cookie).
 |---|---|---|
 | 1 (built) | `docker-compose.yml` | Drop the `8787` publish. Replace the `decks`, `chats` mounts with `users/`. Add `OWNER_EMAIL`, `CF_TEAM`, `CF_AUD`. Add the network that cloudflared joins. |
 | 1 (built) | `apps/web/src/auth.ts` (new) | `requireUser` middleware: verify the JWT with `jose`, set `req.user`. Unit test with a local JWKS. |
-| 1 (built) | `apps/web/src/server.ts` | Mount `requireUser` on `/api/*` and `/suggestions`. Remove `"Read"`, `"Grep"` from `allowedTools`. Startup migration (code in `users-core.ts`, wired in Phase 2 with the per-user paths). |
+| 1 (built) | `apps/web/src/server.ts` | Mount `requireUser` on `/api/*` and `/suggestions`. Remove `"Read"`, `"Grep"` from `allowedTools`. Startup migration (code in `users-core.ts`, wired at startup in Phase 2). |
 | 1 (built) | `.claude/skills/edh-deck-builder/SKILL.md` | Inline what the model needs from `references/functional-tags.md`. |
-| 2 | `apps/web/src/server.ts` | `userRoot(req)`. Replace `DECKS_DIR`, `CHATS_DIR`, `SUGGESTIONS_DIR`, `CONFIG_PATH`, `COLLECTION_PATH` uses with per-request paths. Inline `mcpServers` with `env.SCRYCHAT_ROOT`. Key `actionLog`, `deckHistory`, `activeTurns` by user. Recursive watch + filter in `/api/deck-events`. |
-| 2 | `packages/core/src/collection.ts` | Callers pass the collection path. Keep the default only for the CLI. |
-| 2 | `packages/mcp/src/tools.ts` | `ROOT` from `SCRYCHAT_ROOT`. Use it at lines 56, 59, 70, 93. Pass `join(ROOT,"collection.json")` to `getOwnedIndex` at 205, 229, 293. |
-| 2 | `apps/web/src/deck-history-core.ts` | No change; callers key by `user/deck`. |
+| 2 (built) | `apps/web/src/server.ts` | `userRoot(req)`. Replace `DECKS_DIR`, `CHATS_DIR`, `SUGGESTIONS_DIR`, `CONFIG_PATH`, `COLLECTION_PATH` uses with per-request paths. Inline `mcpServers` with `env.SCRYCHAT_ROOT`. Key `actionLog`, `deckHistory`, `activeTurns` by user. Recursive watch + filter in `/api/deck-events`. |
+| 2 (built) | `packages/core/src/collection.ts` | Callers pass the collection path. Keep the default only for the CLI. |
+| 2 (built) | `packages/mcp/src/tools.ts` | `ROOT` from `SCRYCHAT_ROOT`. Use it at lines 56, 59, 70, 93. Pass `join(ROOT,"collection.json")` to `getOwnedIndex` at 205, 229, 293. |
+| 2 (built) | `apps/web/src/deck-history-core.ts` | No change; callers key by `user/deck`. |
 | 3 | `apps/web/src/server.ts` | Turn semaphore, daily budget, `pausedUntil`, `GET /api/admin/usage`. Pure helpers in a `*-core.ts` with tests. |
 | 1-3 | `docs/deploy-nas.md` | New mounts, env, tunnel route, security gate record. |
 
