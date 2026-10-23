@@ -11,6 +11,7 @@ import {
   listDecks,
   deleteDeck,
   deckReport,
+  originalityScore,
   deckSummary,
   setCardTags,
   renameTag,
@@ -850,5 +851,20 @@ describe("decks", () => {
       const commanderEntry = result.entries.find((e) => e.name === "Kefka, Court Mage");
       expect(commanderEntry?.commander).toBe(true);
     });
+  });
+});
+
+describe("originalityScore", () => {
+  it("averages min(1, log10(rank)/4) over ranked nonbasics", () => {
+    expect(
+      originalityScore([
+        { count: 1, typeLine: "Creature", edhrecRank: 1 },
+        { count: 1, typeLine: "Instant", edhrecRank: 100 },
+        { count: 1, typeLine: "Sorcery", edhrecRank: 10000 },
+        { count: 20, typeLine: "Basic Land — Forest", edhrecRank: 5 },
+        { count: 1, typeLine: "Artifact", edhrecRank: null },
+      ]),
+    ).toEqual({ score: 50, ranked: 3, unranked: 1 });
+    expect(originalityScore([])).toEqual({ score: null, ranked: 0, unranked: 0 });
   });
 });

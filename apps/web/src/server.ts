@@ -808,6 +808,7 @@ const resolver: CardResolver = async (name: string) => {
         producedMana: card.producedMana,
         arena: card.arena,
         usd: card.usd,
+        edhrecRank: card.edhrecRank,
       }
     : null;
   resolverCache.set(key, resolved);

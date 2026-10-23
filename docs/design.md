@@ -80,6 +80,16 @@ Deck state:
 7. `deck_get({ name })` — cards by role + quota report (lands/ramp/draw/interaction/wipes) + curve + identity violations
 8. `deck_add / deck_remove({ name, cards: [{name, role?}] })` — validates identity/singleton/legality on add
 
+## Originality score (formula)
+
+Per nonbasic card with EDHREC rank r: `s = min(1, log10(max(1, r)) / 4)`. Score = `round(100 × Σ(count·s) / Σ(count))` over ranked cards.
+
+- Anchors: rank 1 → 0, 10 → 25, 100 → 50, 1000 → 75, ≥10000 → 100.
+- Excluded: basic lands (typeLine contains "Basic Land"); the commander when not in `deck.cards`. Null/undefined rank or unresolved nonbasic = `unranked` (counted, not scored). Zero ranked → score null.
+- Labels: <40 Staple-heavy, <60 Typical, <80 Original, else Off-meta.
+
+Descriptive only: EDHREC rank is never an input to suggestion ranking (no popularity prior).
+
 ## Skill (SKILL.md)
 
 - API etiquette: proper headers, URL-encoding, pagination (matters when the model curls directly too).

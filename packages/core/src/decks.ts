@@ -53,6 +53,7 @@ export type ResolvedCard = {
   producedMana?: string[] | null;
   arena?: boolean | null;
   usd?: number | null;
+  edhrecRank?: number | null;
 };
 
 export type CardResolver = (name: string) => Promise<ResolvedCard | null>;
@@ -86,6 +87,7 @@ export type DeckReport = {
     wincon: QuotaCheck;
   };
   priceUsd: { total: number; unpriced: number };
+  originality: { score: number | null; ranked: number; unranked: number };
   violations: string[];
   identityViolations: string[];
   arenaCheck: {
@@ -716,6 +718,23 @@ export async function setDeckMeta(
   return deck;
 }
 
+/** Deterministic originality score from EDHREC rank; see docs/design.md "Originality score". */
+export function originalityScore(
+  cards: { count: number; typeLine: string; edhrecRank?: number | null }[],
+): { score: number | null; ranked: number; unranked: number } {
+  let sum = 0;
+  let ranked = 0;
+  let unranked = 0;
+  for (const c of cards) {
+    if (c.typeLine.includes("Basic Land")) continue;
+    if (typeof c.edhrecRank === "number") {
+      sum += c.count * Math.min(1, Math.log10(Math.max(1, c.edhrecRank)) / 4);
+      ranked += c.count;
+    } else unranked += c.count;
+  }
+  return { score: ranked ? Math.round((100 * sum) / ranked) : null, ranked, unranked };
+}
+
 export async function deckReport(
   name: string,
   resolver: CardResolver,
@@ -749,6 +768,7 @@ export async function deckReport(
   let unpriced = 0;
   const arenaMissing: string[] = [];
   const arenaUnknown: string[] = [];
+  const originalityInput: { count: number; typeLine: string; edhrecRank?: number | null }[] = [];
 
   // Resolve every card up front, concurrently. Resolving inside the loop below
   // made the report cost one serial round trip per card, which is ~75 of them
@@ -780,6 +800,7 @@ export async function deckReport(
     }
 
     const resolved = resolvedByName.get(card.name) ?? null;
+    originalityInput.push({ count, typeLine: resolved?.typeLine ?? "", edhrecRank: resolved?.edhrecRank ?? null });
     if (typeof resolved?.usd === "number") priceTotal += resolved.usd * count;
     else unpriced += count;
     if (resolved) {
@@ -830,6 +851,7 @@ export async function deckReport(
     curve,
     quotaCheck,
     priceUsd,
+    originality: originalityScore(originalityInput),
     violations: contractViolations(deck, { quotaCheck, priceUsd }),
     identityViolations,
     arenaCheck: {

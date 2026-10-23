@@ -18,7 +18,7 @@ turns — see §3 for why both paths exist.
 | R1 remote | scryfall | `packages/core/src/scryfall.ts` | live Scryfall client, retry | search/card fetch |
 | R1 remote | spellbook | `packages/core/src/spellbook.ts` | live Commander Spellbook client | combo fetch |
 | R1 ingest | ingest/* | `packages/core/src/ingest/` | bulk download → SQLite populate | `ingest` entry, `cards`, `prices`, `tagger`, `spellbook`, `download` |
-| R2 domain | decks | `packages/core/src/decks.ts` | deck CRUD, quotas, report, export | `Deck`, `CardEntry`, `DeckReport`, `addCards`, `deckReport`, `exportDeck`, … |
+| R2 domain | decks | `packages/core/src/decks.ts` | deck CRUD, quotas, report (+ `originalityScore`, see docs/design.md "Originality score (formula)"), export | `Deck`, `CardEntry`, `DeckReport`, `addCards`, `deckReport`, `exportDeck`, … |
 | R2 domain | suggestions | `packages/core/src/suggestions.ts` | proposed deck changes | `Suggestion`, `listSuggestions`, `addSuggestions`, `decideSuggestion`, `clearDecided` |
 | R2 domain | collection | `packages/core/src/collection.ts` | Arena owned/missing index | `CollectionFile`, `OwnedIndex`, `getOwnedIndex`, `collectionStats`, `COLLECTION_PATH` |
 | R2 domain | arena-log | `packages/core/src/arena-log.ts` | `Player.log` parse | log → arena id list |

@@ -2008,6 +2008,28 @@ export function DeckPanel({
                         {report.quotaCheck.wipes.have} / {report.quotaCheck.wipes.want}
                       </div>
                     </div>
+                    <div
+                      className="bar"
+                      title="100 × mean of min(1, log10(EDHREC rank)/4) over nonbasic cards; see docs/design.md"
+                    >
+                      <div className="lbl">Originality</div>
+                      <div className="meter">
+                        <i className="ok" style={{ width: `${report.originality?.score ?? 0}%` }} />
+                      </div>
+                      <div className="val">
+                        {report.originality?.score == null
+                          ? "—"
+                          : `${report.originality.score} · ${
+                              report.originality.score < 40
+                                ? "Staple-heavy"
+                                : report.originality.score < 60
+                                  ? "Typical"
+                                  : report.originality.score < 80
+                                    ? "Original"
+                                    : "Off-meta"
+                            }${report.originality.unranked > 0 ? ` (${report.originality.unranked} unranked)` : ""}`}
+                      </div>
+                    </div>
                   </div>
                   <ManaCurve curve={report.curve} />
                   {report.violations.length > 0 && (

@@ -115,6 +115,7 @@ const resolveCard: CardResolver = async (name: string) => {
     legalCommander: card.legalCommander,
     arena: card.arena,
     usd: card.usd,
+    edhrecRank: card.edhrecRank,
   };
 };
 

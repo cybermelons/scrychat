@@ -54,6 +54,7 @@ export type DeckReport = {
     wincon: QuotaCheck;
   };
   priceUsd: { total: number; unpriced: number };
+  originality?: { score: number | null; ranked: number; unranked: number };
   violations: string[];
   identityViolations: string[];
   arenaCheck?: ArenaCheck;
