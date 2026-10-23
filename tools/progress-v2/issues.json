@@ -99,9 +99,9 @@
       "n": 81,
       "anchor": "#nav-collection",
       "side": "left",
-      "state": "open",
+      "state": "closed",
       "title": "Oracle: collection/printing analysis and originality scoring",
-      "pin": "Moved here from farseek-teardown gitea #3, where it did not belong - it is a scrychat feature request, not a teardown finding. Originality scoring is the natural extension of our 'no popularity prior' stance. Their ranking formula is server-side and uncopyable; only the idea transfers, implemented with our published formula. Output shape is STATED, not MEASURED - a real-deck Oracle reading was gated on account age and never ran."
+      "pin": "DONE (023987a): deterministic originality score, deckReport().originality, formula in docs/design.md, benchmarks bar in the deck panel. Collection/printing analysis deferred by owner decision (v2 = score only). Closed."
     }
   ],
   "off_board": {
