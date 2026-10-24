@@ -8,6 +8,8 @@ data
 chats
 decks
 secrets
+home
+users
 .git
 .DS_Store
 evals/transcripts
